@@ -19,6 +19,22 @@ jobs:
     name: validate
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16.10-bookworm
+        env:
+          POSTGRES_DB: orchestrator
+          POSTGRES_PASSWORD: local-orchestrator
+          POSTGRES_USER: orchestrator
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U orchestrator -d orchestrator"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      DATABASE_URL: postgresql://orchestrator:local-orchestrator@127.0.0.1:5432/orchestrator
 
     steps:
       - name: Check out repository
@@ -44,6 +60,9 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Test PostgreSQL integration
+        run: npm run test:integration
 
       - name: Build
         run: npm run build
