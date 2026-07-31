@@ -1,4 +1,20 @@
 services:
+  postgres:
+    image: postgres:16.10-bookworm
+    environment:
+      POSTGRES_DB: orchestrator
+      POSTGRES_PASSWORD: local-orchestrator
+      POSTGRES_USER: orchestrator
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orchestrator -d orchestrator"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    ports:
+      - "127.0.0.1:54329:5432"
+    volumes:
+      - orchestrator-postgres:/var/lib/postgresql/data
+
   worker:
     build:
       context: .
@@ -6,6 +22,10 @@ services:
       NODE_ENV: development
       LOG_LEVEL: info
       WORKER_HEARTBEAT_MS: 5000
+      DATABASE_URL: postgresql://orchestrator:local-orchestrator@postgres:5432/orchestrator
+    depends_on:
+      postgres:
+        condition: service_healthy
     init: true
     read_only: true
     restart: unless-stopped
@@ -13,3 +33,6 @@ services:
       - no-new-privileges:true
     tmpfs:
       - /tmp
+
+volumes:
+  orchestrator-postgres:

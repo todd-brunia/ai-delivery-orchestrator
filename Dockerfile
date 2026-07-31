@@ -16,6 +16,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY --from=build /app/dist ./dist
+COPY migrations ./migrations
 
 USER node
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
