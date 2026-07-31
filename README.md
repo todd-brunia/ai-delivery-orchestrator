@@ -7,8 +7,9 @@ preserve human approval boundaries.
 ## Status
 
 The repository is in its foundation phase. It currently provides a validated
-TypeScript worker process, container build, local runtime, tests, and CI. It
-does not yet connect to GitHub, OpenAI, or AWS and cannot mutate another
+TypeScript worker process, versioned provider-neutral `sprint-delivery/v1`
+domain and state-machine contracts, container build, local runtime, tests, and
+CI. It does not yet connect to GitHub, OpenAI, or AWS and cannot mutate another
 repository.
 
 The approved implementation direction is maintained in the private owner's

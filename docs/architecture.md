@@ -44,3 +44,21 @@ for authoritative operational state and LangGraph checkpoints.
 
 Infrastructure will be added incrementally through Terraform after local
 domain and adapter contracts are tested.
+
+## Sprint-delivery v1 domain contract
+
+The stable provider-neutral contract is exported from
+`src/domain/sprint-delivery/v1/index.ts`. It owns:
+
+- Versioned run input and strict repository adapter configuration.
+- Run and work-item states, commands, events, and fail-closed transitions.
+- Risk categories and the human plan-approval boundary.
+- Dependency edges, conflict domains, cycle detection, and parallelism policy.
+- Transition evidence, idempotency keys, and expected aggregate revisions.
+
+The v1 contract enables only human merge and at most two parallel
+implementations. Low-confidence analysis and configured sensitive risks become
+more restrictive automatically. Provider adapters may translate these domain
+decisions into GitHub, persistence, queue, or model operations, but cannot add
+states, weaken transitions, or broaden authority without a new contract
+version.
