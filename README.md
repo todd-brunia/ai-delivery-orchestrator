@@ -8,9 +8,9 @@ preserve human approval boundaries.
 
 The repository is in its foundation phase. It currently provides a validated
 TypeScript worker process, versioned provider-neutral `sprint-delivery/v1`
-domain and state-machine contracts, container build, local runtime, tests, and
-CI. It does not yet connect to GitHub, OpenAI, or AWS and cannot mutate another
-repository.
+domain and state-machine contracts, PostgreSQL workflow persistence, container
+build, local runtime, tests, and CI. It does not yet connect to GitHub, OpenAI,
+or AWS and cannot mutate another repository.
 
 The approved implementation direction is maintained in the private owner's
 public planning repository:
@@ -34,6 +34,17 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+Start PostgreSQL, apply migrations, and run the integration suite:
+
+```bash
+docker compose up -d postgres
+DATABASE_URL=postgresql://orchestrator:local-orchestrator@127.0.0.1:54329/orchestrator npm run db:migrate
+DATABASE_URL=postgresql://orchestrator:local-orchestrator@127.0.0.1:54329/orchestrator npm run test:integration
+```
+
+The Compose volume is intentionally durable. `docker compose stop postgres`
+stops compute without deleting local workflow data.
 
 Run the worker locally:
 

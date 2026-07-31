@@ -62,3 +62,18 @@ more restrictive automatically. Provider adapters may translate these domain
 decisions into GitHub, persistence, queue, or model operations, but cannot add
 states, weaken transitions, or broaden authority without a new contract
 version.
+
+## Application persistence boundary
+
+Versioned SQL migrations under `migrations/` define the authoritative
+application schema. `PostgresSprintRunRepository` is the initial adapter behind
+the provider-neutral persistence interface. It atomically records validated
+state transitions and pending outbox actions, rejects stale revisions, treats
+idempotency keys as globally unique commands, and uses expiring aggregate
+leases to exclude competing workers.
+
+Sprint workflow identity (definition version, repository, issue list, and merge
+policy) is immutable after insertion. The database stores structured events,
+actors, and evidence references; it does not store credentials, webhook bodies,
+private source, or raw model reasoning. LangGraph checkpoints will use a
+separate schema and are not authoritative application state.
