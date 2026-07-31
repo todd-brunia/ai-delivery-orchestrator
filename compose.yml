@@ -1,0 +1,15 @@
+services:
+  worker:
+    build:
+      context: .
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: info
+      WORKER_HEARTBEAT_MS: 5000
+    init: true
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
