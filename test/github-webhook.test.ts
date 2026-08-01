@@ -1,0 +1,32 @@
+import { createHmac } from "node:crypto";
+import { describe, expect, it } from "vitest";
+
+import { InvalidWebhookError, verifyAndNormalizeGitHubWebhook } from "../src/github/webhooks/v1/index.js";
+
+const secret = "test-secret-not-a-credential";
+const payload = { action: "labeled", installation: { id: 42 }, sender: { login: "octocat" }, repository: { full_name: "todd-brunia/ai-consulting-client-portal" }, issue: { number: 81 }, ignored_private_content: "must not survive normalization" };
+const raw = Buffer.from(JSON.stringify(payload));
+const signature = `sha256=${createHmac("sha256", secret).update(raw).digest("hex")}`;
+const headers = { deliveryId: "8dc126aa-dfd8-4c95-8e4d-25c00800721d", eventName: "issues", hookId: "123", signature256: signature };
+
+describe("GitHub webhook verification", () => {
+  it("verifies exact bytes and retains only normalized metadata", () => {
+    const event = verifyAndNormalizeGitHubWebhook(raw, headers, secret, new Date("2026-08-01T12:00:00Z"));
+    expect(event).toMatchObject({ eventName: "issues", issueNumber: 81, installationId: 42, repository: payload.repository.full_name });
+    expect(JSON.stringify(event)).not.toContain("ignored_private_content");
+  });
+
+  it("rejects a bad signature before attempting JSON parsing", () => {
+    expect(() => verifyAndNormalizeGitHubWebhook(Buffer.from("not-json"), { ...headers, signature256: `sha256=${"0".repeat(64)}` }, secret)).toThrow(InvalidWebhookError);
+  });
+
+  it("fails closed on unsupported and malformed events", () => {
+    expect(() => verifyAndNormalizeGitHubWebhook(raw, { ...headers, eventName: "push" }, secret)).toThrow("unsupported");
+    const malformed = Buffer.from(JSON.stringify({ action: "opened" }));
+    const malformedSignature = `sha256=${createHmac("sha256", secret).update(malformed).digest("hex")}`;
+    expect(() => verifyAndNormalizeGitHubWebhook(malformed, { ...headers, signature256: malformedSignature }, secret)).toThrow("malformed");
+    const missingIssue = Buffer.from(JSON.stringify({ ...payload, issue: undefined }));
+    const missingIssueSignature = `sha256=${createHmac("sha256", secret).update(missingIssue).digest("hex")}`;
+    expect(() => verifyAndNormalizeGitHubWebhook(missingIssue, { ...headers, signature256: missingIssueSignature }, secret)).toThrow("issueNumber");
+  });
+});

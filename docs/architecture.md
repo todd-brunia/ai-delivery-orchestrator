@@ -83,3 +83,12 @@ advances work items through the domain state machine, and selects build-ready
 items only after their prerequisites merge. Outbox consumers claim bounded
 batches with `SKIP LOCKED`; owner and expiry checks govern completion or retry,
 and expired claims become recoverable without duplicating completed actions.
+
+## GitHub webhook trust boundary
+
+`github-webhook/v1` verifies HMAC-SHA256 over exact request bytes before JSON
+parsing and normalizes only correlation metadata. PostgreSQL stores the
+normalized envelope and payload hash—not the raw body or secret—and deduplicates
+globally by GitHub delivery ID. Inbox claims use expiring ownership,
+`SKIP LOCKED`, bounded retries, and dead-letter exhaustion. An HTTP/Lambda
+adapter and canonical GitHub refetch are separate future slices.
