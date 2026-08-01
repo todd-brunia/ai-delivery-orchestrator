@@ -1,9 +1,12 @@
 import type {
+  ConflictDomain,
+  DependencyEdge,
   SprintRunEvent,
   SprintRunInput,
   SprintRunState,
   TransitionMetadata,
   WorkItemState,
+  WorkItemEvent,
 } from "../domain/sprint-delivery/v1/index.js";
 
 export interface PersistedWorkItem {
@@ -42,6 +45,33 @@ export interface RunTransitionResult {
   readonly duplicate: boolean;
 }
 
+export interface WorkItemTransitionRequest {
+  readonly workItemId: string;
+  readonly event: WorkItemEvent;
+  readonly metadata: TransitionMetadata;
+  readonly outbox: OutboxAction;
+}
+
+export interface WorkItemTransitionResult {
+  readonly workItem: PersistedWorkItem;
+  readonly duplicate: boolean;
+}
+
+export interface WorkItemConflictAnalysis {
+  readonly issueNumber: number;
+  readonly domains: readonly ConflictDomain[];
+}
+
+export interface SprintAnalysis {
+  readonly dependencies: readonly DependencyEdge[];
+  readonly conflicts: readonly WorkItemConflictAnalysis[];
+}
+
+export interface ClaimedOutboxAction extends OutboxAction {
+  readonly attemptCount: number;
+  readonly claimExpiresAt: string;
+}
+
 export interface LeaseRequest {
   readonly aggregateType: "sprint_run" | "work_item";
   readonly aggregateId: string;
@@ -53,6 +83,12 @@ export interface SprintRunRepository {
   createRun(id: string, input: SprintRunInput, now?: Date): Promise<PersistedSprintRun>;
   getRun(id: string): Promise<PersistedSprintRun | undefined>;
   transitionRun(request: RunTransitionRequest): Promise<RunTransitionResult>;
+  transitionWorkItem(request: WorkItemTransitionRequest): Promise<WorkItemTransitionResult>;
+  saveAnalysis(runId: string, analysis: SprintAnalysis): Promise<void>;
+  listRunnableWorkItems(runId: string): Promise<readonly PersistedWorkItem[]>;
+  claimOutbox(ownerId: string, limit: number, expiresAt: Date, now?: Date): Promise<readonly ClaimedOutboxAction[]>;
+  completeOutbox(id: string, ownerId: string, now?: Date): Promise<boolean>;
+  retryOutbox(id: string, ownerId: string, error: string, now?: Date): Promise<boolean>;
   tryAcquireLease(request: LeaseRequest, now?: Date): Promise<boolean>;
 }
 

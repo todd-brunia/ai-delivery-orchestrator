@@ -4,16 +4,26 @@ import type { Pool, PoolClient } from "pg";
 
 import {
   SprintRunEventSchema,
+  ConflictDomainSchema,
+  DependencyEdgeSchema,
   SprintRunInputSchema,
   SprintRunStateSchema,
   TransitionMetadataSchema,
+  WorkItemEventSchema,
   WorkItemStateSchema,
   transitionSprintRun,
+  transitionWorkItem,
+  assertAcyclicDependencies,
 } from "../domain/sprint-delivery/v1/index.js";
 import {
   ConcurrencyError,
   type LeaseRequest,
   type PersistedSprintRun,
+  type PersistedWorkItem,
+  type SprintAnalysis,
+  type WorkItemTransitionRequest,
+  type WorkItemTransitionResult,
+  type ClaimedOutboxAction,
   type RunTransitionRequest,
   type RunTransitionResult,
   type SprintRunRepository,
@@ -191,6 +201,120 @@ export class PostgresSprintRunRepository implements SprintRunRepository {
       ],
     );
     return result.rowCount === 1;
+  }
+
+  async saveAnalysis(runId: string, analysis: SprintAnalysis): Promise<void> {
+    const run = await this.requireRun(runId);
+    const dependencies = analysis.dependencies.map((edge) => DependencyEdgeSchema.parse(edge));
+    const conflicts = analysis.conflicts.map((entry) => ({
+      issueNumber: entry.issueNumber,
+      domains: entry.domains.map((domain) => ConflictDomainSchema.parse(domain)),
+    }));
+    assertAcyclicDependencies(run.input.issueNumbers, dependencies);
+    const analyzedIssues = new Set(conflicts.map((entry) => entry.issueNumber));
+    if (analyzedIssues.size !== conflicts.length ||
+        [...analyzedIssues].some((issue) => !run.input.issueNumbers.includes(issue))) {
+      throw new Error("conflict analysis must uniquely reference in-sprint issues");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("DELETE FROM orchestrator.dependency_edges WHERE sprint_run_id = $1", [runId]);
+      await client.query(`DELETE FROM orchestrator.conflict_domains
+        WHERE work_item_id IN (SELECT id FROM orchestrator.work_items WHERE sprint_run_id = $1)`, [runId]);
+      for (const edge of dependencies) await client.query(
+        `INSERT INTO orchestrator.dependency_edges
+         (sprint_run_id, prerequisite_issue_number, dependent_issue_number, kind)
+         VALUES ($1, $2, $3, $4)`,
+        [runId, edge.prerequisiteIssueNumber, edge.dependentIssueNumber, edge.kind],
+      );
+      for (const entry of conflicts) for (const domain of entry.domains) await client.query(
+        `INSERT INTO orchestrator.conflict_domains (id, work_item_id, kind, value, confidence)
+         SELECT $1, id, $2, $3, $4 FROM orchestrator.work_items
+         WHERE sprint_run_id = $5 AND issue_number = $6`,
+        [randomUUID(), domain.kind, domain.value, domain.confidence, runId, entry.issueNumber],
+      );
+      await client.query("COMMIT");
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
+  }
+
+  async transitionWorkItem(request: WorkItemTransitionRequest): Promise<WorkItemTransitionResult> {
+    const event = WorkItemEventSchema.parse(request.event);
+    const metadata = TransitionMetadataSchema.parse(request.metadata);
+    if (metadata.aggregateId !== request.workItemId) throw new ConcurrencyError("transition aggregateId does not match workItemId");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const prior = await client.query<{ aggregate_id: string; aggregate_type: string }>("SELECT aggregate_id, aggregate_type FROM orchestrator.transitions WHERE idempotency_key = $1", [metadata.idempotencyKey]);
+      if (prior.rowCount === 1) {
+        if (prior.rows[0]?.aggregate_id !== request.workItemId || prior.rows[0]?.aggregate_type !== "work_item") throw new ConcurrencyError("idempotency key belongs to another aggregate");
+        const workItem = await this.requireWorkItem(client, request.workItemId);
+        await client.query("COMMIT");
+        return { workItem, duplicate: true };
+      }
+      const result = await client.query<WorkItemRow>("SELECT id, issue_number, state, revision FROM orchestrator.work_items WHERE id = $1 FOR UPDATE", [request.workItemId]);
+      const row = result.rows[0];
+      if (!row) throw new Error(`work item not found: ${request.workItemId}`);
+      if (row.revision !== metadata.expectedRevision) throw new ConcurrencyError(`expected revision ${metadata.expectedRevision}, found ${row.revision}`);
+      const from = WorkItemStateSchema.parse(row.state);
+      const to = transitionWorkItem(from, event);
+      const revision = row.revision + 1;
+      await client.query(`INSERT INTO orchestrator.transitions
+        (id, aggregate_type, aggregate_id, aggregate_revision, from_state, to_state, event, actor, evidence, idempotency_key, occurred_at)
+        VALUES ($1, 'work_item', $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [metadata.transitionId, request.workItemId, revision, from, to, JSON.stringify(event), JSON.stringify(metadata.actor), JSON.stringify(metadata.evidence), metadata.idempotencyKey, metadata.occurredAt]);
+      await client.query("UPDATE orchestrator.work_items SET state = $2, revision = $3, updated_at = $4 WHERE id = $1", [request.workItemId, to, revision, metadata.occurredAt]);
+      await client.query(`INSERT INTO orchestrator.outbox (id, transition_id, action_type, payload, idempotency_key, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6)`, [request.outbox.id, metadata.transitionId, request.outbox.type, JSON.stringify(request.outbox.payload), request.outbox.idempotencyKey, metadata.occurredAt]);
+      const workItem = await this.requireWorkItem(client, request.workItemId);
+      await client.query("COMMIT");
+      return { workItem, duplicate: false };
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
+  }
+
+  async listRunnableWorkItems(runId: string): Promise<readonly PersistedWorkItem[]> {
+    const result = await this.pool.query<WorkItemRow>(`SELECT wi.id, wi.issue_number, wi.state, wi.revision
+      FROM orchestrator.work_items wi WHERE wi.sprint_run_id = $1 AND wi.state = 'ready_to_build'
+      AND NOT EXISTS (SELECT 1 FROM orchestrator.dependency_edges de
+        JOIN orchestrator.work_items prerequisite ON prerequisite.sprint_run_id = de.sprint_run_id
+          AND prerequisite.issue_number = de.prerequisite_issue_number
+        WHERE de.sprint_run_id = wi.sprint_run_id AND de.dependent_issue_number = wi.issue_number
+          AND prerequisite.state <> 'merged') ORDER BY wi.issue_number`, [runId]);
+    return result.rows.map((row) => this.mapWorkItem(row));
+  }
+
+  async claimOutbox(ownerId: string, limit: number, expiresAt: Date, now = new Date()): Promise<readonly ClaimedOutboxAction[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || expiresAt <= now) throw new Error("invalid outbox claim");
+    const result = await this.pool.query<{ id: string; action_type: string; payload: Record<string, unknown>; idempotency_key: string; attempt_count: number; claim_expires_at: Date }>(`WITH candidates AS (
+      SELECT id FROM orchestrator.outbox WHERE status = 'pending' OR (status = 'claimed' AND claim_expires_at <= $3)
+      ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT $1)
+      UPDATE orchestrator.outbox o SET status = 'claimed', claimed_by = $2, claim_expires_at = $4,
+        attempt_count = attempt_count + 1 FROM candidates WHERE o.id = candidates.id
+      RETURNING o.id, o.action_type, o.payload, o.idempotency_key, o.attempt_count, o.claim_expires_at`, [limit, ownerId, now, expiresAt]);
+    return result.rows.map((row) => ({ id: row.id, type: row.action_type, payload: row.payload, idempotencyKey: row.idempotency_key, attemptCount: row.attempt_count, claimExpiresAt: row.claim_expires_at.toISOString() }));
+  }
+
+  async completeOutbox(id: string, ownerId: string, now = new Date()): Promise<boolean> {
+    const result = await this.pool.query("UPDATE orchestrator.outbox SET status = 'completed', completed_at = $3, claimed_by = NULL, claim_expires_at = NULL WHERE id = $1 AND status = 'claimed' AND claimed_by = $2 AND claim_expires_at > $3", [id, ownerId, now]);
+    return result.rowCount === 1;
+  }
+
+  async retryOutbox(id: string, ownerId: string, error: string, now = new Date()): Promise<boolean> {
+    const result = await this.pool.query("UPDATE orchestrator.outbox SET status = 'pending', last_error = $3, claimed_by = NULL, claim_expires_at = NULL WHERE id = $1 AND status = 'claimed' AND claimed_by = $2 AND claim_expires_at > $4", [id, ownerId, error.slice(0, 4000), now]);
+    return result.rowCount === 1;
+  }
+
+  private mapWorkItem(row: WorkItemRow): PersistedWorkItem {
+    return { id: row.id, issueNumber: row.issue_number, state: WorkItemStateSchema.parse(row.state), revision: row.revision };
+  }
+
+  private async requireWorkItem(client: PoolClient, id: string): Promise<PersistedWorkItem> {
+    const result = await client.query<WorkItemRow>("SELECT id, issue_number, state, revision FROM orchestrator.work_items WHERE id = $1", [id]);
+    const row = result.rows[0];
+    if (!row) throw new Error(`work item not found: ${id}`);
+    return this.mapWorkItem(row);
   }
 
   private async requireRun(id: string): Promise<PersistedSprintRun> {
