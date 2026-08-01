@@ -5,6 +5,7 @@ export interface WorkerConfig {
   readonly nodeEnvironment: "development" | "test" | "production";
   readonly logLevel: "debug" | "info" | "warn" | "error";
   readonly heartbeatMilliseconds: number;
+  readonly providerMode: "stub";
 }
 
 export function loadWorkerConfig(
@@ -13,6 +14,7 @@ export function loadWorkerConfig(
   const nodeEnvironment = environment.NODE_ENV ?? "development";
   const logLevel = environment.LOG_LEVEL ?? "info";
   const heartbeatMilliseconds = Number(environment.WORKER_HEARTBEAT_MS ?? "30000");
+  const providerMode = environment.PROVIDER_MODE ?? "stub";
 
   if (!NODE_ENVIRONMENTS.has(nodeEnvironment)) {
     throw new Error(`NODE_ENV is invalid: ${nodeEnvironment}`);
@@ -27,10 +29,14 @@ export function loadWorkerConfig(
   ) {
     throw new Error("WORKER_HEARTBEAT_MS must be an integer from 1000 to 300000");
   }
+  if (providerMode !== "stub") {
+    throw new Error("PROVIDER_MODE must be stub; real providers are not enabled");
+  }
 
   return {
     nodeEnvironment: nodeEnvironment as WorkerConfig["nodeEnvironment"],
     logLevel: logLevel as WorkerConfig["logLevel"],
     heartbeatMilliseconds,
+    providerMode,
   };
 }
