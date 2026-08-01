@@ -23,6 +23,7 @@ services:
       LOG_LEVEL: info
       WORKER_HEARTBEAT_MS: 5000
       DATABASE_URL: postgresql://orchestrator:local-orchestrator@postgres:5432/orchestrator
+      PROVIDER_MODE: stub
     depends_on:
       postgres:
         condition: service_healthy
