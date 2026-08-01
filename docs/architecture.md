@@ -77,3 +77,9 @@ policy) is immutable after insertion. The database stores structured events,
 actors, and evidence references; it does not store credentials, webhook bodies,
 private source, or raw model reasoning. LangGraph checkpoints will use a
 separate schema and are not authoritative application state.
+
+The persistence adapter also records validated dependency/conflict analysis,
+advances work items through the domain state machine, and selects build-ready
+items only after their prerequisites merge. Outbox consumers claim bounded
+batches with `SKIP LOCKED`; owner and expiry checks govern completion or retry,
+and expired claims become recoverable without duplicating completed actions.
