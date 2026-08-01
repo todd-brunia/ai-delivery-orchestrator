@@ -74,7 +74,13 @@ credentials.
 
 See [Architecture](./docs/architecture.md),
 [Threat model](./docs/threat-model.md), and
+[Local operating runbook](./docs/operating-runbook.md), and
 [Contributing](./CONTRIBUTING.md) before proposing changes.
+
+Local provider composition is deliberately restricted to deterministic stubs.
+The stubs accept registered fixtures, capture proposed GitHub writes as inert
+intent, and fail closed when a fixture is missing. Real GitHub and OpenAI
+providers require separately reviewed implementation and authority.
 
 ## License and reuse
 

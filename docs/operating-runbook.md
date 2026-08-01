@@ -1,0 +1,96 @@
+# Local Operating Runbook
+
+## Scope and safety boundary
+
+This runbook covers the local foundation environment only. The worker runs
+with `PROVIDER_MODE=stub`; it has no GitHub or OpenAI credentials, makes no
+provider network calls, and cannot mutate a repository. AWS, LangGraph,
+webhook HTTP ingress, and the operator API are not implemented.
+
+Never place secrets in `.env`, fixtures, logs, issue bodies, or committed
+files. The example database password is local-only and must not be reused.
+
+## Install and validate
+
+Requirements are Node.js 22, npm, and Docker. From the repository root:
+
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm run docker:build
+```
+
+Run `npm audit --audit-level=high` and a secret scan before requesting review.
+
+## PostgreSQL lifecycle
+
+Start only PostgreSQL and wait for a healthy status:
+
+```bash
+docker compose up -d postgres
+docker compose ps postgres
+```
+
+Apply versioned migrations and run real-database tests:
+
+```bash
+DATABASE_URL=postgresql://orchestrator:local-orchestrator@127.0.0.1:54329/orchestrator npm run db:migrate
+DATABASE_URL=postgresql://orchestrator:local-orchestrator@127.0.0.1:54329/orchestrator npm run test:integration
+```
+
+Stop compute while preserving workflow data:
+
+```bash
+docker compose stop
+```
+
+Restarting with `docker compose up -d postgres` reuses the named volume.
+Migrations are checksum-verified and safe to rerun. Never edit an applied
+migration; add a new numbered migration.
+
+## Worker lifecycle
+
+Start the local stack and inspect structured logs:
+
+```bash
+docker compose up -d
+docker compose logs worker
+```
+
+Validate the production image without starting the long-running worker:
+
+```bash
+docker run --rm ai-delivery-orchestrator:local node dist/index.js --check
+```
+
+Use `docker compose stop worker` for a normal stop. The current worker only
+emits heartbeats; it does not yet claim inbox or outbox work.
+
+## Recovery
+
+- If PostgreSQL is unhealthy, inspect `docker compose logs postgres`, stop the
+  service, and start it again. Do not delete the volume as a first response.
+- If a migration fails, preserve the database and logs, correct the new
+  unapplied migration, and rerun it. Do not alter a successfully applied file.
+- Expired database leases and inbox/outbox claims are designed for another
+  worker to recover. Completed records are not claimable again.
+- Configuration errors fail startup. `PROVIDER_MODE` must remain `stub` until
+  a separately reviewed issue enables a real adapter.
+
+## Destructive local reset
+
+`docker compose down --volumes` permanently deletes the local PostgreSQL named
+volume and all locally persisted workflow history. Use it only when a complete
+local reset is intentional and the data is confirmed disposable. A normal
+cost/resource stop is `docker compose stop`, which preserves data.
+
+## Escalation and evidence
+
+Retain concise error messages, migration names, delivery IDs, transition IDs,
+and commit SHAs. Do not copy raw webhook bodies, source content, credentials,
+or model reasoning into logs or issues. Stop and require human review for an
+unknown migration checksum, conflicting idempotency fingerprint, invalid
+signature, exhausted retry, or unexpected provider mode.

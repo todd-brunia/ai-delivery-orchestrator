@@ -1,6 +1,8 @@
 import { loadWorkerConfig } from "./config.js";
+import { createProviderSet } from "./providers/v1/index.js";
 
 const config = loadWorkerConfig();
+createProviderSet(config.providerMode);
 
 function log(event: string, details: Record<string, unknown> = {}): void {
   process.stdout.write(
@@ -22,6 +24,7 @@ if (process.argv.includes("--check")) {
 log("worker_started", {
   nodeEnvironment: config.nodeEnvironment,
   heartbeatMilliseconds: config.heartbeatMilliseconds,
+  providerMode: config.providerMode,
 });
 
 const heartbeat = setInterval(() => {

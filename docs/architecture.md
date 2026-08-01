@@ -92,3 +92,15 @@ normalized envelope and payload hash—not the raw body or secret—and deduplic
 globally by GitHub delivery ID. Inbox claims use expiring ownership,
 `SKIP LOCKED`, bounded retries, and dead-letter exhaustion. An HTTP/Lambda
 adapter and canonical GitHub refetch are separate future slices.
+
+## Provider ports and local composition
+
+The versioned `providers/v1` boundary separates canonical GitHub reads,
+proposed GitHub mutations, feasibility analysis, and pull-request review from
+application policy. Model results retain structured decisions, evidence,
+provenance, policy/model versions, and usage—not raw reasoning.
+
+Only `PROVIDER_MODE=stub` is enabled. Deterministic in-memory adapters require
+explicit fixtures, return isolated copies, capture mutation intent without
+executing it, and make no network calls. Real Octokit and OpenAI adapters are
+deferred and cannot be selected through configuration.
