@@ -75,6 +75,7 @@ credentials.
 See [Architecture](./docs/architecture.md),
 [Threat model](./docs/threat-model.md), and
 [Local operating runbook](./docs/operating-runbook.md), and
+[Terraform and AWS bootstrap](./docs/terraform-bootstrap.md), and
 [Contributing](./CONTRIBUTING.md) before proposing changes.
 
 Local provider composition is deliberately restricted to deterministic stubs.

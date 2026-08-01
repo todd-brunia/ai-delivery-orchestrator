@@ -104,3 +104,13 @@ Only `PROVIDER_MODE=stub` is enabled. Deterministic in-memory adapters require
 explicit fixtures, return isolated copies, capture mutation intent without
 executing it, and make no network calls. Real Octokit and OpenAI adapters are
 deferred and cannot be selected through configuration.
+
+## Terraform foundation
+
+`infra/bootstrap` defines the protected S3 state bucket and a GitHub OIDC role
+restricted to pull requests from this repository. `infra/environments/pilot`
+uses a partial S3 backend with native lockfiles and defines only immutable ECR
+storage plus two-AZ public/isolated networking. There is no NAT Gateway or
+application compute in this slice. CI validates all configuration without
+credentials and runs an OIDC-backed speculative plan only when explicit
+repository variables are present; it never applies infrastructure.
