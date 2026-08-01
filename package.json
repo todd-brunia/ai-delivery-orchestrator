@@ -14,7 +14,7 @@
     "db:migrate": "tsx src/persistence/migrate-cli.ts",
     "start": "node dist/index.js",
     "test": "vitest run --coverage test/*.test.ts",
-    "test:integration": "vitest run test/integration",
+    "test:integration": "vitest run --no-file-parallelism test/integration",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
