@@ -20,6 +20,14 @@ variable "github_repository" {
   type    = string
   default = "todd-brunia/ai-delivery-orchestrator"
 }
+variable "pilot_environment_name" {
+  type    = string
+  default = "pilot"
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_-]{1,64}$", var.pilot_environment_name))
+    error_message = "pilot_environment_name must contain only letters, digits, underscores, or hyphens."
+  }
+}
 
 locals {
   tags = {
