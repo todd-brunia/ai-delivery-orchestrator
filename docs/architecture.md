@@ -107,10 +107,17 @@ deferred and cannot be selected through configuration.
 
 ## Terraform foundation
 
-`infra/bootstrap` defines the protected S3 state bucket and a GitHub OIDC role
-restricted to pull requests from this repository. `infra/environments/pilot`
-uses a partial S3 backend with native lockfiles and defines only immutable ECR
-storage plus two-AZ public/isolated networking. There is no NAT Gateway or
-application compute in this slice. CI validates all configuration without
-credentials and runs an OIDC-backed speculative plan only when explicit
-repository variables are present; it never applies infrastructure.
+`infra/bootstrap` defines the protected S3 state bucket plus separate GitHub
+OIDC roles for pull-request planning and protected-environment apply.
+`infra/environments/pilot` uses a partial S3 backend with native lockfiles and
+defines immutable ECR storage, two-AZ public/isolated networking, empty secret
+containers, retained log groups, an informational billing alarm, and a monthly
+budget. There is no NAT Gateway or application compute in this slice.
+
+Pull requests can produce read-only plans. Provisioning requires manual
+dispatch for an explicit commit already on `main`, approval through the GitHub
+`pilot` environment, and short-lived OIDC credentials. A one-time human
+bootstrap creates the state bucket and OIDC roles because that trust cannot
+bootstrap itself. Secret values are entered outside Terraform; the future
+runtime read policy remains unattached. Resource-specific queue, compute, and
+database alarms are deferred until those resources exist.
