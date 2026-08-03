@@ -116,9 +116,45 @@ data "aws_iam_policy_document" "github_plan" {
     resources = ["${aws_s3_bucket.terraform_state.arn}/pilot/terraform.tfstate.tflock"]
   }
   statement {
-    sid       = "InspectFoundation"
-    actions   = ["ec2:Describe*", "ecr:DescribeRepositories", "ecr:GetLifecyclePolicy", "ecr:GetRepositoryPolicy", "ecr:ListTagsForResource", "sts:GetCallerIdentity"]
+    sid = "InspectFoundation"
+    actions = [
+      "cloudwatch:DescribeAlarms", "ec2:Describe*", "logs:DescribeLogGroups", "sts:GetCallerIdentity",
+    ]
     resources = ["*"]
+  }
+  statement {
+    sid = "InspectPilotEcr"
+    actions = [
+      "ecr:DescribeRepositories", "ecr:GetLifecyclePolicy", "ecr:GetRepositoryPolicy", "ecr:ListTagsForResource",
+    ]
+    resources = ["arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/ai-delivery-orchestrator-pilot-worker"]
+  }
+  statement {
+    sid       = "InspectPilotSecrets"
+    actions   = ["secretsmanager:DescribeSecret", "secretsmanager:ListSecretVersionIds"]
+    resources = ["arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:ai-delivery-orchestrator/pilot/*"]
+  }
+  statement {
+    sid       = "InspectPilotLogs"
+    actions   = ["logs:ListTagsForResource"]
+    resources = ["arn:aws:logs:${var.aws_region}:${var.aws_account_id}:log-group:/ai-delivery-orchestrator/pilot/*"]
+  }
+  statement {
+    sid       = "InspectPilotBudget"
+    actions   = ["budgets:DescribeBudget", "budgets:ListTagsForResource"]
+    resources = ["arn:aws:budgets::${var.aws_account_id}:budget/ai-delivery-orchestrator-pilot-monthly"]
+  }
+  statement {
+    sid       = "InspectPilotBillingAlarm"
+    actions   = ["cloudwatch:ListTagsForResource"]
+    resources = ["arn:aws:cloudwatch:${var.aws_region}:${var.aws_account_id}:alarm:ai-delivery-orchestrator-pilot-*"]
+  }
+  statement {
+    sid = "InspectRuntimeSecretPolicy"
+    actions = [
+      "iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyTags", "iam:ListPolicyVersions",
+    ]
+    resources = ["arn:aws:iam::${var.aws_account_id}:policy/ai-delivery-orchestrator-pilot-runtime-secrets"]
   }
 }
 
@@ -126,4 +162,132 @@ resource "aws_iam_role_policy" "github_plan" {
   name   = "pilot-foundation-read-only-plan"
   role   = aws_iam_role.github_plan.id
   policy = data.aws_iam_policy_document.github_plan.json
+}
+
+data "aws_iam_policy_document" "github_apply_trust" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:${var.github_repository}:environment:${var.pilot_environment_name}"]
+    }
+  }
+}
+
+resource "aws_iam_role" "github_apply" {
+  name                 = "ai-delivery-orchestrator-terraform-pilot-apply"
+  assume_role_policy   = data.aws_iam_policy_document.github_apply_trust.json
+  max_session_duration = 3600
+}
+
+data "aws_iam_policy_document" "github_apply" {
+  statement {
+    sid       = "ListPilotState"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.terraform_state.arn]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["pilot/*"]
+    }
+  }
+  statement {
+    sid       = "ManagePilotState"
+    actions   = ["s3:GetObject", "s3:PutObject"]
+    resources = ["${aws_s3_bucket.terraform_state.arn}/pilot/terraform.tfstate"]
+  }
+  statement {
+    sid       = "ManagePilotLock"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.terraform_state.arn}/pilot/terraform.tfstate.tflock"]
+  }
+  statement {
+    sid = "ManagePilotNetwork"
+    actions = [
+      "ec2:AssociateRouteTable", "ec2:AttachInternetGateway", "ec2:CreateInternetGateway",
+      "ec2:CreateRoute", "ec2:CreateRouteTable", "ec2:CreateSubnet", "ec2:CreateTags",
+      "ec2:CreateVpc", "ec2:DeleteInternetGateway", "ec2:DeleteRoute", "ec2:DeleteRouteTable",
+      "ec2:DeleteSubnet", "ec2:DeleteTags", "ec2:DeleteVpc", "ec2:Describe*",
+      "ec2:DetachInternetGateway", "ec2:DisassociateRouteTable", "ec2:ModifySubnetAttribute",
+      "ec2:ModifyVpcAttribute",
+    ]
+    resources = ["*"]
+  }
+  statement {
+    sid = "ManagePilotEcr"
+    actions = [
+      "ecr:CreateRepository", "ecr:DeleteLifecyclePolicy", "ecr:DeleteRepository",
+      "ecr:DescribeRepositories", "ecr:GetLifecyclePolicy", "ecr:GetRepositoryPolicy",
+      "ecr:ListTagsForResource", "ecr:PutLifecyclePolicy", "ecr:TagResource", "ecr:UntagResource",
+    ]
+    resources = ["arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/ai-delivery-orchestrator-pilot-worker"]
+  }
+  statement {
+    sid = "ManagePilotSecrets"
+    actions = [
+      "secretsmanager:CreateSecret", "secretsmanager:DeleteSecret", "secretsmanager:DescribeSecret",
+      "secretsmanager:ListSecretVersionIds", "secretsmanager:TagResource", "secretsmanager:UntagResource",
+      "secretsmanager:UpdateSecret",
+    ]
+    resources = ["arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:ai-delivery-orchestrator/pilot/*"]
+  }
+  statement {
+    sid = "ManagePilotLogs"
+    actions = [
+      "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:ListTagsForResource", "logs:PutRetentionPolicy",
+      "logs:TagResource", "logs:UntagResource",
+    ]
+    resources = ["arn:aws:logs:${var.aws_region}:${var.aws_account_id}:log-group:/ai-delivery-orchestrator/pilot/*"]
+  }
+  statement {
+    sid       = "InspectPilotLogs"
+    actions   = ["logs:DescribeLogGroups"]
+    resources = ["*"]
+  }
+  statement {
+    sid = "ManagePilotBillingAlarm"
+    actions = [
+      "cloudwatch:DeleteAlarms", "cloudwatch:ListTagsForResource", "cloudwatch:PutMetricAlarm",
+      "cloudwatch:TagResource", "cloudwatch:UntagResource",
+    ]
+    resources = ["arn:aws:cloudwatch:${var.aws_region}:${var.aws_account_id}:alarm:ai-delivery-orchestrator-pilot-*"]
+  }
+  statement {
+    sid       = "InspectPilotAlarms"
+    actions   = ["cloudwatch:DescribeAlarms"]
+    resources = ["*"]
+  }
+  statement {
+    sid = "ManagePilotBudget"
+    actions = [
+      "budgets:CreateBudget", "budgets:DeleteBudget", "budgets:DescribeBudget",
+      "budgets:ModifyBudget", "budgets:TagResource", "budgets:UntagResource",
+    ]
+    resources = ["arn:aws:budgets::${var.aws_account_id}:budget/ai-delivery-orchestrator-pilot-monthly"]
+  }
+  statement {
+    sid = "ManageRuntimeSecretPolicy"
+    actions = [
+      "iam:CreatePolicy", "iam:CreatePolicyVersion", "iam:DeletePolicy", "iam:DeletePolicyVersion",
+      "iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions", "iam:ListPolicyTags",
+      "iam:SetDefaultPolicyVersion", "iam:TagPolicy", "iam:UntagPolicy",
+    ]
+    resources = ["arn:aws:iam::${var.aws_account_id}:policy/ai-delivery-orchestrator-pilot-runtime-secrets"]
+  }
+}
+
+resource "aws_iam_role_policy" "github_apply" {
+  name   = "pilot-foundation-apply"
+  role   = aws_iam_role.github_apply.id
+  policy = data.aws_iam_policy_document.github_apply.json
 }

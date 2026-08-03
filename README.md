@@ -10,7 +10,10 @@ The repository is in its foundation phase. It currently provides a validated
 TypeScript worker process, versioned provider-neutral `sprint-delivery/v1`
 domain and state-machine contracts, PostgreSQL workflow persistence, container
 build, local runtime, tests, and CI. It does not yet connect to GitHub, OpenAI,
-or AWS and cannot mutate another repository.
+or a deployed AWS environment and cannot mutate another repository. The
+reviewed Terraform foundation supports protected GitHub OIDC plan/apply
+workflows, networking, image storage, empty secret containers, bounded logs,
+and cost guardrails; the one-time AWS trust bootstrap has not been applied.
 
 The approved implementation direction is maintained in the private owner's
 public planning repository:
