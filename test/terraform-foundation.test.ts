@@ -23,8 +23,10 @@ describe("Terraform foundation policy", () => {
 
   it("restricts GitHub OIDC trust to this repository's pull requests", () => {
     expect(bootstrap).toMatch(/values\s*=\s*\["sts\.amazonaws\.com"\]/);
-    expect(bootstrap).toMatch(/values\s*=\s*\["repo:\$\{var\.github_repository\}:pull_request"\]/);
-    expect(bootstrap).not.toMatch(/repo:\$\{var\.github_repository\}:\*/);
+    expect(bootstrap).toContain('github_immutable_repository = "${local.github_repository_parts[0]}@${var.github_repository_owner_id}/${local.github_repository_parts[1]}@${var.github_repository_id}"');
+    expect(bootstrap).toMatch(/values\s*=\s*\["repo:\$\{local\.github_immutable_repository\}:pull_request"\]/);
+    expect(bootstrap).not.toContain('repo:${var.github_repository}:pull_request');
+    expect(bootstrap).not.toMatch(/repo:\$\{local\.github_immutable_repository\}:\*/);
   });
 
   it("uses immutable scanned ECR and two-tier networking without compute or NAT", () => {
@@ -43,11 +45,21 @@ describe("Terraform foundation policy", () => {
   });
 
   it("trusts apply only through the protected pilot environment", () => {
-    expect(bootstrap).toContain('values   = ["repo:${var.github_repository}:environment:${var.pilot_environment_name}"]');
+    expect(bootstrap).toContain('values   = ["repo:${local.github_immutable_repository}:environment:${var.pilot_environment_name}"]');
+    expect(bootstrap).not.toContain('repo:${var.github_repository}:environment:');
     expect(bootstrap).not.toContain("environment:*");
     expect(applyWorkflow).toContain("environment: pilot");
     expect(applyWorkflow).toContain("role-to-assume: ${{ vars.AWS_TERRAFORM_APPLY_ROLE_ARN }}");
     expect(applyWorkflow).not.toMatch(/access-key-id|secret-access-key/);
+  });
+
+  it("validates immutable GitHub identity inputs without embedding live IDs", () => {
+    expect(bootstrap).toContain('variable "github_repository_owner_id"');
+    expect(bootstrap).toContain('variable "github_repository_id"');
+    expect(bootstrap).toContain('regex("^[1-9][0-9]{0,19}$", var.github_repository_owner_id)');
+    expect(bootstrap).toContain('regex("^[1-9][0-9]{0,19}$", var.github_repository_id)');
+    expect(read("infra/bootstrap/terraform.tfvars.example")).toContain('github_repository_owner_id = "12345678"');
+    expect(read("infra/bootstrap/terraform.tfvars.example")).toContain('github_repository_id       = "87654321"');
   });
 
   it("plans pull requests without granting forked code AWS credentials", () => {

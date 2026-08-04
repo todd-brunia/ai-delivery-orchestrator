@@ -109,6 +109,8 @@ deferred and cannot be selected through configuration.
 
 `infra/bootstrap` defines the protected S3 state bucket plus separate GitHub
 OIDC roles for pull-request planning and protected-environment apply.
+Both roles bind to GitHub's immutable subject format, including the stable
+numeric owner and repository IDs, so namespace reuse cannot inherit AWS trust.
 `infra/environments/pilot` uses a partial S3 backend with native lockfiles and
 defines immutable ECR storage, two-AZ public/isolated networking, empty secret
 containers, retained log groups, an informational billing alarm, and a monthly
