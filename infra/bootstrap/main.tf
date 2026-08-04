@@ -83,7 +83,7 @@ data "aws_iam_policy_document" "github_plan_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:pull_request"]
+      values   = ["repo:${local.github_immutable_repository}:pull_request"]
     }
   }
 }
@@ -179,7 +179,7 @@ data "aws_iam_policy_document" "github_apply_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:environment:${var.pilot_environment_name}"]
+      values   = ["repo:${local.github_immutable_repository}:environment:${var.pilot_environment_name}"]
     }
   }
 }

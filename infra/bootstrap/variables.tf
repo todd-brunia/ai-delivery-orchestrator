@@ -19,6 +19,24 @@ variable "state_bucket_name" {
 variable "github_repository" {
   type    = string
   default = "todd-brunia/ai-delivery-orchestrator"
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_repository))
+    error_message = "github_repository must be an OWNER/REPOSITORY pair."
+  }
+}
+variable "github_repository_owner_id" {
+  type = string
+  validation {
+    condition     = can(regex("^[1-9][0-9]{0,19}$", var.github_repository_owner_id))
+    error_message = "github_repository_owner_id must be a positive numeric GitHub owner ID."
+  }
+}
+variable "github_repository_id" {
+  type = string
+  validation {
+    condition     = can(regex("^[1-9][0-9]{0,19}$", var.github_repository_id))
+    error_message = "github_repository_id must be a positive numeric GitHub repository ID."
+  }
 }
 variable "pilot_environment_name" {
   type    = string
@@ -30,6 +48,8 @@ variable "pilot_environment_name" {
 }
 
 locals {
+  github_repository_parts     = split("/", var.github_repository)
+  github_immutable_repository = "${local.github_repository_parts[0]}@${var.github_repository_owner_id}/${local.github_repository_parts[1]}@${var.github_repository_id}"
   tags = {
     Project     = "ai-delivery-orchestrator"
     Environment = "bootstrap"
