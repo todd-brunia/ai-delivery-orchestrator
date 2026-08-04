@@ -13,7 +13,8 @@ build, local runtime, tests, and CI. It does not yet connect to GitHub, OpenAI,
 or a deployed AWS environment and cannot mutate another repository. The
 reviewed Terraform foundation supports protected GitHub OIDC plan/apply
 workflows, networking, image storage, empty secret containers, bounded logs,
-and cost guardrails; the one-time AWS trust bootstrap has not been applied.
+and cost guardrails. The initial pilot AWS trust bootstrap is applied; the
+pilot environment stack and application infrastructure are not yet deployed.
 
 The approved implementation direction is maintained in the private owner's
 public planning repository:
@@ -76,8 +77,9 @@ credentials.
   automatic merge is a separately gated future capability.
 
 See [Architecture](./docs/architecture.md),
-[Threat model](./docs/threat-model.md), and
-[Local operating runbook](./docs/operating-runbook.md), and
+[Threat model](./docs/threat-model.md),
+[Local operating runbook](./docs/operating-runbook.md),
+[Client AWS account foundation](./docs/client-aws-account-foundation.md),
 [Terraform and AWS bootstrap](./docs/terraform-bootstrap.md), and
 [Contributing](./CONTRIBUTING.md) before proposing changes.
 
