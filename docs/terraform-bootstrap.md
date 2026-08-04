@@ -20,6 +20,8 @@ Actions. Do not apply the pilot stack from a developer workstation.
 - An explicitly selected AWS account and `us-east-1` access.
 - Authority to create the bootstrap S3 and IAM resources.
 - A globally unique, non-sensitive S3 bucket name.
+- The repository owner's numeric GitHub ID and the repository's numeric GitHub
+  ID for immutable OIDC subjects.
 
 Never commit account-specific `.tfvars`, backend files, state, lock files, or
 plans. Example variable files contain placeholders only.
@@ -45,7 +47,7 @@ address exists only in protected environment configuration.
 ## One-time bootstrap sequence
 
 1. Copy `infra/bootstrap/terraform.tfvars.example` to an ignored local
-   `.tfvars` file and replace both placeholders.
+   `.tfvars` file and replace all placeholders.
 2. Reauthenticate to the intended AWS account and verify its account ID.
 3. Run `terraform -chdir=infra/bootstrap plan`. Confirm it contains only the
    state bucket, GitHub OIDC provider, pull-request plan role, protected pilot
@@ -67,6 +69,51 @@ An AWS account can have only one GitHub Actions OIDC provider for this issuer.
 If the account already contains it, import that provider into the bootstrap
 state rather than attempting to create a duplicate or deleting the shared
 provider.
+
+## Immutable GitHub OIDC identity
+
+GitHub repositories using immutable OIDC subjects include stable numeric owner
+and repository IDs alongside their names. This prevents a renamed or recycled
+namespace from inheriting cloud trust. Retrieve the public identifiers without
+requesting or retaining an OIDC token:
+
+```bash
+gh api users/OWNER --jq .id
+gh api repos/OWNER/REPOSITORY --jq .id
+```
+
+Set the results as `github_repository_owner_id` and `github_repository_id` in
+the ignored bootstrap variable file. The plan role then trusts only:
+
+```text
+repo:OWNER@OWNER-ID/REPOSITORY@REPOSITORY-ID:pull_request
+```
+
+The apply role trusts only the same immutable repository identity followed by
+`environment:pilot`. Do not replace either condition with the legacy name-only
+format or a wildcard. Numeric GitHub IDs are public identifiers, but reusable
+examples contain placeholders rather than live installation values.
+
+## Existing-bootstrap trust update
+
+When immutable identity support is added after the bootstrap already exists,
+preserve `infra/bootstrap/terraform.tfstate`; it remains authoritative. Update
+the ignored variable file with the existing account, bucket, and immutable
+GitHub IDs, then create a saved plan:
+
+```bash
+terraform -chdir=infra/bootstrap plan \
+  -out=immutable-oidc.tfplan \
+  -var-file=terraform.tfvars
+```
+
+The reviewed update must report exactly `0 to add, 2 to change, 0 to destroy`,
+with in-place `assume_role_policy` changes only for the plan and apply roles.
+Do not apply a plan that creates, replaces, or destroys a resource. Apply that
+saved plan only after separate human authorization, then rerun the
+pull-request-only Terraform workflow. Verify role assumption and remote-state
+locking from Actions logs; use CloudTrail metadata for failures without ever
+logging or retaining the web identity token.
 
 ## Pilot backend and plan
 
