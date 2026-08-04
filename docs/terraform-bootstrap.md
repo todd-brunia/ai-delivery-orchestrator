@@ -14,6 +14,8 @@ Actions. Do not apply the pilot stack from a developer workstation.
 
 ## Prerequisites
 
+- Complete the durable identity, account-isolation, budget, and CLI checkpoints
+  in [Client AWS account foundation](./client-aws-account-foundation.md).
 - Terraform 1.15.8 (the configuration permits 1.10 through 1.x).
 - An explicitly selected AWS account and `us-east-1` access.
 - Authority to create the bootstrap S3 and IAM resources.
