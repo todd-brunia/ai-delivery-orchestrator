@@ -118,6 +118,7 @@ describe("Terraform foundation policy", () => {
     expect(planWorkflow.indexOf("Create speculative pilot IAM plan")).toBeLessThan(planWorkflow.indexOf("Create speculative pilot plan"));
     expect(planWorkflow).toContain("vars.PILOT_IAM_STATE_ENABLED == 'true'");
     expect(planWorkflow).toContain("vars.PILOT_IAM_STATE_ENABLED != 'true'");
+    expect(planWorkflow).toContain("mv infra/environments/pilot-iam/backend.tf infra/environments/pilot-iam/backend.tf.disabled");
     expect(planWorkflow).toContain("init -input=false -backend=false");
     expect(bootstrap).toContain("pilot-iam/terraform.tfstate");
     expect(bootstrap).toContain("pilot-iam/terraform.tfstate.tflock");

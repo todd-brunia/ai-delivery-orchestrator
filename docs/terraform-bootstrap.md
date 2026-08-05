@@ -143,8 +143,10 @@ terraform -chdir=infra/environments/pilot plan \
 The OIDC plan role can access only these two pilot state keys and inspect
 declared resources; it cannot mutate managed infrastructure.
 
-During the implementation rollout, pull-request CI initializes the IAM root
-with its backend disabled while `PILOT_IAM_STATE_ENABLED` is unset. After the
+During the implementation rollout, pull-request CI temporarily excludes the
+IAM backend declaration and initializes local, ephemeral state while
+`PILOT_IAM_STATE_ENABLED` is unset. The runner never applies or publishes that
+state. After the
 merged bootstrap change is separately planned and applied, set that repository
 variable to the literal value `true`. Protected IAM apply fails closed unless
 the flag is `true`; subsequent pull requests then plan against remote IAM

@@ -52,9 +52,11 @@ jobs:
       - name: Initialize pilot IAM remote state
         if: ${{ vars.PILOT_IAM_STATE_ENABLED == 'true' }}
         run: terraform -chdir=infra/environments/pilot-iam init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
-      - name: Initialize pilot IAM without remote state
+      - name: Initialize pilot IAM with temporary local state
         if: ${{ vars.PILOT_IAM_STATE_ENABLED != 'true' }}
-        run: terraform -chdir=infra/environments/pilot-iam init -input=false -backend=false
+        run: |
+          mv infra/environments/pilot-iam/backend.tf infra/environments/pilot-iam/backend.tf.disabled
+          terraform -chdir=infra/environments/pilot-iam init -input=false -backend=false
       - name: Create speculative pilot IAM plan
         run: terraform -chdir=infra/environments/pilot-iam plan -input=false -lock-timeout=5m -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
       - name: Initialize pilot remote state
