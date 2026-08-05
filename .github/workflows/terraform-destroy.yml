@@ -36,7 +36,7 @@ jobs:
     env:
       TF_IN_AUTOMATION: "true"
       TF_INPUT: "false"
-      TF_VAR_budget_notification_email: ${{ vars.BUDGET_NOTIFICATION_EMAIL }}
+      TF_VAR_budget_notification_email: ${{ secrets.BUDGET_NOTIFICATION_EMAIL }}
       TF_VAR_runtime_secret_policy_arn: ${{ vars.RUNTIME_SECRET_POLICY_ARN }}
     steps:
       - name: Validate destructive request
@@ -63,7 +63,7 @@ jobs:
         env:
           AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ vars.AWS_TERRAFORM_APPLY_ROLE_ARN }}
-          BUDGET_NOTIFICATION_EMAIL: ${{ vars.BUDGET_NOTIFICATION_EMAIL }}
+          BUDGET_NOTIFICATION_EMAIL: ${{ secrets.BUDGET_NOTIFICATION_EMAIL }}
           PILOT_IAM_STATE_ENABLED: ${{ vars.PILOT_IAM_STATE_ENABLED }}
           RUNTIME_SECRET_POLICY_ARN: ${{ vars.RUNTIME_SECRET_POLICY_ARN }}
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}

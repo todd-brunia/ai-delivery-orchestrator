@@ -156,6 +156,24 @@ describe("Terraform foundation policy", () => {
     expect(bootstrap).not.toContain("repository/ai-delivery-orchestrator-pilot-worker");
   });
 
+  it("grants provider-required reads only on existing pilot scopes", () => {
+    expect(bootstrap.match(/secretsmanager:GetResourcePolicy/g)).toHaveLength(2);
+    expect(bootstrap.match(/budgets:ViewBudget/g)).toHaveLength(2);
+    expect(bootstrap).toContain("secret:ai-delivery-orchestrator/pilot/*");
+    expect(bootstrap).toContain("budget/ai-delivery-orchestrator-pilot-monthly");
+  });
+
+  it("masks the protected budget email in mutation workflows", () => {
+    for (const workflow of [applyWorkflow, destroyWorkflow]) {
+      expect(workflow).toContain("TF_VAR_budget_notification_email: ${{ secrets.BUDGET_NOTIFICATION_EMAIL }}");
+      expect(workflow).toContain("BUDGET_NOTIFICATION_EMAIL: ${{ secrets.BUDGET_NOTIFICATION_EMAIL }}");
+      expect(workflow).not.toContain("${{ vars.BUDGET_NOTIFICATION_EMAIL }}");
+      expect(workflow).not.toMatch(/-var=.*budget_notification_email/);
+      expect(workflow).not.toMatch(/echo.*BUDGET_NOTIFICATION_EMAIL/);
+    }
+    expect(planWorkflow).toContain("TF_VAR_budget_notification_email: terraform-plan@example.invalid");
+  });
+
   it("bounds logs, alarms, and budget notifications", () => {
     expect(pilot).toContain("retention_in_days = var.log_retention_days");
     expect(pilot).toContain('namespace           = "AWS/Billing"');
