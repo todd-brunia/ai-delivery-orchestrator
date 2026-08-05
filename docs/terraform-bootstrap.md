@@ -187,6 +187,66 @@ The workflow has a single non-cancelling concurrency group, so two pilot applies
 cannot overlap. There is no automated destroy path. Pull requests and ordinary
 pushes cannot invoke apply.
 
+## Protected pilot teardown
+
+`Terraform destroy` is a manual-only workflow for removing pilot resources
+when they are not needed. It uses the same protected `pilot` environment,
+short-lived OIDC apply role, current-main commit check, and non-cancelling
+concurrency group as provisioning. Apply and destroy therefore cannot overlap.
+
+Dispatch the workflow with all of the following:
+
+- the full 40-character SHA currently at `origin/main`;
+- the exact confirmation `DESTROY PILOT`; and
+- `destroy_iam=false` unless deletion of the no-cost, unattached runtime policy
+  is separately intended.
+
+The workflow creates a saved main-stack destroy plan and applies that exact
+plan. Only after it succeeds may the explicitly enabled IAM destroy steps run.
+It never targets `infra/bootstrap`, the OIDC provider, GitHub roles, the state
+bucket, state objects, state history, or GitHub environment configuration.
+
+Before the first apply or any destroy after this workflow is introduced,
+update the existing bootstrap permissions through a separately authorized
+saved plan. It must report `0 to add, 2 to change, 0 to destroy` and change only
+the plan-role and apply-role inline policies from the obsolete ECR repository
+ARN to `repository/ai-delivery-orchestrator-worker`. Stop if trust, principals,
+role names, state access, or any other permission changes.
+
+An approved main-stack teardown permanently deletes the VPC, subnets, routes,
+internet gateway, ECR repository and all stored images, CloudWatch log groups
+and their logs, billing alarm, and budget. Terraform schedules the three secret
+containers for deletion with their 30-day recovery windows; it does not
+immediately erase them. The confirmation phrase explicitly acknowledges the
+permanent ECR image and log loss.
+
+Bootstrap resources and both remote state histories remain after teardown.
+They can continue to incur S3 storage charges. The pilot IAM policy is retained
+by default and has no direct service charge, but any separately retained or
+pending-deletion service resources should still be checked in Cost Explorer.
+
+To reprovision during the secret recovery window, first restore each
+pending-deletion secret through an authorized operator session:
+
+```bash
+aws secretsmanager restore-secret --profile REPLACE_WITH_AUTHORIZED_PILOT_PROFILE --region us-east-1 --secret-id ai-delivery-orchestrator/pilot/github-app-private-key
+aws secretsmanager restore-secret --profile REPLACE_WITH_AUTHORIZED_PILOT_PROFILE --region us-east-1 --secret-id ai-delivery-orchestrator/pilot/github-webhook-secret
+aws secretsmanager restore-secret --profile REPLACE_WITH_AUTHORIZED_PILOT_PROFILE --region us-east-1 --secret-id ai-delivery-orchestrator/pilot/openai-api-key
+```
+
+Verify all three are active before dispatching apply. Never recreate them under
+a different name, shorten the recovery window, or place their values in
+Terraform. After the recovery window expires, a later reviewed apply can create
+new empty containers and their values must be re-entered through the authorized
+secret process.
+
+If destroy fails, preserve the state and lock evidence. Do not delete a lock or
+edit state. Correct the permission or dependency problem through a reviewed
+change, then dispatch the workflow again for the still-current main SHA; the
+new saved plan will contain only resources that remain. After completion,
+verify the workflow result and use read-only plans for both roots to confirm
+their expected empty or retained state.
+
 ## Existing pilot IAM state migration
 
 No migration is needed before the first pilot apply. If a future installation
