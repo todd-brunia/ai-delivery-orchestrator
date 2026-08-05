@@ -291,7 +291,7 @@ data "aws_iam_policy_document" "github_apply" {
     sid = "ManagePilotBudget"
     actions = [
       "budgets:CreateBudget", "budgets:DeleteBudget", "budgets:DescribeBudget", "budgets:ViewBudget",
-      "budgets:ModifyBudget", "budgets:TagResource", "budgets:UntagResource",
+      "budgets:ListTagsForResource", "budgets:ModifyBudget", "budgets:TagResource", "budgets:UntagResource",
     ]
     resources = ["arn:aws:budgets::${var.aws_account_id}:budget/ai-delivery-orchestrator-pilot-monthly"]
   }

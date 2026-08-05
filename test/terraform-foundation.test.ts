@@ -85,6 +85,18 @@ describe("Terraform foundation policy", () => {
     expect(applyWorkflow).toContain("apply -input=false -lock-timeout=5m pilot-iam.tfplan");
   });
 
+  it("rejects delete and replacement actions before ordinary saved plans are applied", () => {
+    expect(applyWorkflow).toContain("Reject destructive pilot IAM plan");
+    expect(applyWorkflow).toContain("Reject destructive pilot plan");
+    expect(applyWorkflow.match(/show -json pilot(?:-iam)?\.tfplan/g)).toHaveLength(2);
+    expect(applyWorkflow.match(/index\("delete"\)/g)).toHaveLength(2);
+    expect(applyWorkflow.indexOf("Reject destructive pilot IAM plan")).toBeGreaterThan(applyWorkflow.indexOf("Plan pilot IAM for selected commit"));
+    expect(applyWorkflow.indexOf("Reject destructive pilot IAM plan")).toBeLessThan(applyWorkflow.indexOf("Apply selected pilot IAM plan"));
+    expect(applyWorkflow.indexOf("Reject destructive pilot plan")).toBeGreaterThan(applyWorkflow.indexOf("Plan selected commit"));
+    expect(applyWorkflow.indexOf("Reject destructive pilot plan")).toBeLessThan(applyWorkflow.indexOf("Apply selected plan"));
+    expect(destroyWorkflow).not.toContain("Reject destructive");
+  });
+
   it("creates named secret containers without managing values", () => {
     expect(pilot).toContain('resource "aws_secretsmanager_secret" "application"');
     for (const name of ["github-app-private-key", "github-webhook-secret", "openai-api-key"]) {
@@ -157,8 +169,11 @@ describe("Terraform foundation policy", () => {
   });
 
   it("grants provider-required reads only on existing pilot scopes", () => {
+    const applyPolicy = bootstrap.slice(bootstrap.indexOf('data "aws_iam_policy_document" "github_apply"'));
     expect(bootstrap.match(/secretsmanager:GetResourcePolicy/g)).toHaveLength(2);
     expect(bootstrap.match(/budgets:ViewBudget/g)).toHaveLength(2);
+    expect(bootstrap.match(/budgets:ListTagsForResource/g)).toHaveLength(2);
+    expect(applyPolicy.match(/budgets:ListTagsForResource/g)).toHaveLength(1);
     expect(bootstrap).toContain("secret:ai-delivery-orchestrator/pilot/*");
     expect(bootstrap).toContain("budget/ai-delivery-orchestrator-pilot-monthly");
   });

@@ -186,20 +186,30 @@ The workflow has a single non-cancelling concurrency group, so two pilot applies
 cannot overlap. There is no automated destroy path. Pull requests and ordinary
 pushes cannot invoke apply.
 
-### Recover a fully recorded partial apply
+### Recover the recorded partial apply
 
-The initial pilot apply can fail during a provider post-create read after AWS
-has already created and Terraform has recorded resources. Before attempting
-recovery, inspect both remote state objects read-only. If the IAM state contains
-the runtime policy and the main state contains all 23 declared resources, both
-states are complete and authoritative: do not import, remove state, destroy, or
-recreate anything.
+The initial pilot apply failed during provider post-create reads after AWS had
+created and Terraform had recorded all resources. The IAM state contains its
+one managed policy and the main state contains all 23 managed resources. Three
+main-state instances were nevertheless marked tainted:
 
-For the recorded pilot recovery, add `secretsmanager:GetResourcePolicy` and
-`budgets:ViewBudget` to the two existing bootstrap role policies on their
-already scoped resources. After the implementation merges, create a saved
-bootstrap plan and require exactly two in-place inline role-policy updates with
-`0 to add, 0 to destroy`. Apply only after separate authorization.
+- `aws_secretsmanager_secret.application["github-app-private-key"]`
+- `aws_secretsmanager_secret.application["github-webhook-secret"]`
+- `aws_secretsmanager_secret.application["openai-api-key"]`
+
+Do not apply the resulting replacement plan. Do not import, remove state,
+destroy, or recreate these secrets. Ordinary apply now inspects each saved plan
+and fails before apply when any resource action contains `delete`, including a
+delete-and-create replacement. The protected destroy workflow remains the only
+workflow intended to apply deletion plans.
+
+Complete the missing provider reads by adding
+`secretsmanager:GetResourcePolicy`, `budgets:ViewBudget`, and
+`budgets:ListTagsForResource` to the bootstrap role policies on their existing
+scoped resources. After the implementation merges, create a saved bootstrap
+plan and require only in-place inline role-policy updates with `0 to add, 0 to
+destroy`. Apply only after separate authorization and confirm a follow-up
+bootstrap plan reports no changes.
 
 Before rerunning apply, migrate the protected environment configuration:
 
@@ -210,10 +220,44 @@ Before rerunning apply, migrate the protected environment configuration:
 4. set `RUNTIME_SECRET_POLICY_ARN` to the exact output from the complete IAM
    state.
 
-Rerun apply for the current full `main` SHA with `provision_iam=false`. The
-workflow must produce and apply a fresh saved plan under environment approval.
-Verify both state locks and a succeeding follow-up speculative plan. Do not
-reuse the failed run's saved plan or artifacts.
+Initialize the main pilot backend locally using the protected profile and state
+bucket:
+
+```text
+AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot init -reconfigure -input=false -backend-config="bucket=$TF_STATE_BUCKET"
+```
+
+Immediately before changing state, run both read-only assertions below. The
+first requires 23 instances. The second requires exactly the three tainted
+addresses listed above. Each command prints only `true` on success and exits
+nonzero on a mismatch; stop if either fails. Do not save or print the complete
+state because it contains protected configuration.
+
+```text
+AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot state pull | jq -e '[.resources[].instances[]] | length == 23'
+AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot state pull | jq -e '[.resources[] as $resource | $resource.instances[] | select(.status == "tainted") | "\($resource.type).\($resource.name)[\"\(.index_key)\"]"] | sort == ["aws_secretsmanager_secret.application[\"github-app-private-key\"]", "aws_secretsmanager_secret.application[\"github-webhook-secret\"]", "aws_secretsmanager_secret.application[\"openai-api-key\"]"]'
+```
+
+Only after separate authorization for these exact addresses, run:
+
+```text
+AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot untaint 'aws_secretsmanager_secret.application["github-app-private-key"]'
+AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot untaint 'aws_secretsmanager_secret.application["github-webhook-secret"]'
+AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot untaint 'aws_secretsmanager_secret.application["openai-api-key"]'
+```
+
+Immediately after repair, repeat the 23-instance assertion and require that no
+instance is tainted:
+
+```text
+AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot state pull | jq -e '[.resources[].instances[]] | length == 23'
+AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot state pull | jq -e '[.resources[].instances[] | select(.status == "tainted")] | length == 0'
+```
+
+Then create a fresh main-stack plan with
+`provision_iam=false`; it must report `0 to add, 0 to change, 0 to destroy`
+before a protected recovery apply is dispatched. Do not reuse a failed run's
+saved plan or artifacts.
 
 ## Protected pilot teardown
 
