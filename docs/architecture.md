@@ -111,14 +111,21 @@ deferred and cannot be selected through configuration.
 OIDC roles for pull-request planning and protected-environment apply.
 Both roles bind to GitHub's immutable subject format, including the stable
 numeric owner and repository IDs, so namespace reuse cannot inherit AWS trust.
-`infra/environments/pilot` uses a partial S3 backend with native lockfiles and
-defines immutable ECR storage, two-AZ public/isolated networking, empty secret
-containers, retained log groups, an informational billing alarm, and a monthly
-budget. There is no NAT Gateway or application compute in this slice.
+`infra/environments/pilot-iam` owns pilot/application IAM in the independent
+`pilot-iam/terraform.tfstate` state key. Its exact, account-scoped outputs are
+passed as validated inputs to `infra/environments/pilot`; neither root reads the
+other's state or guesses resource names. The main pilot root contains no
+managed IAM resources and defines immutable ECR storage, two-AZ
+public/isolated networking, empty secret containers, retained log groups, an
+informational billing alarm, and a monthly budget. There is no NAT Gateway or
+application compute in this slice.
 
 Pull requests can produce read-only plans. Provisioning requires manual
 dispatch for an explicit commit already on `main`, approval through the GitHub
-`pilot` environment, and short-lived OIDC credentials. A one-time human
+`pilot` environment, and short-lived OIDC credentials. IAM provisioning is an
+explicit, fail-closed workflow option that defaults off; when enabled, its
+saved plan is applied before the saved main-stack plan for the same commit. A
+one-time human
 bootstrap creates the state bucket and OIDC roles because that trust cannot
 bootstrap itself. Secret values are entered outside Terraform; the future
 runtime read policy remains unattached. Resource-specific queue, compute, and
