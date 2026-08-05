@@ -51,7 +51,7 @@ address exists only in protected environment configuration.
 2. Reauthenticate to the intended AWS account and verify its account ID.
 3. Run `terraform -chdir=infra/bootstrap plan`. Confirm it contains only the
    state bucket, GitHub OIDC provider, pull-request plan role, protected pilot
-   apply role, and their policies.
+   apply role, main-only ECR publishing role, and their policies.
 4. Apply only after explicit human authorization.
 5. Record the state bucket and plan-role ARN as GitHub repository variables.
    They are identifiers, not credentials. Leave the repository variable
@@ -185,6 +185,42 @@ After the first successful IAM-enabled deployment, record the emitted
 The workflow has a single non-cancelling concurrency group, so two pilot applies
 cannot overlap. There is no automated destroy path. Pull requests and ordinary
 pushes cannot invoke apply.
+
+## Immutable worker image publication
+
+`.github/workflows/publish-worker-image.yml` builds the reviewed `Dockerfile`
+on every push to `main` and publishes exactly one tag: the full commit SHA. It
+does not publish `latest`, accept user-supplied tags, run for pull requests, or
+deploy the image. The workflow uses a dedicated OIDC role whose trust is scoped
+to the immutable repository identity and `ref:refs/heads/main`; it does not use
+either Terraform role.
+
+For an existing bootstrap, merge the implementation before changing AWS or
+GitHub configuration. The first workflow run is expected to fail closed while
+`AWS_ECR_PUBLISH_ROLE_ARN` is absent. Preserve the authoritative local
+bootstrap state, verify the non-root pilot identity, and create a saved plan:
+
+```text
+AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/bootstrap plan -out=ecr-publish-role.tfplan -var-file=terraform.tfvars
+```
+
+Require exactly `2 to add, 0 to change, 0 to destroy`: the dedicated publish
+role and its inline policy. The plan must not change the existing roles, OIDC
+provider, state bucket, trust relationships, or pilot resources. Apply that
+saved plan only after separate explicit authorization, then require a
+follow-up bootstrap plan with no changes.
+
+Record the verified `github_publish_role_arn` output as the repository Actions
+variable `AWS_ECR_PUBLISH_ROLE_ARN`. It is an identifier, not a credential. Do
+not print or store the account ID unnecessarily, and do not configure access
+keys. A subsequent separately reviewed merge to `main` performs the first real
+publication.
+
+Before building, the workflow requires proof that the commit tag does not
+already exist. An existing tag, a permission failure, or an inconclusive ECR
+read stops publication. Because the repository is immutable, rerunning a
+successful commit publication is expected to fail safely; never delete or
+overwrite the image to make a rerun pass.
 
 ### Recover the recorded partial apply
 

@@ -311,3 +311,52 @@ resource "aws_iam_role_policy" "github_apply" {
   role   = aws_iam_role.github_apply.id
   policy = data.aws_iam_policy_document.github_apply.json
 }
+
+data "aws_iam_policy_document" "github_publish_trust" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:${local.github_immutable_repository}:ref:refs/heads/main"]
+    }
+  }
+}
+
+resource "aws_iam_role" "github_publish" {
+  name                 = "ai-delivery-orchestrator-ecr-publish"
+  assume_role_policy   = data.aws_iam_policy_document.github_publish_trust.json
+  max_session_duration = 3600
+  tags                 = local.tags
+}
+
+data "aws_iam_policy_document" "github_publish" {
+  statement {
+    sid       = "AuthenticateToEcr"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+  statement {
+    sid = "PublishWorkerImage"
+    actions = [
+      "ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:CompleteLayerUpload",
+      "ecr:DescribeImages", "ecr:InitiateLayerUpload", "ecr:PutImage", "ecr:UploadLayerPart",
+    ]
+    resources = ["arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/ai-delivery-orchestrator-worker"]
+  }
+}
+
+resource "aws_iam_role_policy" "github_publish" {
+  name   = "worker-image-publish"
+  role   = aws_iam_role.github_publish.id
+  policy = data.aws_iam_policy_document.github_publish.json
+}
