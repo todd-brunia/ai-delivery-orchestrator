@@ -13,6 +13,7 @@ describe("Terraform foundation policy", () => {
   const planWorkflow = read(".github/workflows/terraform-plan.yml");
   const applyWorkflow = read(".github/workflows/terraform-apply.yml");
   const destroyWorkflow = read(".github/workflows/terraform-destroy.yml");
+  const publishWorkflow = read(".github/workflows/publish-worker-image.yml");
   const bootstrapRunbook = read("docs/terraform-bootstrap.md");
 
   it("protects and versions native-locking remote state", () => {
@@ -163,10 +164,60 @@ describe("Terraform foundation policy", () => {
     expect(applyWorkflow).toContain("group: terraform-apply-pilot");
   });
 
-  it("uses the exact ECR repository ARN for plan and apply permissions", () => {
+  it("uses the exact ECR repository ARN for plan, apply, and publish permissions", () => {
     const expectedArn = "repository/ai-delivery-orchestrator-worker";
-    expect(bootstrap.match(new RegExp(expectedArn, "g"))).toHaveLength(2);
+    expect(bootstrap.match(new RegExp(expectedArn, "g"))).toHaveLength(3);
     expect(bootstrap).not.toContain("repository/ai-delivery-orchestrator-pilot-worker");
+  });
+
+  it("trusts immutable main only for dedicated ECR publication", () => {
+    const publishTrust = bootstrap.slice(bootstrap.indexOf('data "aws_iam_policy_document" "github_publish_trust"'));
+    expect(publishTrust).toContain('values   = ["repo:${local.github_immutable_repository}:ref:refs/heads/main"]');
+    expect(publishTrust).not.toContain(":pull_request");
+    expect(publishTrust).not.toContain(":ref:refs/heads/*");
+    expect(publishTrust).not.toContain('repo:${var.github_repository}');
+    expect(publishTrust).not.toMatch(/identifiers\s*=\s*\["\*"\]/);
+    expect(bootstrap).toContain('name                 = "ai-delivery-orchestrator-ecr-publish"');
+    expect(bootstrap).toContain('output "github_publish_role_arn"');
+  });
+
+  it("grants the publishing role only exact-repository ECR push authority", () => {
+    const publishPolicy = bootstrap.slice(bootstrap.indexOf('data "aws_iam_policy_document" "github_publish"'));
+    const expectedActions = [
+      "ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:CompleteLayerUpload",
+      "ecr:DescribeImages", "ecr:GetAuthorizationToken", "ecr:InitiateLayerUpload",
+      "ecr:PutImage", "ecr:UploadLayerPart",
+    ];
+    for (const action of expectedActions) {
+      expect(publishPolicy).toContain(`"${action}"`);
+    }
+    const actualActions = [...publishPolicy.matchAll(/"(ecr:[A-Za-z]+)"/g)].flatMap((match) => match[1] ? [match[1]] : []);
+    expect(actualActions.sort()).toEqual(expectedActions.sort());
+    expect(publishPolicy.match(/resources\s*=\s*\["\*"\]/g)).toHaveLength(1);
+    expect(publishPolicy).toContain("repository/ai-delivery-orchestrator-worker");
+    expect(publishPolicy).not.toMatch(/ecr:(?:Create|Delete|PutLifecyclePolicy|TagResource|UntagResource)/);
+    expect(publishPolicy).not.toMatch(/s3:|iam:|ec2:|secretsmanager:/);
+  });
+
+  it("publishes only an immutable full-main-SHA image with pinned actions", () => {
+    expect(publishWorkflow).toMatch(/on:\n\s{2}push:\n\s{4}branches: \[main\]/);
+    expect(publishWorkflow).not.toMatch(/pull_request:|workflow_dispatch:/);
+    expect(publishWorkflow).toContain("contents: read");
+    expect(publishWorkflow).toContain("id-token: write");
+    expect(publishWorkflow).toContain("role-to-assume: ${{ vars.AWS_ECR_PUBLISH_ROLE_ARN }}");
+    expect(publishWorkflow).not.toMatch(/AWS_TERRAFORM_(?:PLAN|APPLY)_ROLE_ARN/);
+    expect(publishWorkflow).toContain('test "${#SELECTED_SHA}" -eq 40');
+    expect(publishWorkflow).toContain('test "$(git rev-parse HEAD)" = "$SELECTED_SHA"');
+    expect(publishWorkflow).toContain("${{ env.ECR_REPOSITORY }}:${{ github.sha }}");
+    expect(publishWorkflow).not.toMatch(/tags:.*latest/);
+    expect(publishWorkflow).toContain("ImageNotFoundException");
+    expect(publishWorkflow).toContain("refusing to overwrite or accept it");
+    expect(publishWorkflow).toContain('mask-password: "true"');
+    expect(publishWorkflow).toContain("cancel-in-progress: false");
+    expect(publishWorkflow).not.toMatch(/access-key-id|secret-access-key|terraform apply|terraform destroy/);
+    const actionReferences = [...publishWorkflow.matchAll(/uses:\s+[^@\s]+@([^\s]+)/g)].flatMap((match) => match[1] ? [match[1]] : []);
+    expect(actionReferences).toHaveLength(5);
+    expect(actionReferences.every((reference) => /^[0-9a-f]{40}$/.test(reference))).toBe(true);
   });
 
   it("grants provider-required reads only on existing pilot scopes", () => {
