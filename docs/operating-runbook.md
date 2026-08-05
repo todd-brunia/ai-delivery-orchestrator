@@ -2,10 +2,10 @@
 
 ## Scope and safety boundary
 
-This runbook covers the local foundation environment only. The worker runs
+This runbook primarily covers the local foundation environment. The worker runs
 with `PROVIDER_MODE=stub`; it has no GitHub or OpenAI credentials, makes no
-provider network calls, and cannot mutate a repository. AWS, LangGraph,
-webhook HTTP ingress, and the operator API are not implemented.
+provider network calls, and cannot mutate a repository. AWS runtime compute,
+LangGraph, webhook HTTP ingress, and the operator API are not implemented.
 
 Never place secrets in `.env`, fixtures, logs, issue bodies, or committed
 files. The example database password is local-only and must not be reused.
@@ -68,6 +68,21 @@ docker run --rm ai-delivery-orchestrator:local node dist/index.js --check
 
 Use `docker compose stop worker` for a normal stop. The current worker only
 emits heartbeats; it does not yet claim inbox or outbox work.
+
+## Published worker images
+
+A push to `main` publishes the worker image to the existing pilot ECR
+repository under the full 40-character commit SHA. Publication uses a dedicated
+main-only OIDC role and does not deploy or start the image. Confirm the workflow
+commit matches the intended merge and retain the workflow run URL and image
+digest as evidence; do not copy registry credentials or account identifiers
+into issues or logs.
+
+The publishing workflow fails closed when its immutable SHA tag already exists.
+Treat that result as evidence of a prior publication or possible preemption.
+Do not delete, overwrite, retag, or accept the existing image automatically.
+Investigate the original workflow run and ECR metadata before deciding on a
+new reviewed commit.
 
 ## Recovery
 
