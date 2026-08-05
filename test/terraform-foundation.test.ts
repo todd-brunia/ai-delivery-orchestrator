@@ -9,11 +9,15 @@ const allTerraform = (directory: string) => readdirSync(join(root, directory)).f
 describe("Terraform foundation policy", () => {
   const bootstrap = allTerraform("infra/bootstrap");
   const pilot = allTerraform("infra/environments/pilot");
+  const pilotIam = allTerraform("infra/environments/pilot-iam");
   const planWorkflow = read(".github/workflows/terraform-plan.yml");
   const applyWorkflow = read(".github/workflows/terraform-apply.yml");
 
   it("protects and versions native-locking remote state", () => {
     expect(read("infra/environments/pilot/backend.tf")).toContain("use_lockfile = true");
+    expect(read("infra/environments/pilot-iam/backend.tf")).toContain("use_lockfile = true");
+    expect(read("infra/environments/pilot/backend.tf")).toContain('key          = "pilot/terraform.tfstate"');
+    expect(read("infra/environments/pilot-iam/backend.tf")).toContain('key          = "pilot-iam/terraform.tfstate"');
     expect(bootstrap).toContain("prevent_destroy = true");
     expect(bootstrap).toContain('status = "Enabled"');
     expect(bootstrap).toContain("aws_s3_bucket_public_access_block");
@@ -38,7 +42,7 @@ describe("Terraform foundation policy", () => {
   });
 
   it("requires common ownership tags", () => {
-    for (const value of [bootstrap, pilot]) {
+    for (const value of [bootstrap, pilot, pilotIam]) {
       expect(value).toMatch(/Project\s*=\s*"ai-delivery-orchestrator"/);
       expect(value).toMatch(/ManagedBy\s*=\s*"terraform"/);
     }
@@ -75,6 +79,8 @@ describe("Terraform foundation policy", () => {
     expect(applyWorkflow).toContain('test "$(git rev-parse origin/main)" = "$SELECTED_SHA"');
     expect(applyWorkflow).toContain("-out=pilot.tfplan");
     expect(applyWorkflow).toContain("apply -input=false -lock-timeout=5m pilot.tfplan");
+    expect(applyWorkflow).toContain("-out=pilot-iam.tfplan");
+    expect(applyWorkflow).toContain("apply -input=false -lock-timeout=5m pilot-iam.tfplan");
   });
 
   it("creates named secret containers without managing values", () => {
@@ -87,10 +93,34 @@ describe("Terraform foundation policy", () => {
   });
 
   it("keeps future runtime secret access scoped and unattached", () => {
-    expect(pilot).toContain('["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"]');
-    expect(pilot).toContain("resources = values(aws_secretsmanager_secret.application)[*].arn");
-    expect(pilot).not.toMatch(/resources\s*=\s*\["\*"\][\s\S]{0,200}GetSecretValue/);
-    expect(pilot).not.toMatch(/aws_iam_(role_)?policy_attachment/);
+    expect(pilotIam).toContain('["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"]');
+    expect(pilotIam).toContain("secret:ai-delivery-orchestrator/pilot/${name}-??????");
+    expect(pilotIam).not.toMatch(/resources\s*=\s*\["\*"\][\s\S]{0,200}GetSecretValue/);
+    expect(pilotIam).not.toMatch(/aws_iam_(role_)?policy_attachment/);
+  });
+
+  it("separates pilot IAM ownership behind an exact reference contract", () => {
+    expect(pilot).not.toMatch(/resource\s+"aws_iam_/);
+    expect(pilotIam).toContain('resource "aws_iam_policy" "runtime_secrets"');
+    expect(pilot).toContain('variable "runtime_secret_policy_arn"');
+    expect(pilot).toContain('var.runtime_secret_policy_arn == "arn:aws:iam::${var.aws_account_id}:policy/ai-delivery-orchestrator-pilot-runtime-secrets"');
+    expect(pilot).not.toMatch(/terraform_remote_state/);
+    expect(pilotIam).not.toMatch(/terraform_remote_state/);
+  });
+
+  it("fails closed and orders optional IAM provisioning before the main stack", () => {
+    expect(applyWorkflow).toContain("provision_iam:");
+    expect(applyWorkflow).toMatch(/provision_iam:[\s\S]*?default: false/);
+    expect(applyWorkflow).toContain('test "$PILOT_IAM_STATE_ENABLED" = "true"');
+    expect(applyWorkflow).toContain('test "$RUNTIME_SECRET_POLICY_ARN" = "arn:aws:iam::$AWS_ACCOUNT_ID:policy/ai-delivery-orchestrator-pilot-runtime-secrets"');
+    expect(applyWorkflow.indexOf("Apply selected pilot IAM plan")).toBeLessThan(applyWorkflow.indexOf("Plan selected commit"));
+    expect(applyWorkflow).toContain("TF_VAR_runtime_secret_policy_arn");
+    expect(planWorkflow.indexOf("Create speculative pilot IAM plan")).toBeLessThan(planWorkflow.indexOf("Create speculative pilot plan"));
+    expect(planWorkflow).toContain("vars.PILOT_IAM_STATE_ENABLED == 'true'");
+    expect(planWorkflow).toContain("vars.PILOT_IAM_STATE_ENABLED != 'true'");
+    expect(planWorkflow).toContain("init -input=false -backend=false");
+    expect(bootstrap).toContain("pilot-iam/terraform.tfstate");
+    expect(bootstrap).toContain("pilot-iam/terraform.tfstate.tflock");
   });
 
   it("bounds logs, alarms, and budget notifications", () => {

@@ -54,12 +54,17 @@ address exists only in protected environment configuration.
    apply role, and their policies.
 4. Apply only after explicit human authorization.
 5. Record the state bucket and plan-role ARN as GitHub repository variables.
-   They are identifiers, not credentials.
+   They are identifiers, not credentials. Leave the repository variable
+   `PILOT_IAM_STATE_ENABLED` unset until the separately reviewed bootstrap
+   update grants both OIDC roles access to the dedicated IAM state key.
 6. Create a protected GitHub environment named `pilot`. Require a human
    reviewer and prevent unreviewed branches from deploying.
 7. In the `pilot` environment, set `AWS_ACCOUNT_ID`, `TF_STATE_BUCKET`,
-   `AWS_TERRAFORM_APPLY_ROLE_ARN`, and `BUDGET_NOTIFICATION_EMAIL` variables.
-   The notification address is account configuration and is not committed.
+   `AWS_TERRAFORM_APPLY_ROLE_ARN`, and `BUDGET_NOTIFICATION_EMAIL`. The
+   notification address is account configuration and is not committed. After
+   the first IAM-enabled deployment, also set `RUNTIME_SECRET_POLICY_ARN`; it
+   is an identifier, not a credential, and is required when a deployment skips
+   IAM provisioning.
 
 The bootstrap begins with local state because it creates its own remote state
 bucket. Preserve that state securely until a separately reviewed migration
@@ -115,33 +120,90 @@ pull-request-only Terraform workflow. Verify role assumption and remote-state
 locking from Actions logs; use CloudTrail metadata for failures without ever
 logging or retaining the web identity token.
 
-## Pilot backend and plan
+## Pilot IAM and main backends
+
+Pilot/application IAM is isolated in `infra/environments/pilot-iam` with the
+`pilot-iam/terraform.tfstate` backend key. The main root uses
+`pilot/terraform.tfstate` and must not manage IAM. Both use S3 native lockfiles.
+The roots exchange only an explicit, validated policy ARN; neither reads the
+other's Terraform state.
 
 ```bash
+terraform -chdir=infra/environments/pilot-iam init \
+  -backend-config="bucket=REPLACE_WITH_STATE_BUCKET"
+terraform -chdir=infra/environments/pilot-iam plan \
+  -var="aws_account_id=REPLACE_WITH_12_DIGIT_ACCOUNT_ID"
 terraform -chdir=infra/environments/pilot init \
   -backend-config="bucket=REPLACE_WITH_STATE_BUCKET"
 terraform -chdir=infra/environments/pilot plan \
-  -var="aws_account_id=REPLACE_WITH_12_DIGIT_ACCOUNT_ID"
+  -var="aws_account_id=REPLACE_WITH_12_DIGIT_ACCOUNT_ID" \
+  -var="runtime_secret_policy_arn=arn:aws:iam::REPLACE_WITH_12_DIGIT_ACCOUNT_ID:policy/ai-delivery-orchestrator-pilot-runtime-secrets"
 ```
 
-The backend uses S3 native lockfiles at `pilot/terraform.tfstate.tflock`. The
-OIDC plan role can access only the pilot state and inspect declared resources;
-it cannot mutate managed infrastructure.
+The OIDC plan role can access only these two pilot state keys and inspect
+declared resources; it cannot mutate managed infrastructure.
+
+During the implementation rollout, pull-request CI initializes the IAM root
+with its backend disabled while `PILOT_IAM_STATE_ENABLED` is unset. After the
+merged bootstrap change is separately planned and applied, set that repository
+variable to the literal value `true`. Protected IAM apply fails closed unless
+the flag is `true`; subsequent pull requests then plan against remote IAM
+state. The flag grants no authority by itself.
+
+For an existing bootstrap, preserve its local state and create a saved
+bootstrap plan after merging the IAM separation change. The reviewed plan must
+show exactly two in-place updates: the plan-role and apply-role inline
+permission policies gain access to `pilot-iam/terraform.tfstate` and its lock.
+OIDC trust, principals, role names, the state bucket, and all other resources
+must remain unchanged. Apply the saved plan only after separate authorization,
+then set `PILOT_IAM_STATE_ENABLED=true` and rerun the Terraform plan workflow.
 
 ## Protected pilot provisioning
 
 Dispatch `Terraform apply` from GitHub Actions with the full 40-character SHA
-of a reviewed commit on `main`. The workflow:
+of a reviewed commit on `main`. Set `provision_iam` to `true` for the first
+deployment or an explicitly reviewed IAM change. Leave it at its fail-closed
+default, `false`, for ordinary main-stack changes; the workflow then requires
+the exact `RUNTIME_SECRET_POLICY_ARN` protected environment variable. The
+workflow:
 
 1. waits for approval through the protected `pilot` environment;
 2. rejects malformed SHAs and any commit other than the current `origin/main`;
 3. assumes the environment-scoped apply role through OIDC;
-4. creates a saved Terraform plan for that exact commit; and
-5. applies that saved plan in the same job.
+4. when explicitly enabled, creates and applies a saved pilot-IAM plan before
+   exporting its concrete policy output;
+5. creates a saved main-stack plan for that exact commit with the validated IAM
+   reference; and
+6. applies that saved plan in the same job.
+
+After the first successful IAM-enabled deployment, record the emitted
+`runtime_secret_policy_arn` output as the protected environment variable
+`RUNTIME_SECRET_POLICY_ARN`. Future main-only deployments leave
+`provision_iam=false` and fail unless that exact account-scoped ARN is present.
 
 The workflow has a single non-cancelling concurrency group, so two pilot applies
 cannot overlap. There is no automated destroy path. Pull requests and ordinary
 pushes cannot invoke apply.
+
+## Existing pilot IAM state migration
+
+No migration is needed before the first pilot apply. If a future installation
+already has `aws_iam_policy.runtime_secrets` in the main pilot state, migration
+is a separate state-changing operation and is not authorized by an
+implementation PR or ordinary apply approval.
+
+Before any migration, download protected backups of both remote states, record
+their serials and lineage, and confirm the policy ARN from AWS. Import the
+existing policy into the dedicated IAM state first; do not recreate it. After a
+no-change IAM plan confirms the import, remove only the legacy policy address
+from the main state. Plan both roots and require no create, replace, detach, or
+destroy action before proceeding. Keep backups outside source control and
+never pass state through issue comments, logs, or workflow artifacts.
+
+If any resource other than the single runtime policy appears in the migration
+plan, stop. Restoring a state backup, removing an import, destroying a policy,
+or changing an attachment requires its own reviewed recovery plan and explicit
+authorization.
 
 ## Secrets, logging, and alerts
 

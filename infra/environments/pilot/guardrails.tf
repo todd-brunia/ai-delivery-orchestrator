@@ -18,20 +18,6 @@ resource "aws_secretsmanager_secret" "application" {
   recovery_window_in_days = 30
 }
 
-data "aws_iam_policy_document" "runtime_secrets" {
-  statement {
-    sid       = "ReadPilotApplicationSecrets"
-    actions   = ["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"]
-    resources = values(aws_secretsmanager_secret.application)[*].arn
-  }
-}
-
-resource "aws_iam_policy" "runtime_secrets" {
-  name        = "ai-delivery-orchestrator-pilot-runtime-secrets"
-  description = "Unattached policy for the future pilot runtime; attachment requires a reviewed compute slice."
-  policy      = data.aws_iam_policy_document.runtime_secrets.json
-}
-
 resource "aws_cloudwatch_log_group" "application" {
   for_each          = local.log_group_names
   name              = "/ai-delivery-orchestrator/pilot/${each.value}"

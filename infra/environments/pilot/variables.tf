@@ -5,6 +5,13 @@ variable "aws_account_id" {
     error_message = "aws_account_id must be 12 digits."
   }
 }
+variable "runtime_secret_policy_arn" {
+  type = string
+  validation {
+    condition     = var.runtime_secret_policy_arn == "arn:aws:iam::${var.aws_account_id}:policy/ai-delivery-orchestrator-pilot-runtime-secrets"
+    error_message = "runtime_secret_policy_arn must identify the exact pilot runtime secrets policy in aws_account_id."
+  }
+}
 variable "aws_region" {
   type    = string
   default = "us-east-1"

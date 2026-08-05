@@ -102,7 +102,7 @@ data "aws_iam_policy_document" "github_plan" {
     condition {
       test     = "StringLike"
       variable = "s3:prefix"
-      values   = ["pilot/*"]
+      values   = ["pilot/*", "pilot-iam/*"]
     }
   }
   statement {
@@ -114,6 +114,16 @@ data "aws_iam_policy_document" "github_plan" {
     sid       = "ManagePilotLock"
     actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
     resources = ["${aws_s3_bucket.terraform_state.arn}/pilot/terraform.tfstate.tflock"]
+  }
+  statement {
+    sid       = "ReadWritePilotIamState"
+    actions   = ["s3:GetObject", "s3:PutObject"]
+    resources = ["${aws_s3_bucket.terraform_state.arn}/pilot-iam/terraform.tfstate"]
+  }
+  statement {
+    sid       = "ManagePilotIamLock"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.terraform_state.arn}/pilot-iam/terraform.tfstate.tflock"]
   }
   statement {
     sid = "InspectFoundation"
@@ -198,7 +208,7 @@ data "aws_iam_policy_document" "github_apply" {
     condition {
       test     = "StringLike"
       variable = "s3:prefix"
-      values   = ["pilot/*"]
+      values   = ["pilot/*", "pilot-iam/*"]
     }
   }
   statement {
@@ -210,6 +220,16 @@ data "aws_iam_policy_document" "github_apply" {
     sid       = "ManagePilotLock"
     actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
     resources = ["${aws_s3_bucket.terraform_state.arn}/pilot/terraform.tfstate.tflock"]
+  }
+  statement {
+    sid       = "ManagePilotIamState"
+    actions   = ["s3:GetObject", "s3:PutObject"]
+    resources = ["${aws_s3_bucket.terraform_state.arn}/pilot-iam/terraform.tfstate"]
+  }
+  statement {
+    sid       = "ManagePilotIamLock"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.terraform_state.arn}/pilot-iam/terraform.tfstate.tflock"]
   }
   statement {
     sid = "ManagePilotNetwork"
