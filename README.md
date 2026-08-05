@@ -8,13 +8,14 @@ preserve human approval boundaries.
 
 The repository is in its foundation phase. It currently provides a validated
 TypeScript worker process, versioned provider-neutral `sprint-delivery/v1`
-domain and state-machine contracts, PostgreSQL workflow persistence, container
-build, local runtime, tests, and CI. It does not yet connect to GitHub, OpenAI,
-or a deployed AWS environment and cannot mutate another repository. The
+domain and state-machine contracts, PostgreSQL workflow persistence, a
+stub-only LangGraph dry-run runtime with durable PostgreSQL checkpoints,
+container build, local runtime, tests, and CI. It does not yet connect to
+GitHub, OpenAI, or a deployed AWS environment and cannot mutate another repository. The
 reviewed Terraform foundation supports protected GitHub OIDC plan/apply
 workflows, networking, image storage, empty secret containers, bounded logs,
-and cost guardrails. The initial pilot AWS trust bootstrap is applied; the
-pilot environment stack and application infrastructure are not yet deployed.
+and cost guardrails. The pilot foundation is deployed and converges with a
+no-op plan; application compute and data-plane infrastructure are not deployed.
 
 The approved implementation direction is maintained in the private owner's
 public planning repository:
@@ -44,6 +45,7 @@ Start PostgreSQL, apply migrations, and run the integration suite:
 ```bash
 docker compose up -d postgres
 DATABASE_URL=postgresql://orchestrator:local-orchestrator@127.0.0.1:54329/orchestrator npm run db:migrate
+DATABASE_URL=postgresql://orchestrator:local-orchestrator@127.0.0.1:54329/orchestrator npm run db:checkpoints
 DATABASE_URL=postgresql://orchestrator:local-orchestrator@127.0.0.1:54329/orchestrator npm run test:integration
 ```
 
@@ -87,6 +89,13 @@ Local provider composition is deliberately restricted to deterministic stubs.
 The stubs accept registered fixtures, capture proposed GitHub writes as inert
 intent, and fail closed when a fixture is missing. Real GitHub and OpenAI
 providers require separately reviewed implementation and authority.
+
+The internal `sprint-delivery/v1` runtime can load an existing run, collect
+canonical issue fixtures, perform deterministic feasibility analysis, persist
+validated dependency/conflict decisions, and checkpoint each graph step. It
+records proposed GitHub label changes only as inert transactional-outbox
+intent. It does not dispatch builds, call a live provider, or complete the
+Phase 2 workflow.
 
 ## License and reuse
 

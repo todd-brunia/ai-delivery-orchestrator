@@ -12,6 +12,7 @@
     "docker:build": "docker build --tag ai-delivery-orchestrator:local .",
     "lint": "eslint . --max-warnings 0",
     "db:migrate": "tsx src/persistence/migrate-cli.ts",
+    "db:checkpoints": "tsx src/workflows/checkpoint-setup-cli.ts",
     "start": "node dist/index.js",
     "test": "vitest run --coverage test/*.test.ts",
     "test:integration": "vitest run --no-file-parallelism test/integration",
@@ -29,6 +30,8 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "@langchain/langgraph": "^1.4.9",
+    "@langchain/langgraph-checkpoint-postgres": "^1.0.4",
     "pg": "^8.22.0",
     "zod": "^4.4.3"
   }
