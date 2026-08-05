@@ -7,6 +7,11 @@ on:
         description: Full 40-character commit SHA from main to provision
         required: true
         type: string
+      provision_iam:
+        description: Provision the dedicated pilot IAM stack before the main stack
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -50,12 +55,20 @@ jobs:
           AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ vars.AWS_TERRAFORM_APPLY_ROLE_ARN }}
           BUDGET_NOTIFICATION_EMAIL: ${{ vars.BUDGET_NOTIFICATION_EMAIL }}
+          PILOT_IAM_STATE_ENABLED: ${{ vars.PILOT_IAM_STATE_ENABLED }}
+          RUNTIME_SECRET_POLICY_ARN: ${{ vars.RUNTIME_SECRET_POLICY_ARN }}
           TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
         run: |
           test -n "$AWS_ACCOUNT_ID"
           test -n "$AWS_TERRAFORM_APPLY_ROLE_ARN"
           test -n "$BUDGET_NOTIFICATION_EMAIL"
           test -n "$TF_STATE_BUCKET"
+          if [ "${{ inputs.provision_iam }}" = "true" ]; then
+            test "$PILOT_IAM_STATE_ENABLED" = "true"
+          fi
+          if [ "${{ inputs.provision_iam }}" != "true" ]; then
+            test "$RUNTIME_SECRET_POLICY_ARN" = "arn:aws:iam::$AWS_ACCOUNT_ID:policy/ai-delivery-orchestrator-pilot-runtime-secrets"
+          fi
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
@@ -65,7 +78,24 @@ jobs:
         with:
           aws-region: us-east-1
           role-to-assume: ${{ vars.AWS_TERRAFORM_APPLY_ROLE_ARN }}
-      - name: Initialize remote state
+      - name: Initialize pilot IAM remote state
+        if: ${{ inputs.provision_iam }}
+        run: terraform -chdir=infra/environments/pilot-iam init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+      - name: Plan pilot IAM for selected commit
+        if: ${{ inputs.provision_iam }}
+        run: terraform -chdir=infra/environments/pilot-iam plan -input=false -lock-timeout=5m -out=pilot-iam.tfplan -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+      - name: Apply selected pilot IAM plan
+        if: ${{ inputs.provision_iam }}
+        run: terraform -chdir=infra/environments/pilot-iam apply -input=false -lock-timeout=5m pilot-iam.tfplan
+      - name: Export provisioned IAM references
+        if: ${{ inputs.provision_iam }}
+        run: echo "TF_VAR_runtime_secret_policy_arn=$(terraform -chdir=infra/environments/pilot-iam output -raw runtime_secret_policy_arn)" >> "$GITHUB_ENV"
+      - name: Require configured IAM references
+        if: ${{ ! inputs.provision_iam }}
+        env:
+          RUNTIME_SECRET_POLICY_ARN: ${{ vars.RUNTIME_SECRET_POLICY_ARN }}
+        run: echo "TF_VAR_runtime_secret_policy_arn=$RUNTIME_SECRET_POLICY_ARN" >> "$GITHUB_ENV"
+      - name: Initialize pilot remote state
         run: terraform -chdir=infra/environments/pilot init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
       - name: Plan selected commit
         run: terraform -chdir=infra/environments/pilot plan -input=false -lock-timeout=5m -out=pilot.tfplan -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
