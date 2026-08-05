@@ -59,12 +59,12 @@ address exists only in protected environment configuration.
    update grants both OIDC roles access to the dedicated IAM state key.
 6. Create a protected GitHub environment named `pilot`. Require a human
    reviewer and prevent unreviewed branches from deploying.
-7. In the `pilot` environment, set `AWS_ACCOUNT_ID`, `TF_STATE_BUCKET`,
-   `AWS_TERRAFORM_APPLY_ROLE_ARN`, and `BUDGET_NOTIFICATION_EMAIL`. The
-   notification address is account configuration and is not committed. After
-   the first IAM-enabled deployment, also set `RUNTIME_SECRET_POLICY_ARN`; it
-   is an identifier, not a credential, and is required when a deployment skips
-   IAM provisioning.
+7. In the `pilot` environment, set `AWS_ACCOUNT_ID`, `TF_STATE_BUCKET`, and
+   `AWS_TERRAFORM_APPLY_ROLE_ARN` as variables. Set
+   `BUDGET_NOTIFICATION_EMAIL` as a protected environment secret so Actions
+   masks it in mutation-workflow logs. After the first IAM-enabled deployment,
+   also set `RUNTIME_SECRET_POLICY_ARN` as a variable; it is an identifier, not
+   a credential, and is required when a deployment skips IAM provisioning.
 
 The bootstrap begins with local state because it creates its own remote state
 bucket. Preserve that state securely until a separately reviewed migration
@@ -146,11 +146,10 @@ declared resources; it cannot mutate managed infrastructure.
 During the implementation rollout, pull-request CI temporarily excludes the
 IAM backend declaration and initializes local, ephemeral state while
 `PILOT_IAM_STATE_ENABLED` is unset. The runner never applies or publishes that
-state. After the
-merged bootstrap change is separately planned and applied, set that repository
-variable to the literal value `true`. Protected IAM apply fails closed unless
-the flag is `true`; subsequent pull requests then plan against remote IAM
-state. The flag grants no authority by itself.
+state. After the merged bootstrap change is separately planned and applied,
+set that repository variable to the literal value `true`. Protected IAM apply
+fails closed unless the flag is `true`; subsequent pull requests then plan
+against remote IAM state. The flag grants no authority by itself.
 
 For an existing bootstrap, preserve its local state and create a saved
 bootstrap plan after merging the IAM separation change. The reviewed plan must
@@ -186,6 +185,35 @@ After the first successful IAM-enabled deployment, record the emitted
 The workflow has a single non-cancelling concurrency group, so two pilot applies
 cannot overlap. There is no automated destroy path. Pull requests and ordinary
 pushes cannot invoke apply.
+
+### Recover a fully recorded partial apply
+
+The initial pilot apply can fail during a provider post-create read after AWS
+has already created and Terraform has recorded resources. Before attempting
+recovery, inspect both remote state objects read-only. If the IAM state contains
+the runtime policy and the main state contains all 23 declared resources, both
+states are complete and authoritative: do not import, remove state, destroy, or
+recreate anything.
+
+For the recorded pilot recovery, add `secretsmanager:GetResourcePolicy` and
+`budgets:ViewBudget` to the two existing bootstrap role policies on their
+already scoped resources. After the implementation merges, create a saved
+bootstrap plan and require exactly two in-place inline role-policy updates with
+`0 to add, 0 to destroy`. Apply only after separate authorization.
+
+Before rerunning apply, migrate the protected environment configuration:
+
+1. create the `BUDGET_NOTIFICATION_EMAIL` environment secret with the current
+   notification address;
+2. verify only that the secret name exists—never retrieve or print its value;
+3. delete the same-named environment variable to prevent ambiguity; and
+4. set `RUNTIME_SECRET_POLICY_ARN` to the exact output from the complete IAM
+   state.
+
+Rerun apply for the current full `main` SHA with `provision_iam=false`. The
+workflow must produce and apply a fresh saved plan under environment approval.
+Verify both state locks and a succeeding follow-up speculative plan. Do not
+reuse the failed run's saved plan or artifacts.
 
 ## Protected pilot teardown
 

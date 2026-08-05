@@ -141,7 +141,7 @@ data "aws_iam_policy_document" "github_plan" {
   }
   statement {
     sid       = "InspectPilotSecrets"
-    actions   = ["secretsmanager:DescribeSecret", "secretsmanager:ListSecretVersionIds"]
+    actions   = ["secretsmanager:DescribeSecret", "secretsmanager:GetResourcePolicy", "secretsmanager:ListSecretVersionIds"]
     resources = ["arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:ai-delivery-orchestrator/pilot/*"]
   }
   statement {
@@ -151,7 +151,7 @@ data "aws_iam_policy_document" "github_plan" {
   }
   statement {
     sid       = "InspectPilotBudget"
-    actions   = ["budgets:DescribeBudget", "budgets:ListTagsForResource"]
+    actions   = ["budgets:DescribeBudget", "budgets:ListTagsForResource", "budgets:ViewBudget"]
     resources = ["arn:aws:budgets::${var.aws_account_id}:budget/ai-delivery-orchestrator-pilot-monthly"]
   }
   statement {
@@ -255,7 +255,7 @@ data "aws_iam_policy_document" "github_apply" {
   statement {
     sid = "ManagePilotSecrets"
     actions = [
-      "secretsmanager:CreateSecret", "secretsmanager:DeleteSecret", "secretsmanager:DescribeSecret",
+      "secretsmanager:CreateSecret", "secretsmanager:DeleteSecret", "secretsmanager:DescribeSecret", "secretsmanager:GetResourcePolicy",
       "secretsmanager:ListSecretVersionIds", "secretsmanager:TagResource", "secretsmanager:UntagResource",
       "secretsmanager:UpdateSecret",
     ]
@@ -290,7 +290,7 @@ data "aws_iam_policy_document" "github_apply" {
   statement {
     sid = "ManagePilotBudget"
     actions = [
-      "budgets:CreateBudget", "budgets:DeleteBudget", "budgets:DescribeBudget",
+      "budgets:CreateBudget", "budgets:DeleteBudget", "budgets:DescribeBudget", "budgets:ViewBudget",
       "budgets:ModifyBudget", "budgets:TagResource", "budgets:UntagResource",
     ]
     resources = ["arn:aws:budgets::${var.aws_account_id}:budget/ai-delivery-orchestrator-pilot-monthly"]
