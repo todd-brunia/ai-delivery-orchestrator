@@ -1,0 +1,102 @@
+name: Terraform destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Full 40-character commit SHA currently at main
+        required: true
+        type: string
+      confirmation:
+        description: Type DESTROY PILOT to confirm permanent pilot resource deletion
+        required: true
+        type: string
+      destroy_iam:
+        description: Also destroy the dedicated pilot IAM policy after the main stack
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-apply-pilot
+  cancel-in-progress: false
+
+jobs:
+  destroy:
+    name: pilot-destroy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: pilot
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      TF_VAR_budget_notification_email: ${{ vars.BUDGET_NOTIFICATION_EMAIL }}
+      TF_VAR_runtime_secret_policy_arn: ${{ vars.RUNTIME_SECRET_POLICY_ARN }}
+    steps:
+      - name: Validate destructive request
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          SELECTED_SHA: ${{ inputs.commit_sha }}
+        run: |
+          test "$CONFIRMATION" = "DESTROY PILOT"
+          test "${#SELECTED_SHA}" -eq 40
+          test -z "${SELECTED_SHA//[0-9a-f]/}"
+      - name: Check out selected commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+      - name: Verify commit is current main
+        env:
+          SELECTED_SHA: ${{ inputs.commit_sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SELECTED_SHA"
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$SELECTED_SHA"
+      - name: Require protected environment configuration
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ vars.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          BUDGET_NOTIFICATION_EMAIL: ${{ vars.BUDGET_NOTIFICATION_EMAIL }}
+          PILOT_IAM_STATE_ENABLED: ${{ vars.PILOT_IAM_STATE_ENABLED }}
+          RUNTIME_SECRET_POLICY_ARN: ${{ vars.RUNTIME_SECRET_POLICY_ARN }}
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+        run: |
+          test -n "$AWS_ACCOUNT_ID"
+          test -n "$AWS_TERRAFORM_APPLY_ROLE_ARN"
+          test -n "$BUDGET_NOTIFICATION_EMAIL"
+          test -n "$TF_STATE_BUCKET"
+          test "$RUNTIME_SECRET_POLICY_ARN" = "arn:aws:iam::$AWS_ACCOUNT_ID:policy/ai-delivery-orchestrator-pilot-runtime-secrets"
+          if [ "${{ inputs.destroy_iam }}" = "true" ]; then
+            test "$PILOT_IAM_STATE_ENABLED" = "true"
+          fi
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+      - name: Assume protected apply role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          aws-region: us-east-1
+          role-to-assume: ${{ vars.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+      - name: Initialize pilot remote state
+        run: terraform -chdir=infra/environments/pilot init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+      - name: Create saved pilot destroy plan
+        run: terraform -chdir=infra/environments/pilot plan -destroy -input=false -lock-timeout=5m -out=pilot-destroy.tfplan -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+      - name: Apply saved pilot destroy plan
+        run: terraform -chdir=infra/environments/pilot apply -input=false -lock-timeout=5m pilot-destroy.tfplan
+      - name: Initialize pilot IAM remote state
+        if: ${{ inputs.destroy_iam }}
+        run: terraform -chdir=infra/environments/pilot-iam init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+      - name: Create saved pilot IAM destroy plan
+        if: ${{ inputs.destroy_iam }}
+        run: terraform -chdir=infra/environments/pilot-iam plan -destroy -input=false -lock-timeout=5m -out=pilot-iam-destroy.tfplan -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+      - name: Apply saved pilot IAM destroy plan
+        if: ${{ inputs.destroy_iam }}
+        run: terraform -chdir=infra/environments/pilot-iam apply -input=false -lock-timeout=5m pilot-iam-destroy.tfplan
