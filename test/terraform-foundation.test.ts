@@ -13,6 +13,7 @@ describe("Terraform foundation policy", () => {
   const planWorkflow = read(".github/workflows/terraform-plan.yml");
   const applyWorkflow = read(".github/workflows/terraform-apply.yml");
   const destroyWorkflow = read(".github/workflows/terraform-destroy.yml");
+  const bootstrapRunbook = read("docs/terraform-bootstrap.md");
 
   it("protects and versions native-locking remote state", () => {
     expect(read("infra/environments/pilot/backend.tf")).toContain("use_lockfile = true");
@@ -176,6 +177,17 @@ describe("Terraform foundation policy", () => {
     expect(applyPolicy.match(/budgets:ListTagsForResource/g)).toHaveLength(1);
     expect(bootstrap).toContain("secret:ai-delivery-orchestrator/pilot/*");
     expect(bootstrap).toContain("budget/ai-delivery-orchestrator-pilot-monthly");
+  });
+
+  it("documents the exact four-address tainted-state recovery contract", () => {
+    expect(bootstrapRunbook).toContain("exactly the four tainted");
+    expect(bootstrapRunbook).toContain("aws_budgets_budget.monthly");
+    for (const name of ["github-app-private-key", "github-webhook-secret", "openai-api-key"]) {
+      expect(bootstrapRunbook).toContain(`aws_secretsmanager_secret.application[\\"${name}\\"]`);
+    }
+    expect(bootstrapRunbook.match(/length == 23/g)).toHaveLength(2);
+    expect(bootstrapRunbook).toContain('select(.status == "tainted")] | length == 0');
+    expect(bootstrapRunbook).toContain("0 to add, 0 to change, 0 to destroy");
   });
 
   it("masks the protected budget email in mutation workflows", () => {

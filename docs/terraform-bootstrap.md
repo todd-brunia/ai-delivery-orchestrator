@@ -190,26 +190,27 @@ pushes cannot invoke apply.
 
 The initial pilot apply failed during provider post-create reads after AWS had
 created and Terraform had recorded all resources. The IAM state contains its
-one managed policy and the main state contains all 23 managed resources. Three
+one managed policy and the main state contains all 23 managed resources. Four
 main-state instances were nevertheless marked tainted:
 
+- `aws_budgets_budget.monthly`
 - `aws_secretsmanager_secret.application["github-app-private-key"]`
 - `aws_secretsmanager_secret.application["github-webhook-secret"]`
 - `aws_secretsmanager_secret.application["openai-api-key"]`
 
 Do not apply the resulting replacement plan. Do not import, remove state,
-destroy, or recreate these secrets. Ordinary apply now inspects each saved plan
-and fails before apply when any resource action contains `delete`, including a
-delete-and-create replacement. The protected destroy workflow remains the only
-workflow intended to apply deletion plans.
+destroy, or recreate the budget or secrets. Ordinary apply now inspects each
+saved plan and fails before apply when any resource action contains `delete`,
+including a delete-and-create replacement. The protected destroy workflow
+remains the only workflow intended to apply deletion plans.
 
-Complete the missing provider reads by adding
+The missing provider reads were completed by adding
 `secretsmanager:GetResourcePolicy`, `budgets:ViewBudget`, and
 `budgets:ListTagsForResource` to the bootstrap role policies on their existing
-scoped resources. After the implementation merges, create a saved bootstrap
-plan and require only in-place inline role-policy updates with `0 to add, 0 to
-destroy`. Apply only after separate authorization and confirm a follow-up
-bootstrap plan reports no changes.
+scoped resources. The final saved bootstrap plan changed only the apply-role
+inline policy in place with `0 to add, 0 to destroy`, and the separately
+authorized apply completed successfully. A follow-up bootstrap plan reported
+no changes.
 
 Before rerunning apply, migrate the protected environment configuration:
 
@@ -228,19 +229,26 @@ AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot init
 ```
 
 Immediately before changing state, run both read-only assertions below. The
-first requires 23 instances. The second requires exactly the three tainted
+first requires 23 instances. The second requires exactly the four tainted
 addresses listed above. Each command prints only `true` on success and exits
 nonzero on a mismatch; stop if either fails. Do not save or print the complete
 state because it contains protected configuration.
 
 ```text
 AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot state pull | jq -e '[.resources[].instances[]] | length == 23'
-AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot state pull | jq -e '[.resources[] as $resource | $resource.instances[] | select(.status == "tainted") | "\($resource.type).\($resource.name)[\"\(.index_key)\"]"] | sort == ["aws_secretsmanager_secret.application[\"github-app-private-key\"]", "aws_secretsmanager_secret.application[\"github-webhook-secret\"]", "aws_secretsmanager_secret.application[\"openai-api-key\"]"]'
+AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot state pull | jq -e '[.resources[] as $resource | $resource.instances[] | select(.status == "tainted") | if .index_key == null then "\($resource.type).\($resource.name)" else "\($resource.type).\($resource.name)[\(.index_key | @json)]" end] | sort == ["aws_budgets_budget.monthly", "aws_secretsmanager_secret.application[\"github-app-private-key\"]", "aws_secretsmanager_secret.application[\"github-webhook-secret\"]", "aws_secretsmanager_secret.application[\"openai-api-key\"]"]'
 ```
+
+Create a fresh read-only main-stack plan with the configured runtime policy ARN
+and notification email. Provider refresh must succeed with the corrected
+permissions, and destructive actions must be limited to replacements of
+exactly those four tainted addresses. Do not save, dispatch, or apply that
+replacement plan. Stop on any provider error or additional change.
 
 Only after separate authorization for these exact addresses, run:
 
 ```text
+AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot untaint 'aws_budgets_budget.monthly'
 AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot untaint 'aws_secretsmanager_secret.application["github-app-private-key"]'
 AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot untaint 'aws_secretsmanager_secret.application["github-webhook-secret"]'
 AWS_PROFILE=ai-orchestrator-pilot terraform -chdir=infra/environments/pilot untaint 'aws_secretsmanager_secret.application["openai-api-key"]'
