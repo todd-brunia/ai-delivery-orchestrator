@@ -84,6 +84,20 @@ jobs:
       - name: Plan pilot IAM for selected commit
         if: ${{ inputs.provision_iam }}
         run: terraform -chdir=infra/environments/pilot-iam plan -input=false -lock-timeout=5m -out=pilot-iam.tfplan -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+      - name: Reject destructive pilot IAM plan
+        if: ${{ inputs.provision_iam }}
+        run: |
+          set -euo pipefail
+          destructive_changes="$(
+            terraform -chdir=infra/environments/pilot-iam show -json pilot-iam.tfplan |
+              jq -r '.resource_changes[]? | select(.change.actions | index("delete")) | "\(.address): \(.change.actions | join(","))"'
+          )"
+          if [ -n "$destructive_changes" ]; then
+            echo "::error::Saved pilot IAM plan contains delete or replacement actions"
+            printf '%s\n' "$destructive_changes"
+            exit 1
+          fi
+          echo "Saved pilot IAM plan contains no delete or replacement actions."
       - name: Apply selected pilot IAM plan
         if: ${{ inputs.provision_iam }}
         run: terraform -chdir=infra/environments/pilot-iam apply -input=false -lock-timeout=5m pilot-iam.tfplan
@@ -99,5 +113,18 @@ jobs:
         run: terraform -chdir=infra/environments/pilot init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
       - name: Plan selected commit
         run: terraform -chdir=infra/environments/pilot plan -input=false -lock-timeout=5m -out=pilot.tfplan -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+      - name: Reject destructive pilot plan
+        run: |
+          set -euo pipefail
+          destructive_changes="$(
+            terraform -chdir=infra/environments/pilot show -json pilot.tfplan |
+              jq -r '.resource_changes[]? | select(.change.actions | index("delete")) | "\(.address): \(.change.actions | join(","))"'
+          )"
+          if [ -n "$destructive_changes" ]; then
+            echo "::error::Saved pilot plan contains delete or replacement actions"
+            printf '%s\n' "$destructive_changes"
+            exit 1
+          fi
+          echo "Saved pilot plan contains no delete or replacement actions."
       - name: Apply selected plan
         run: terraform -chdir=infra/environments/pilot apply -input=false -lock-timeout=5m pilot.tfplan
