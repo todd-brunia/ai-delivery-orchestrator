@@ -130,3 +130,9 @@ bootstrap creates the state bucket and OIDC roles because that trust cannot
 bootstrap itself. Secret values are entered outside Terraform; the future
 runtime read policy remains unattached. Resource-specific queue, compute, and
 database alarms are deferred until those resources exist.
+
+Pilot teardown is a separate manual workflow protected by the same environment,
+commit-identity checks, OIDC role, and non-cancelling concurrency group as
+apply. It applies a saved main-stack destroy plan first and retains pilot IAM by
+default. Bootstrap trust, state storage, and state history are never in the
+workflow's destroy boundary.

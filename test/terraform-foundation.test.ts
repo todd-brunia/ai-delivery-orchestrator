@@ -12,6 +12,7 @@ describe("Terraform foundation policy", () => {
   const pilotIam = allTerraform("infra/environments/pilot-iam");
   const planWorkflow = read(".github/workflows/terraform-plan.yml");
   const applyWorkflow = read(".github/workflows/terraform-apply.yml");
+  const destroyWorkflow = read(".github/workflows/terraform-destroy.yml");
 
   it("protects and versions native-locking remote state", () => {
     expect(read("infra/environments/pilot/backend.tf")).toContain("use_lockfile = true");
@@ -36,6 +37,7 @@ describe("Terraform foundation policy", () => {
   it("uses immutable scanned ECR and two-tier networking without compute or NAT", () => {
     expect(pilot).toContain('image_tag_mutability = "IMMUTABLE"');
     expect(pilot).toContain("scan_on_push = true");
+    expect(pilot).toContain("force_delete         = true");
     expect(pilot).toContain('resource "aws_subnet" "public"');
     expect(pilot).toContain('resource "aws_subnet" "isolated"');
     expect(pilot).not.toMatch(/aws_nat_gateway|aws_ecs_|aws_rds_|aws_lambda_|aws_apigateway/);
@@ -122,6 +124,36 @@ describe("Terraform foundation policy", () => {
     expect(planWorkflow).toContain("init -input=false -backend=false");
     expect(bootstrap).toContain("pilot-iam/terraform.tfstate");
     expect(bootstrap).toContain("pilot-iam/terraform.tfstate.tflock");
+  });
+
+  it("keeps pilot destruction manual, confirmed, and protected", () => {
+    expect(destroyWorkflow).toContain("workflow_dispatch:");
+    expect(destroyWorkflow).not.toMatch(/^\s*(pull_request|push|schedule):/m);
+    expect(destroyWorkflow).toContain("environment: pilot");
+    expect(destroyWorkflow).toContain('test "$CONFIRMATION" = "DESTROY PILOT"');
+    expect(destroyWorkflow).toContain('test "$(git rev-parse origin/main)" = "$SELECTED_SHA"');
+    expect(destroyWorkflow.indexOf("Verify commit is current main")).toBeLessThan(destroyWorkflow.indexOf("Assume protected apply role"));
+    expect(destroyWorkflow).toContain("role-to-assume: ${{ vars.AWS_TERRAFORM_APPLY_ROLE_ARN }}");
+    expect(destroyWorkflow).not.toMatch(/access-key-id|secret-access-key/);
+  });
+
+  it("applies saved destroy plans main-first with IAM retained by default", () => {
+    expect(destroyWorkflow).toMatch(/destroy_iam:[\s\S]*?default: false/);
+    expect(destroyWorkflow).toContain("plan -destroy -input=false -lock-timeout=5m -out=pilot-destroy.tfplan");
+    expect(destroyWorkflow).toContain("apply -input=false -lock-timeout=5m pilot-destroy.tfplan");
+    expect(destroyWorkflow).toContain("plan -destroy -input=false -lock-timeout=5m -out=pilot-iam-destroy.tfplan");
+    expect(destroyWorkflow).toContain("apply -input=false -lock-timeout=5m pilot-iam-destroy.tfplan");
+    expect(destroyWorkflow.indexOf("Apply saved pilot destroy plan")).toBeLessThan(destroyWorkflow.indexOf("Create saved pilot IAM destroy plan"));
+    expect(destroyWorkflow).not.toContain("terraform destroy");
+    expect(destroyWorkflow).not.toContain("infra/bootstrap");
+    expect(destroyWorkflow).toContain("group: terraform-apply-pilot");
+    expect(applyWorkflow).toContain("group: terraform-apply-pilot");
+  });
+
+  it("uses the exact ECR repository ARN for plan and apply permissions", () => {
+    const expectedArn = "repository/ai-delivery-orchestrator-worker";
+    expect(bootstrap.match(new RegExp(expectedArn, "g"))).toHaveLength(2);
+    expect(bootstrap).not.toContain("repository/ai-delivery-orchestrator-pilot-worker");
   });
 
   it("bounds logs, alarms, and budget notifications", () => {
