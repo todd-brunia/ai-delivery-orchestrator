@@ -75,8 +75,8 @@ leases to exclude competing workers.
 Sprint workflow identity (definition version, repository, issue list, and merge
 policy) is immutable after insertion. The database stores structured events,
 actors, and evidence references; it does not store credentials, webhook bodies,
-private source, or raw model reasoning. LangGraph checkpoints will use a
-separate schema and are not authoritative application state.
+private source, or raw model reasoning. LangGraph checkpoints use the separate
+`langgraph_checkpoints` schema and are not authoritative application state.
 
 The persistence adapter also records validated dependency/conflict analysis,
 advances work items through the domain state machine, and selects build-ready
@@ -104,6 +104,27 @@ Only `PROVIDER_MODE=stub` is enabled. Deterministic in-memory adapters require
 explicit fixtures, return isolated copies, capture mutation intent without
 executing it, and make no network calls. Real Octokit and OpenAI adapters are
 deferred and cannot be selected through configuration.
+
+## Stub-only LangGraph runtime
+
+The internal workflow runtime executes the first bounded
+`sprint-delivery/v1` dry-run path: load an existing immutable run, read every
+issue through fixture-backed GitHub ports, request fixture-backed feasibility
+analysis, validate domain policy and dependency rules, and persist analysis
+plus attributable state transitions. Proposed label changes are durable
+outbox intent only; the graph never invokes the GitHub mutation port.
+
+The official open-source PostgreSQL checkpointer stores graph execution state
+in `langgraph_checkpoints`. Stable thread IDs resume interrupted graphs, while
+deterministic application idempotency keys prevent replay from duplicating
+transitions or outbox actions. Application tables remain authoritative for run
+and work-item state; checkpoint payloads cannot add states or bypass policy.
+Missing fixtures, incomplete conflict coverage, unsupported versions,
+non-stub provider selection, infeasible results, unresolved decisions, and
+stale database revisions fail closed.
+
+This slice does not implement webhook transport, reconciliation, end-to-end
+scheduling, live provider adapters, GitHub writes, or application AWS compute.
 
 ## Terraform foundation
 
