@@ -49,7 +49,18 @@ jobs:
         with:
           aws-region: us-east-1
           role-to-assume: ${{ vars.AWS_TERRAFORM_PLAN_ROLE_ARN }}
-      - name: Initialize remote state
+      - name: Initialize pilot IAM remote state
+        if: ${{ vars.PILOT_IAM_STATE_ENABLED == 'true' }}
+        run: terraform -chdir=infra/environments/pilot-iam init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+      - name: Initialize pilot IAM without remote state
+        if: ${{ vars.PILOT_IAM_STATE_ENABLED != 'true' }}
+        run: terraform -chdir=infra/environments/pilot-iam init -input=false -backend=false
+      - name: Create speculative pilot IAM plan
+        run: terraform -chdir=infra/environments/pilot-iam plan -input=false -lock-timeout=5m -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+      - name: Initialize pilot remote state
         run: terraform -chdir=infra/environments/pilot init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
-      - name: Create speculative plan
-        run: terraform -chdir=infra/environments/pilot plan -input=false -lock-timeout=5m -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+      - name: Create speculative pilot plan
+        run: >-
+          terraform -chdir=infra/environments/pilot plan -input=false -lock-timeout=5m
+          -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+          -var="runtime_secret_policy_arn=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:policy/ai-delivery-orchestrator-pilot-runtime-secrets"
