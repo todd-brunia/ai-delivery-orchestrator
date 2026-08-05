@@ -137,7 +137,7 @@ data "aws_iam_policy_document" "github_plan" {
     actions = [
       "ecr:DescribeRepositories", "ecr:GetLifecyclePolicy", "ecr:GetRepositoryPolicy", "ecr:ListTagsForResource",
     ]
-    resources = ["arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/ai-delivery-orchestrator-pilot-worker"]
+    resources = ["arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/ai-delivery-orchestrator-worker"]
   }
   statement {
     sid       = "InspectPilotSecrets"
@@ -250,7 +250,7 @@ data "aws_iam_policy_document" "github_apply" {
       "ecr:DescribeRepositories", "ecr:GetLifecyclePolicy", "ecr:GetRepositoryPolicy",
       "ecr:ListTagsForResource", "ecr:PutLifecyclePolicy", "ecr:TagResource", "ecr:UntagResource",
     ]
-    resources = ["arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/ai-delivery-orchestrator-pilot-worker"]
+    resources = ["arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/ai-delivery-orchestrator-worker"]
   }
   statement {
     sid = "ManagePilotSecrets"
