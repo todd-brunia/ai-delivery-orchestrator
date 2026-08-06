@@ -13,6 +13,7 @@
     "lint": "eslint . --max-warnings 0",
     "db:migrate": "tsx src/persistence/migrate-cli.ts",
     "db:checkpoints": "tsx src/workflows/checkpoint-setup-cli.ts",
+    "dry-run:schedule": "tsx src/workflows/dry-run-cli.ts",
     "start": "node dist/index.js",
     "test": "vitest run --coverage test/*.test.ts",
     "test:integration": "vitest run --no-file-parallelism test/integration",

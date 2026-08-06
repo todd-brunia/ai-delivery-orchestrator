@@ -9,7 +9,8 @@ preserve human approval boundaries.
 The repository is in its foundation phase. It currently provides a validated
 TypeScript worker process, versioned provider-neutral `sprint-delivery/v1`
 domain and state-machine contracts, PostgreSQL workflow persistence, a
-stub-only LangGraph dry-run runtime with durable PostgreSQL checkpoints,
+stub-only LangGraph feasibility, scheduling, and reconciliation dry-run runtime
+with durable PostgreSQL checkpoints and authoritative scheduling records,
 container build, local runtime, tests, and CI. It does not yet connect to
 GitHub, OpenAI, or a deployed AWS environment and cannot mutate another repository. The
 reviewed Terraform foundation supports protected GitHub OIDC plan/apply
@@ -92,10 +93,21 @@ providers require separately reviewed implementation and authority.
 
 The internal `sprint-delivery/v1` runtime can load an existing run, collect
 canonical issue fixtures, perform deterministic feasibility analysis, persist
-validated dependency/conflict decisions, and checkpoint each graph step. It
-records proposed GitHub label changes only as inert transactional-outbox
-intent. It does not dispatch builds, call a live provider, or complete the
-Phase 2 workflow.
+validated dependency/conflict decisions, select at most two dependency- and
+conflict-safe work items in issue-number order, re-read their canonical
+fixtures for drift, and checkpoint each graph step. Label and implementation
+dispatch actions are durable, idempotent proposals only; they are never sent
+to the GitHub mutation port and work items remain `ready_to_build`.
+
+With local PostgreSQL running, execute a sanitized fixture report with:
+
+```bash
+DATABASE_URL=postgresql://orchestrator:local-orchestrator@127.0.0.1:54329/orchestrator npm run dry-run:schedule -- path/to/fixture.json
+```
+
+This is a partial Phase 2 dry-run slice. It does not validate live target
+repositories, execute external writes, deploy application compute, or complete
+the end-to-end Phase 2 workflow.
 
 ## License and reuse
 
