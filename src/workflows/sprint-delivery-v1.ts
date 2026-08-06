@@ -2,13 +2,15 @@ import { createHash } from "node:crypto";
 
 import { Annotation, END, START, StateGraph, type BaseCheckpointSaver } from "@langchain/langgraph";
 
-import { planApprovalRequirement, WORKFLOW_VERSION } from "../domain/sprint-delivery/v1/index.js";
+import { planApprovalRequirement, ReconciliationReportSchema, scheduleDryRun, WORKFLOW_VERSION, type ReconciliationReport, type SchedulingDecision } from "../domain/sprint-delivery/v1/index.js";
 import type { PersistedSprintRun, SprintRunRepository } from "../persistence/index.js";
 import {
+  CanonicalIssueSchema,
   FeasibilityResultSchema,
   PROVIDER_CONTRACT_VERSION,
   type FeasibilityResult,
   type ProviderSet,
+  type CanonicalIssue,
 } from "../providers/v1/index.js";
 import {
   DryRunWorkflowRequestSchema,
@@ -21,12 +23,14 @@ import {
 const GraphState = Annotation.Root({
   request: Annotation<DryRunWorkflowRequest>,
   run: Annotation<PersistedSprintRun>,
-  issues: Annotation<readonly { number: number; nodeId: string; updatedAt: string }[]>,
+  issues: Annotation<readonly CanonicalIssue[]>,
   analysis: Annotation<FeasibilityResult>,
+  schedule: Annotation<SchedulingDecision>,
+  reconciliation: Annotation<ReconciliationReport>,
   result: Annotation<DryRunWorkflowResult>,
 });
 
-export type DryRunNodeName = "load_run" | "collect_issues" | "analyze" | "persist_analysis";
+export type DryRunNodeName = "load_run" | "collect_issues" | "analyze" | "persist_analysis" | "compute_schedule" | "reconcile_issues" | "save_schedule";
 
 export interface SprintDeliveryGraphOptions {
   readonly interruptAfter?: readonly DryRunNodeName[];
@@ -77,7 +81,7 @@ export function createSprintDeliveryV1Runtime(
       const issues = await Promise.all(state.run.input.issueNumbers.map((number) =>
         providers.githubRead.getIssue(state.run.input.repository, number)));
       if (issues.some((issue) => issue.state !== "open")) throw new Error("all workflow issues must be open");
-      return { issues: issues.map(({ number, nodeId, updatedAt }) => ({ number, nodeId, updatedAt })) };
+      return { issues: issues.map((issue) => CanonicalIssueSchema.parse(issue)) };
     })
     .addNode("analyze", async (state) => {
       const analysis = await providers.modelAnalysis.analyzeFeasibility({
@@ -207,21 +211,68 @@ export function createSprintDeliveryV1Runtime(
           },
         })).run;
       }
-      return { result: DryRunWorkflowResultSchema.parse({
-        workflowVersion: WORKFLOW_VERSION,
-        providerContractVersion: PROVIDER_CONTRACT_VERSION,
-        runId: run.id,
-        threadId: request.threadId,
-        status: run.state,
-        issueNumbers: run.input.issueNumbers,
-        analysis,
+      return { run };
+    })
+    .addNode("compute_schedule", async (state) => {
+      const persisted = state.run.state === "active" && repository.loadSchedulingState
+        ? await repository.loadSchedulingState(state.run.id)
+        : undefined;
+      const workItems = persisted?.workItems ?? state.run.workItems.map((item) => ({
+        ...item,
+        conflictDomains: state.analysis.conflicts.find(({ issueNumber }) => issueNumber === item.issueNumber)?.domains ?? [],
+      }));
+      const activeImplementationCount = workItems.filter(({ state: itemState }) => ["build_dispatched", "building", "pr_open", "checks_pending", "reviewing", "fixing", "ready_for_human_review"].includes(itemState)).length;
+      return { schedule: scheduleDryRun({
+        runId: state.run.id,
+        candidates: workItems.filter(({ state: itemState }) => itemState === "ready_to_build"),
+        dependencies: persisted?.dependencies ?? state.analysis.dependencies,
+        mergedIssueNumbers: workItems.filter(({ state: itemState }) => itemState === "merged").map(({ issueNumber }) => issueNumber),
+        activeImplementationCount,
+        evidence: evidence(state.run.input.issueNumbers),
       }) };
+    })
+    .addNode("reconcile_issues", async (state) => {
+      const selected = new Set(state.schedule.selectedIssueNumbers);
+      const drift: Array<{ issueNumber: number; field: "identity" | "state" | "labels" | "updated_at" | "plan_fingerprint"; severity: "informational" | "invalidating"; expected: string; observed: string }> = [];
+      for (const original of state.issues.filter(({ number }) => selected.has(number))) {
+        const current = CanonicalIssueSchema.parse(await providers.githubRead.getIssue(state.run.input.repository, original.number));
+        if (current.nodeId !== original.nodeId || current.repository !== original.repository || current.number !== original.number) drift.push({ issueNumber: original.number, field: "identity", severity: "invalidating", expected: `${original.repository}#${original.number}:${original.nodeId}`, observed: `${current.repository}#${current.number}:${current.nodeId}` });
+        if (current.state !== original.state || current.state !== "open") drift.push({ issueNumber: original.number, field: "state", severity: "invalidating", expected: "open", observed: current.state });
+        if (JSON.stringify([...current.labels].sort()) !== JSON.stringify([...original.labels].sort())) drift.push({ issueNumber: original.number, field: "labels", severity: "invalidating", expected: JSON.stringify([...original.labels].sort()), observed: JSON.stringify([...current.labels].sort()) });
+        if (current.updatedAt !== original.updatedAt) drift.push({ issueNumber: original.number, field: "updated_at", severity: "invalidating", expected: original.updatedAt, observed: current.updatedAt });
+        const originalPlan = createHash("sha256").update(JSON.stringify({ title: original.title, body: original.body })).digest("hex");
+        const currentPlan = createHash("sha256").update(JSON.stringify({ title: current.title, body: current.body })).digest("hex");
+        if (currentPlan !== originalPlan) drift.push({ issueNumber: original.number, field: "plan_fingerprint", severity: "invalidating", expected: originalPlan, observed: currentPlan });
+      }
+      const reconciliation = ReconciliationReportSchema.parse({
+        version: "reconciliation-report/v1", workflowVersion: WORKFLOW_VERSION,
+        providerContractVersion: PROVIDER_CONTRACT_VERSION, policyVersion: "dry-run-scheduling/v1",
+        runId: state.run.id, reconciledAt: state.request.occurredAt, drift,
+        valid: !drift.some(({ severity }) => severity === "invalidating"), evidence: evidence(state.schedule.selectedIssueNumbers.length > 0 ? state.schedule.selectedIssueNumbers : state.run.input.issueNumbers),
+      });
+      if (!reconciliation.valid) throw new Error("canonical issue drift invalidated scheduling");
+      return { reconciliation };
+    })
+    .addNode("save_schedule", async (state) => {
+      if (repository.persistDryRunScheduling) {
+        const ownerId = `scheduler:${state.request.threadId}`;
+        const occurredAt = new Date(state.request.occurredAt);
+        const acquired = await repository.tryAcquireLease({ aggregateType: "sprint_run", aggregateId: state.run.id, ownerId, expiresAt: new Date(occurredAt.getTime() + 60_000) }, occurredAt);
+        if (!acquired) throw new Error("scheduler lease contention");
+        await repository.persistDryRunScheduling({ decision: state.schedule, reconciliation: state.reconciliation, expectedRunRevision: state.run.revision });
+      }
+      return { result: DryRunWorkflowResultSchema.parse({ workflowVersion: WORKFLOW_VERSION, providerContractVersion: PROVIDER_CONTRACT_VERSION,
+        runId: state.run.id, threadId: state.request.threadId, status: state.run.state, issueNumbers: state.run.input.issueNumbers,
+        analysis: state.analysis, schedule: state.schedule, reconciliation: state.reconciliation }) };
     })
     .addEdge(START, "load_run")
     .addEdge("load_run", "collect_issues")
     .addEdge("collect_issues", "analyze")
     .addEdge("analyze", "persist_analysis")
-    .addEdge("persist_analysis", END)
+    .addEdge("persist_analysis", "compute_schedule")
+    .addEdge("compute_schedule", "reconcile_issues")
+    .addEdge("reconcile_issues", "save_schedule")
+    .addEdge("save_schedule", END)
     .compile({
       checkpointer,
       ...(options.interruptAfter ? { interruptAfter: [...options.interruptAfter] } : {}),
