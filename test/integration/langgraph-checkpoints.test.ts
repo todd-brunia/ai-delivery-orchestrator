@@ -61,12 +61,17 @@ describe("PostgreSQL LangGraph checkpoints", () => {
     await expect(runtime.execute(request(runId, `resume:${runId}`, fixture.fingerprints))).rejects.toThrow("interrupted");
     await expect(runtime.resume(`resume:${runId}`)).rejects.toThrow("interrupted");
     await expect(runtime.resume(`resume:${runId}`)).rejects.toThrow("interrupted");
-    await expect(runtime.resume(`resume:${runId}`)).resolves.toMatchObject({ status: "active" });
+    await expect(runtime.resume(`resume:${runId}`)).resolves.toMatchObject({ status: "active", schedule: { selectedIssueNumbers: [81] }, reconciliation: { valid: true, drift: [] } });
     const counts = await pool.query<{ transitions: string; outbox: string }>("SELECT (SELECT count(*) FROM orchestrator.transitions)::text transitions, (SELECT count(*) FROM orchestrator.outbox)::text outbox");
     expect(counts.rows[0]).toEqual({ transitions: "5", outbox: "5" });
     await expect(runtime.resume(`resume:${runId}`)).resolves.toMatchObject({ status: "active" });
     const replayCounts = await pool.query<{ transitions: string; outbox: string }>("SELECT (SELECT count(*) FROM orchestrator.transitions)::text transitions, (SELECT count(*) FROM orchestrator.outbox)::text outbox");
     expect(replayCounts.rows[0]).toEqual(counts.rows[0]);
+    const scheduling = await pool.query<{ decisions: string; reconciliations: string; proposals: string }>(`SELECT
+      (SELECT count(*) FROM orchestrator.schedule_decisions)::text decisions,
+      (SELECT count(*) FROM orchestrator.reconciliation_reports)::text reconciliations,
+      (SELECT count(*) FROM orchestrator.proposed_actions)::text proposals`);
+    expect(scheduling.rows[0]).toEqual({ decisions: "1", reconciliations: "1", proposals: "2" });
   });
 
   it("isolates concurrent sprint threads", async () => {

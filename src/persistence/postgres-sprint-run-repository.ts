@@ -14,6 +14,8 @@ import {
   transitionSprintRun,
   transitionWorkItem,
   assertAcyclicDependencies,
+  ReconciliationReportSchema,
+  SchedulingDecisionSchema,
 } from "../domain/sprint-delivery/v1/index.js";
 import {
   ConcurrencyError,
@@ -27,6 +29,8 @@ import {
   type RunTransitionRequest,
   type RunTransitionResult,
   type SprintRunRepository,
+  type PersistedSchedulingState,
+  type PersistSchedulingRequest,
 } from "./contracts.js";
 
 interface RunRow {
@@ -46,6 +50,11 @@ interface WorkItemRow {
   issue_number: number;
   state: string;
   revision: number;
+}
+
+function zArray(value: unknown): ReturnType<typeof ConflictDomainSchema.parse>[] {
+  if (!Array.isArray(value)) throw new Error("persisted conflict domains must be an array");
+  return value.map((domain) => ConflictDomainSchema.parse(domain));
 }
 
 export class PostgresSprintRunRepository implements SprintRunRepository {
@@ -283,6 +292,47 @@ export class PostgresSprintRunRepository implements SprintRunRepository {
         WHERE de.sprint_run_id = wi.sprint_run_id AND de.dependent_issue_number = wi.issue_number
           AND prerequisite.state <> 'merged') ORDER BY wi.issue_number`, [runId]);
     return result.rows.map((row) => this.mapWorkItem(row));
+  }
+
+  async loadSchedulingState(runId: string): Promise<PersistedSchedulingState> {
+    await this.requireRun(runId);
+    const [dependencies, items] = await Promise.all([
+      this.pool.query<{ prerequisite_issue_number: number; dependent_issue_number: number; kind: "blocks" }>(
+        "SELECT prerequisite_issue_number, dependent_issue_number, kind FROM orchestrator.dependency_edges WHERE sprint_run_id = $1 ORDER BY prerequisite_issue_number, dependent_issue_number", [runId]),
+      this.pool.query<WorkItemRow & { domains: unknown }>(`SELECT wi.id, wi.issue_number, wi.state, wi.revision,
+        COALESCE(jsonb_agg(jsonb_build_object('kind', cd.kind, 'value', cd.value, 'confidence', cd.confidence))
+          FILTER (WHERE cd.id IS NOT NULL), '[]'::jsonb) AS domains
+        FROM orchestrator.work_items wi LEFT JOIN orchestrator.conflict_domains cd ON cd.work_item_id = wi.id
+        WHERE wi.sprint_run_id = $1 GROUP BY wi.id ORDER BY wi.issue_number`, [runId]),
+    ]);
+    return {
+      dependencies: dependencies.rows.map((row) => DependencyEdgeSchema.parse({ prerequisiteIssueNumber: row.prerequisite_issue_number, dependentIssueNumber: row.dependent_issue_number, kind: row.kind })),
+      conflicts: items.rows.map((row) => ({ issueNumber: row.issue_number, domains: zArray(row.domains) })),
+      workItems: items.rows.map((row) => ({ ...this.mapWorkItem(row), conflictDomains: zArray(row.domains) })),
+    };
+  }
+
+  async persistDryRunScheduling(raw: PersistSchedulingRequest): Promise<{ readonly duplicate: boolean }> {
+    const decision = SchedulingDecisionSchema.parse(raw.decision);
+    const reconciliation = ReconciliationReportSchema.parse(raw.reconciliation);
+    if (decision.runId !== reconciliation.runId) throw new Error("schedule and reconciliation run ids must match");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const run = await client.query<{ revision: number }>("SELECT revision FROM orchestrator.sprint_runs WHERE id = $1 FOR UPDATE", [decision.runId]);
+      if (!run.rows[0]) throw new Error(`sprint run not found: ${decision.runId}`);
+      const existing = await client.query("SELECT run_id FROM orchestrator.schedule_decisions WHERE run_id = $1", [decision.runId]);
+      if (existing.rowCount === 1) { await client.query("COMMIT"); return { duplicate: true }; }
+      if (run.rows[0].revision !== raw.expectedRunRevision) throw new ConcurrencyError(`expected revision ${raw.expectedRunRevision}, found ${run.rows[0].revision}`);
+      await client.query("INSERT INTO orchestrator.schedule_decisions (run_id, run_revision, decision, created_at) VALUES ($1, $2, $3, $4)", [decision.runId, raw.expectedRunRevision, JSON.stringify(decision), reconciliation.reconciledAt]);
+      await client.query("INSERT INTO orchestrator.reconciliation_reports (run_id, report, created_at) VALUES ($1, $2, $3)", [decision.runId, JSON.stringify(reconciliation), reconciliation.reconciledAt]);
+      for (const action of decision.proposedActions) await client.query(`INSERT INTO orchestrator.proposed_actions
+        (idempotency_key, run_id, issue_number, action_type, payload, created_at) VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (idempotency_key) DO NOTHING`, [action.idempotencyKey, decision.runId, action.issueNumber, action.type, JSON.stringify(action.parameters), reconciliation.reconciledAt]);
+      await client.query("COMMIT");
+      return { duplicate: false };
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
   }
 
   async claimOutbox(ownerId: string, limit: number, expiresAt: Date, now = new Date()): Promise<readonly ClaimedOutboxAction[]> {

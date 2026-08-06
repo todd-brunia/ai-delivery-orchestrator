@@ -7,6 +7,8 @@ import type {
   TransitionMetadata,
   WorkItemState,
   WorkItemEvent,
+  ReconciliationReport,
+  SchedulingDecision,
 } from "../domain/sprint-delivery/v1/index.js";
 
 export interface PersistedWorkItem {
@@ -67,6 +69,16 @@ export interface SprintAnalysis {
   readonly conflicts: readonly WorkItemConflictAnalysis[];
 }
 
+export interface PersistedSchedulingState extends SprintAnalysis {
+  readonly workItems: readonly (PersistedWorkItem & { readonly conflictDomains: readonly ConflictDomain[] })[];
+}
+
+export interface PersistSchedulingRequest {
+  readonly decision: SchedulingDecision;
+  readonly reconciliation: ReconciliationReport;
+  readonly expectedRunRevision: number;
+}
+
 export interface ClaimedOutboxAction extends OutboxAction {
   readonly attemptCount: number;
   readonly claimExpiresAt: string;
@@ -86,6 +98,8 @@ export interface SprintRunRepository {
   transitionWorkItem(request: WorkItemTransitionRequest): Promise<WorkItemTransitionResult>;
   saveAnalysis(runId: string, analysis: SprintAnalysis): Promise<void>;
   listRunnableWorkItems(runId: string): Promise<readonly PersistedWorkItem[]>;
+  loadSchedulingState?(runId: string): Promise<PersistedSchedulingState>;
+  persistDryRunScheduling?(request: PersistSchedulingRequest): Promise<{ readonly duplicate: boolean }>;
   claimOutbox(ownerId: string, limit: number, expiresAt: Date, now?: Date): Promise<readonly ClaimedOutboxAction[]>;
   completeOutbox(id: string, ownerId: string, now?: Date): Promise<boolean>;
   retryOutbox(id: string, ownerId: string, error: string, now?: Date): Promise<boolean>;
