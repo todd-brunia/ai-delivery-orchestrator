@@ -111,8 +111,14 @@ The internal workflow runtime executes the first bounded
 `sprint-delivery/v1` dry-run path: load an existing immutable run, read every
 issue through fixture-backed GitHub ports, request fixture-backed feasibility
 analysis, validate domain policy and dependency rules, and persist analysis
-plus attributable state transitions. Proposed label changes are durable
-outbox intent only; the graph never invokes the GitHub mutation port.
+plus attributable state transitions. It then loads authoritative work-item
+state, chooses at most two runnable issues by stable issue-number order,
+serializes dependency, overlapping-domain, and low-confidence candidates, and
+re-reads selected fixtures. Identity, state, label, timestamp, or plan-content
+drift invalidates the schedule. Schedule decisions, reconciliation reports,
+and label/dispatch proposals have versioned strict contracts and durable,
+idempotent records; the graph never invokes the GitHub mutation port or marks
+a work item dispatched.
 
 The official open-source PostgreSQL checkpointer stores graph execution state
 in `langgraph_checkpoints`. Stable thread IDs resume interrupted graphs, while
@@ -123,8 +129,10 @@ Missing fixtures, incomplete conflict coverage, unsupported versions,
 non-stub provider selection, infeasible results, unresolved decisions, and
 stale database revisions fail closed.
 
-This slice does not implement webhook transport, reconciliation, end-to-end
-scheduling, live provider adapters, GitHub writes, or application AWS compute.
+This slice does not implement webhook transport, live target-repository
+validation, live provider adapters, GitHub writes, proposal execution, or
+application AWS compute. Scheduling/reconciliation is fixture-only and does
+not constitute end-to-end Phase 2 completion.
 
 ## Terraform foundation
 

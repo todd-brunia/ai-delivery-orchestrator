@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { WORKFLOW_VERSION } from "../domain/sprint-delivery/v1/index.js";
+import { ReconciliationReportSchema, SchedulingDecisionSchema, WORKFLOW_VERSION } from "../domain/sprint-delivery/v1/index.js";
 import { FeasibilityResultSchema, PROVIDER_CONTRACT_VERSION } from "../providers/v1/index.js";
 
 const shaSchema = z.string().regex(/^[a-f0-9]{40}$/);
@@ -26,6 +26,8 @@ export const DryRunWorkflowResultSchema = z.object({
   status: z.enum(["active", "waiting_for_human"]),
   issueNumbers: z.array(z.number().int().positive()).min(1),
   analysis: FeasibilityResultSchema,
+  schedule: SchedulingDecisionSchema,
+  reconciliation: ReconciliationReportSchema,
 }).strict();
 
 export type DryRunWorkflowResult = z.infer<typeof DryRunWorkflowResultSchema>;

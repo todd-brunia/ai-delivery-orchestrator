@@ -8,6 +8,20 @@ provider network calls, and cannot mutate a repository. AWS runtime compute,
 webhook HTTP ingress, and the operator API are not implemented. LangGraph
 execution is available only through the internal stub-only dry-run runtime.
 
+## Scheduling dry run
+
+Prepare a non-secret JSON fixture containing strict `run`, `request`, `issues`,
+and `feasibility` objects, then run:
+
+```bash
+DATABASE_URL=postgresql://orchestrator:local-orchestrator@127.0.0.1:54329/orchestrator npm run dry-run:schedule -- path/to/fixture.json
+```
+
+The command rejects non-local database hosts and non-stub provider requests.
+Its sanitized report contains selected issues, blockers, capacity, drift,
+evidence, and inert proposed actions. It loads no provider credentials and
+makes no provider network calls.
+
 Never place secrets in `.env`, fixtures, logs, issue bodies, or committed
 files. The example database password is local-only and must not be reused.
 
@@ -106,6 +120,10 @@ new reviewed commit.
 - Checkpoint replay is guarded by deterministic application idempotency keys.
   Stop if replay reports stale revisions or an idempotency conflict; do not
   delete checkpoints or application transitions to force progress.
+- A repeated schedule run does not duplicate proposed actions. On lease
+  contention, wait for the one-minute lease to expire and retry with the same
+  run and thread IDs. On drift or stale revision, correct the fixture or start
+  a newly reviewed run; do not edit authoritative scheduling rows.
 - Configuration errors fail startup. `PROVIDER_MODE` must remain `stub` until
   a separately reviewed issue enables a real adapter.
 
@@ -120,8 +138,9 @@ cost/resource stop is `docker compose stop`, which preserves data.
 
 Retain concise error messages, migration names, delivery IDs, transition IDs,
 and commit SHAs. Do not copy raw webhook bodies, source content, credentials,
-or model reasoning into logs or issues. Checkpoints retain only structured
-workflow state and minimal issue correlation metadata, and follow the same
-local retention boundary as application data. Stop and require human review
+or model reasoning into logs or issues. Checkpoints may contain fixture-backed
+issue content during execution; PostgreSQL retains decisions, reconciliation
+observations, and proposed actions until the local volume is intentionally
+destroyed. Reports omit issue title/body content. Stop and require human review
 for an unknown migration checksum, conflicting idempotency fingerprint,
 invalid signature, exhausted retry, or unexpected provider mode.
