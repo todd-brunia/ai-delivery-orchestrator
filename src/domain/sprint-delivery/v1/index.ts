@@ -1,3 +1,4 @@
+export * from "./authorization.js";
 export * from "./contracts.js";
 export * from "./dependencies.js";
 export * from "./policy.js";

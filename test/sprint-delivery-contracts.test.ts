@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DependencyEdgeSchema,
+  RunAuthorizationSchema,
   InvalidTransitionError,
   MergePolicyModeSchema,
   RiskAssessmentSchema,
@@ -13,7 +14,24 @@ import {
   planApprovalRequirement,
   transitionSprintRun,
   transitionWorkItem,
+  evaluateRunAuthorization,
+  fingerprintAuthorization,
+  transitionAutomaticMerge,
 } from "../src/domain/sprint-delivery/v1/index.js";
+
+const authorization = RunAuthorizationSchema.parse({
+  schemaVersion: "run-authorization/v1",
+  repository: "owner/repository",
+  issueNumbers: [4, 5],
+  plans: [
+    { issueNumber: 4, planSha256: "a".repeat(64) },
+    { issueNumber: 5, planSha256: "b".repeat(64) },
+  ],
+  defaultBranchSha: "c".repeat(40),
+  policy: { version: "automatic-merge/v1", sha256: "d".repeat(64) },
+  authorizedBy: { provider: "github", id: "user:1234" },
+  authorizedAt: "2026-08-09T20:00:00-05:00",
+});
 
 describe("sprint-delivery/v1 contracts", () => {
   it("accepts the explicit v1 input and rejects automatic merge", () => {
@@ -48,6 +66,54 @@ describe("sprint-delivery/v1 contracts", () => {
     expect(() =>
       SprintRunInputSchema.parse({ ...base, issueNumbers: [4], surprise: true }),
     ).toThrow();
+  });
+
+  it("binds automatic input to an exact immutable authorization", () => {
+    const fingerprint = fingerprintAuthorization(authorization);
+    expect(
+      SprintRunInputSchema.parse({
+        workflowVersion: "sprint-delivery/v1",
+        repository: authorization.repository,
+        issueNumbers: authorization.issueNumbers,
+        mergePolicy: "automatic",
+        authorization,
+        authorizationFingerprint: fingerprint,
+      }),
+    ).toBeDefined();
+    expect(() =>
+      SprintRunInputSchema.parse({
+        workflowVersion: "sprint-delivery/v1",
+        repository: authorization.repository,
+        issueNumbers: authorization.issueNumbers,
+        mergePolicy: "automatic",
+        authorization,
+        authorizationFingerprint: "0".repeat(64),
+      }),
+    ).toThrow("authorization fingerprint mismatch");
+  });
+
+  it("denies canonical state drift with explicit reasons", () => {
+    const observation = {
+      repository: authorization.repository,
+      issueNumbers: authorization.issueNumbers,
+      plans: authorization.plans,
+      defaultBranchSha: authorization.defaultBranchSha,
+      policy: authorization.policy,
+    };
+    expect(evaluateRunAuthorization(authorization, observation)).toEqual({
+      authorized: true,
+      fingerprint: fingerprintAuthorization(authorization),
+    });
+    expect(
+      evaluateRunAuthorization(authorization, {
+        ...observation,
+        defaultBranchSha: "e".repeat(40),
+        plans: [observation.plans[0], { ...observation.plans[1], planSha256: "f".repeat(64) }],
+      }),
+    ).toEqual({
+      authorized: false,
+      reasons: ["plan_drift", "default_branch_drift"],
+    });
   });
 
   it("requires human approval for sensitive or low-confidence plans", () => {
@@ -185,6 +251,33 @@ describe("state transitions", () => {
     expect(() => transitionWorkItem("merged", "checks_awaited")).toThrow(
       InvalidTransitionError,
     );
+  });
+
+  it("binds every automatic merge step to one authorization and PR head", () => {
+    const binding = {
+      authorizationFingerprint: fingerprintAuthorization(authorization),
+      pullRequestHeadSha: "e".repeat(40),
+    };
+    let state = transitionAutomaticMerge("ready_for_human_review", {
+      type: "capture_exact_head",
+      ...binding,
+    }, binding);
+    for (const type of [
+      "check_automatic_merge_policy",
+      "authorize_merger",
+      "request_exact_head_merge",
+      "record_exact_head_merge",
+    ] as const) {
+      state = transitionAutomaticMerge(state, { type, ...binding }, binding);
+    }
+    expect(state).toBe("merged");
+    expect(() =>
+      transitionAutomaticMerge("ready_for_merger", {
+        type: "request_exact_head_merge",
+        ...binding,
+        pullRequestHeadSha: "f".repeat(40),
+      }, binding),
+    ).toThrow("evidence binding changed");
   });
 });
 
