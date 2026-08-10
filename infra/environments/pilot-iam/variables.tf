@@ -18,7 +18,7 @@ variable "aws_region" {
 locals {
   name = "ai-delivery-orchestrator-pilot"
   application_secret_names = toset([
-    "github-app-private-key",
+    "github-app-builder-private-key",
     "github-webhook-secret",
     "openai-api-key",
   ])
