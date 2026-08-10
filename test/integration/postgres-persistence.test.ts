@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { WORKFLOW_VERSION } from "../../src/domain/sprint-delivery/v1/index.js";
+import {
+  WORKFLOW_VERSION,
+  fingerprintAuthorization,
+  RunAuthorizationSchema,
+} from "../../src/domain/sprint-delivery/v1/index.js";
 import {
   ConcurrencyError,
   migrate,
@@ -89,6 +93,39 @@ describe("PostgresSprintRunRepository", () => {
       pool.query(
         "UPDATE orchestrator.sprint_runs SET issue_numbers = ARRAY[81, 82] WHERE id = $1",
         [runId],
+      ),
+    ).rejects.toMatchObject({ code: "23000" });
+  });
+
+  it("round-trips an immutable automatic run authorization", async () => {
+    const authorization = RunAuthorizationSchema.parse({
+      schemaVersion: "run-authorization/v1",
+      repository: "todd-brunia/ai-delivery-orchestrator",
+      issueNumbers: [56],
+      plans: [{ issueNumber: 56, planSha256: "a".repeat(64) }],
+      defaultBranchSha: "b".repeat(40),
+      policy: { version: "automatic-merge/v1", sha256: "c".repeat(64) },
+      authorizedBy: { provider: "github", id: "user:1234" },
+      authorizedAt: "2026-08-09T20:00:00-05:00",
+    });
+    const authorizationFingerprint = fingerprintAuthorization(authorization);
+    const runId = randomUUID();
+    await repository.createRun(runId, {
+      workflowVersion: WORKFLOW_VERSION,
+      repository: authorization.repository,
+      issueNumbers: authorization.issueNumbers,
+      mergePolicy: "automatic",
+      authorization,
+      authorizationFingerprint,
+    });
+
+    await expect(repository.getRun(runId)).resolves.toMatchObject({
+      input: { mergePolicy: "automatic", authorization, authorizationFingerprint },
+    });
+    await expect(
+      pool.query(
+        "UPDATE orchestrator.sprint_runs SET authorization_fingerprint = $2 WHERE id = $1",
+        [runId, "d".repeat(64)],
       ),
     ).rejects.toMatchObject({ code: "23000" });
   });
