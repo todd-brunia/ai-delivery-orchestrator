@@ -127,6 +127,156 @@ new reviewed commit.
 - Configuration errors fail startup. `PROVIDER_MODE` must remain `stub` until
   a separately reviewed issue enables a real adapter.
 
+## Automatic-merge containment and recovery
+
+These procedures define future operational behavior and current manual
+containment. The live automatic-merge executor, operator API, and automated
+kill controls are not implemented. Until they are, the human owner contains an
+incident by keeping provider mode stub-only, disabling the affected GitHub App
+installation or credential if one exists, and preventing deployment of any
+publisher. See the [authority matrix](./automatic-merge-authority.md) and
+[threat model](./threat-model.md).
+
+All procedures retain the run ID, issue/PR number, authorization fingerprint,
+expected and observed base/head/policy/plan hashes, transition and delivery
+IDs, relevant sanitized audit events, actor, time, and human decisions. Never
+retain live secrets, raw webhook bodies, source dumps, prompts, responses, or
+model reasoning in an incident record.
+
+### Pause
+
+- **Trigger/initiator:** Operator or human owner observes drift, outage,
+  contradictory state, repeated failure, or needs a reversible stop.
+- **Actions:** Block new dispatch, review, publication, and merge progression;
+  record the reason and expected revision; allow claims already executing to
+  reach a bounded safe point; do not issue new external intents.
+- **Complete when:** The durable run is paused, no new intent is claimable, and
+  in-flight claims are identified with expirations.
+- **Re-entry:** Operator may resume an ordinary pause only after canonical
+  reconciliation reports no drift and no owner-only restoration trigger.
+- **Never:** Treat pause as credential revocation or delete claims/history.
+
+### Drain
+
+- **Trigger/initiator:** Operator or owner needs a controlled shutdown without
+  abandoning known in-flight actions.
+- **Actions:** Pause new work, enumerate claimed inbox/outbox/work items, wait
+  only to their bounded expiry, capture results, and reconcile every uncertain
+  claim from canonical state.
+- **Complete when:** No live claim remains and each item is completed, pending,
+  failed, or explicitly uncertain and blocked.
+- **Re-entry:** Resume only after uncertain items are reconciled.
+- **Never:** Start replacement work during drain or assume an expired claim did
+  not mutate an external system.
+
+### Cancel
+
+- **Trigger/initiator:** Operator or owner decides one work item or run must end
+  terminally within existing authority.
+- **Actions:** Pause, record cancellation at the expected revision, prevent or
+  invalidate pending intents, drain claims, and reconcile possible external
+  effects.
+- **Complete when:** The target is durably cancelled and no pending action can
+  advance it.
+- **Re-entry:** Cancellation is not resumed. Changed work starts under a new
+  run and, for automatic mode, a new human authorization.
+- **Never:** Rewrite cancellation to another state or delete its evidence.
+
+### Kill automatic authority
+
+- **Trigger/initiator:** Human owner, or operator invoking a pre-authorized
+  emergency kill, for suspected compromise, kill bypass, cross-repository
+  target, protection drift, authorization/evidence mismatch, or unsafe outage.
+- **Actions:** Set the repository or global kill before draining; block all new
+  builder/reviewer/merger intents; disable/revoke the affected installation or
+  credential when compromise is possible; preserve claims and audit evidence;
+  test that a synthetic denied request cannot execute.
+- **Complete when:** No affected identity can publish, review, or merge; pending
+  intents are unclaimable; revocation/disablement and the kill revision are
+  evidenced.
+- **Re-entry:** Human owner only, after reconciliation, audit, credential
+  rotation where relevant, verified controls, and new authorization for any
+  changed bound value.
+- **Never:** Restore merely because queues are empty or the suspected token
+  expired.
+
+### Reconcile canonical state
+
+- **Trigger/initiator:** Operator or owner after restart, timeout, expired
+  claim, duplicate response, drift signal, pause, drain, cancellation, or kill.
+- **Actions:** Read canonical GitHub repository/installation, protection,
+  default branch, PR exact head and merge status, checks, reviews, and audit
+  metadata; compare them with the immutable authorization, transitions,
+  inbox/outbox, and checkpoint correlation. Record differences and deny on
+  unavailable/unknown values.
+- **Complete when:** Every uncertain intent has one explained canonical outcome
+  and all bindings either match or the item is blocked.
+- **Re-entry:** Matching state may resume within authority. Any changed plan,
+  policy, repository, issue scope, or base requires fresh human authorization.
+- **Never:** Edit PostgreSQL/checkpoints or trust a webhook/model claim instead
+  of the canonical read.
+
+### Credential compromise, revocation, and rotation
+
+- **Trigger/initiator:** Human owner on suspected builder, reviewer, merger,
+  operator, or owner credential exposure or unexpected use.
+- **Actions:** Kill affected authority; revoke/disable the credential or App
+  installation; inventory its platform and runtime scope; audit all actions in
+  the suspected window; rotate without sharing identities across roles;
+  invalidate derived sessions; reconcile every affected repository/run.
+- **Complete when:** Old credentials cannot authenticate, replacement scope is
+  least privilege, audit findings are classified, and affected work is blocked
+  or independently rebuilt/reviewed.
+- **Re-entry:** Human owner restores after rotation and new authorization/review
+  wherever integrity cannot be proven.
+- **Never:** Put the credential value in evidence or rotate only the application
+  secret while leaving active installation tokens/sessions usable.
+
+### Duplicate or ambiguous merge request
+
+- **Trigger/initiator:** Operator observes duplicate idempotency key, timeout,
+  crash after request, expired merger claim, or conflicting completion state.
+- **Actions:** Pause the item and stop retries; query the PR by repository and
+  number; compare exact requested head, merge commit/method/time, actor, intent
+  ID, and current authorization; complete the original intent only when the
+  canonical result proves it succeeded exactly as authorized.
+- **Complete when:** The request is classified as exact success, definite
+  non-execution safe to retry with the same idempotency identity, or blocked
+  ambiguity requiring owner review.
+- **Re-entry:** Retry only definite non-execution after all gates are rechecked.
+- **Never:** Send a new merge request because the response was lost.
+
+### Protection drift, stale approval, or artifact substitution
+
+- **Trigger/initiator:** Operator or owner sees ruleset/protection differences,
+  missing checks/reviews, or plan/policy/base/head/artifact hash mismatch.
+- **Actions:** Kill repository automatic authority, invalidate pending merge
+  intent, preserve expected and observed fingerprints, audit the change actor,
+  and reconcile other affected runs.
+- **Complete when:** The drift source and scope are known and no affected intent
+  can execute.
+- **Re-entry:** Human owner restores correct settings and requires fresh check,
+  independent review, and immutable authorization wherever bound evidence
+  changed.
+- **Never:** Accept a semantically similar artifact or bypass a missing gate.
+
+### Incident evidence and restoration
+
+- **Trigger/initiator:** Operator opens a sanitized incident record for every
+  kill, compromise, evidence-integrity failure, unauthorized mutation, or
+  unresolved ambiguity; human owner owns restoration.
+- **Actions:** Capture the minimum identifiers listed above, control status,
+  containment proof, timeline, reconciliation report, credential/protection
+  changes by identifier, and owner decisions. Store evidence in the approved
+  access-controlled audit location and link rather than copy sensitive data.
+- **Complete when:** The incident explains scope, mutations, containment,
+  residual uncertainty, and required reauthorization/review.
+- **Re-entry:** Owner verifies kill effectiveness, remediation, least privilege,
+  canonical reconciliation, independent checks/reviews, and a new immutable
+  authorization when any binding changed; then records an explicit restoration.
+- **Never:** Let the identity under investigation approve its own evidence or
+  delete durable history to make reconciliation pass.
+
 ## Destructive local reset
 
 `docker compose down --volumes` permanently deletes the local PostgreSQL named
