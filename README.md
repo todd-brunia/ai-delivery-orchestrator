@@ -77,7 +77,9 @@ credentials.
 - Model execution will not receive GitHub publishing credentials.
 - Infrastructure and external writes require explicit approved work.
 - The initial release will prepare pull requests for human review and merge;
-  automatic merge is a separately gated future capability.
+  automatic merge is a separately gated future capability. The domain and
+  persistence layers can retain an immutable human authorization envelope,
+  but no live automatic-merge executor or identity is enabled.
 
 See [Architecture](./docs/architecture.md),
 [Threat model](./docs/threat-model.md),
