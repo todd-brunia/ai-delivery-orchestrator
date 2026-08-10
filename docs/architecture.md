@@ -129,6 +129,29 @@ Missing fixtures, incomplete conflict coverage, unsupported versions,
 non-stub provider selection, infeasible results, unresolved decisions, and
 stale database revisions fail closed.
 
+## Immutable automatic-run authorization
+
+The domain can represent, but cannot yet execute, an automatic-merge run. A
+strict `run-authorization/v1` envelope binds the canonical repository, sorted
+issue scope, SHA-256 digest of each approved marked plan, default-branch commit
+SHA, automatic-merge policy version and digest, stable GitHub human identity,
+and authorization time. The complete validated envelope has a deterministic
+SHA-256 fingerprint. Exact UTF-8 bytes of the approved marked plan are the
+hashing input; callers must not silently normalize or rewrite plan content.
+
+Automatic run input must match the envelope exactly. PostgreSQL persists the
+envelope and fingerprint as immutable run identity, and rehydration validates
+both before exposing the run. Canonical observations are evaluated separately
+and any missing evidence or repository, scope, plan, base-branch, or policy
+drift denies progress. Changed bound values require a new human authorization
+and run rather than an in-place refresh.
+
+The work-item domain also defines an authorization- and exact-head-bound path
+from human-review readiness through policy check, merger readiness, merge
+request, and recorded completion. It is a policy contract only: no live GitHub
+read, review, publisher, merger, credential, release, or deployment capability
+is enabled by these states.
+
 This slice does not implement webhook transport, live target-repository
 validation, live provider adapters, GitHub writes, proposal execution, or
 application AWS compute. Scheduling/reconciliation is fixture-only and does

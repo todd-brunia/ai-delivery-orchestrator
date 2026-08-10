@@ -16,6 +16,8 @@ import {
   assertAcyclicDependencies,
   ReconciliationReportSchema,
   SchedulingDecisionSchema,
+  RunAuthorizationSchema,
+  fingerprintAuthorization,
 } from "../domain/sprint-delivery/v1/index.js";
 import {
   ConcurrencyError,
@@ -38,7 +40,9 @@ interface RunRow {
   workflow_version: string;
   repository: string;
   issue_numbers: number[];
-  merge_policy: "human";
+  merge_policy: "human" | "automatic";
+  run_authorization: unknown;
+  authorization_fingerprint: string | null;
   state: string;
   revision: number;
   created_at: Date;
@@ -71,9 +75,19 @@ export class PostgresSprintRunRepository implements SprintRunRepository {
       await client.query("BEGIN");
       await client.query(
         `INSERT INTO orchestrator.sprint_runs
-          (id, workflow_version, repository, issue_numbers, merge_policy, state, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, 'accepted', $6, $6)`,
-        [id, input.workflowVersion, input.repository, input.issueNumbers, input.mergePolicy, now],
+          (id, workflow_version, repository, issue_numbers, merge_policy,
+           run_authorization, authorization_fingerprint, state, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'accepted', $8, $8)`,
+        [
+          id,
+          input.workflowVersion,
+          input.repository,
+          input.issueNumbers,
+          input.mergePolicy,
+          input.mergePolicy === "automatic" ? JSON.stringify(input.authorization) : null,
+          input.mergePolicy === "automatic" ? input.authorizationFingerprint : null,
+          now,
+        ],
       );
       for (const issueNumber of input.issueNumbers) {
         await client.query(
@@ -397,13 +411,31 @@ export class PostgresSprintRunRepository implements SprintRunRepository {
        FROM orchestrator.work_items WHERE sprint_run_id = $1 ORDER BY issue_number`,
       [id],
     );
+    const automaticFields = (() => {
+      if (row.merge_policy === "human") {
+        if (row.run_authorization !== null || row.authorization_fingerprint !== null) {
+          throw new Error("persisted human run contains automatic authorization");
+        }
+        return { mergePolicy: "human" as const };
+      }
+      const authorization = RunAuthorizationSchema.parse(row.run_authorization);
+      const fingerprint = fingerprintAuthorization(authorization);
+      if (row.authorization_fingerprint !== fingerprint) {
+        throw new Error("persisted authorization fingerprint mismatch");
+      }
+      return {
+        mergePolicy: "automatic" as const,
+        authorization,
+        authorizationFingerprint: fingerprint,
+      };
+    })();
     return {
       id: row.id,
       input: SprintRunInputSchema.parse({
         workflowVersion: row.workflow_version,
         repository: row.repository,
         issueNumbers: row.issue_numbers,
-        mergePolicy: row.merge_policy,
+        ...automaticFields,
       }),
       state: SprintRunStateSchema.parse(row.state),
       revision: row.revision,

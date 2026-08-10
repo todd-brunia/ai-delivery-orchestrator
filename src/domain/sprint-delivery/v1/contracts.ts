@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { z } from "zod";
 
 export const WORKFLOW_VERSION = "sprint-delivery/v1" as const;
@@ -5,6 +7,7 @@ export const WORKFLOW_VERSION = "sprint-delivery/v1" as const;
 const repositoryNamePattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const idempotencyKeyPattern = /^[A-Za-z0-9][A-Za-z0-9._:/-]{7,199}$/;
 const sha256Pattern = /^[a-f0-9]{64}$/;
+const gitShaPattern = /^[a-f0-9]{40}$/;
 
 export const RepositoryNameSchema = z
   .string()
@@ -41,6 +44,10 @@ export const WorkItemStateSchema = z.enum([
   "reviewing",
   "fixing",
   "ready_for_human_review",
+  "exact_head_captured",
+  "automatic_merge_policy_check",
+  "ready_for_merger",
+  "merge_requested",
   "merged",
   "blocked",
   "failed",
@@ -56,8 +63,74 @@ export type MergePolicyMode = z.infer<typeof MergePolicyModeSchema>;
 export const EnabledMergePolicySchema = z.literal("human");
 export type EnabledMergePolicy = z.infer<typeof EnabledMergePolicySchema>;
 
-export const SprintRunInputSchema = z
+export const RUN_AUTHORIZATION_VERSION = "run-authorization/v1" as const;
+export const SUPPORTED_AUTOMATIC_MERGE_POLICY_VERSION =
+  "automatic-merge/v1" as const;
+
+export const PlanBindingSchema = z
   .object({
+    issueNumber: IssueNumberSchema,
+    planSha256: z.string().regex(sha256Pattern),
+  })
+  .strict();
+
+export const RunAuthorizationSchema = z
+  .object({
+    schemaVersion: z.literal(RUN_AUTHORIZATION_VERSION),
+    repository: RepositoryNameSchema,
+    issueNumbers: z
+      .array(IssueNumberSchema)
+      .min(1)
+      .max(100)
+      .refine(
+        (values) => new Set(values).size === values.length,
+        "authorization issueNumbers must be unique",
+      )
+      .refine(
+        (values) =>
+          values.every(
+            (value, index) => index === 0 || values[index - 1]! < value,
+          ),
+        "authorization issueNumbers must be sorted ascending",
+      ),
+    plans: z.array(PlanBindingSchema).min(1).max(100),
+    defaultBranchSha: z.string().regex(gitShaPattern),
+    policy: z
+      .object({
+        version: z.literal(SUPPORTED_AUTOMATIC_MERGE_POLICY_VERSION),
+        sha256: z.string().regex(sha256Pattern),
+      })
+      .strict(),
+    authorizedBy: z
+      .object({
+        provider: z.literal("github"),
+        id: z.string().trim().min(1).max(200),
+      })
+      .strict(),
+    authorizedAt: z.iso.datetime({ offset: true }),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const planIssues = value.plans.map((plan) => plan.issueNumber);
+    if (new Set(planIssues).size !== planIssues.length) {
+      context.addIssue({ code: "custom", message: "plan issueNumbers must be unique" });
+    }
+    if (
+      planIssues.length !== value.issueNumbers.length ||
+      planIssues.some(
+        (issueNumber, index) => issueNumber !== value.issueNumbers[index],
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "plans must be sorted and bind every authorized issue exactly once",
+      });
+    }
+  });
+
+export type RunAuthorization = z.infer<typeof RunAuthorizationSchema>;
+
+const sprintRunIdentityFields = {
     workflowVersion: z.literal(WORKFLOW_VERSION),
     repository: RepositoryNameSchema,
     issueNumbers: z
@@ -68,9 +141,47 @@ export const SprintRunInputSchema = z
         (issueNumbers) => new Set(issueNumbers).size === issueNumbers.length,
         "issueNumbers must be unique",
       ),
-    mergePolicy: EnabledMergePolicySchema,
+};
+
+const HumanSprintRunInputSchema = z
+  .object({
+    ...sprintRunIdentityFields,
+    mergePolicy: z.literal("human"),
   })
   .strict();
+
+const AutomaticSprintRunInputSchema = z
+  .object({
+    ...sprintRunIdentityFields,
+    mergePolicy: z.literal("automatic"),
+    authorization: RunAuthorizationSchema,
+    authorizationFingerprint: z.string().regex(sha256Pattern),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.repository !== value.authorization.repository) {
+      context.addIssue({ code: "custom", message: "authorization repository mismatch" });
+    }
+    if (
+      value.issueNumbers.length !== value.authorization.issueNumbers.length ||
+      value.issueNumbers.some(
+        (issueNumber, index) => issueNumber !== value.authorization.issueNumbers[index],
+      )
+    ) {
+      context.addIssue({ code: "custom", message: "authorization issue scope mismatch" });
+    }
+    const expectedFingerprint = createHash("sha256")
+      .update(JSON.stringify(value.authorization), "utf8")
+      .digest("hex");
+    if (value.authorizationFingerprint !== expectedFingerprint) {
+      context.addIssue({ code: "custom", message: "authorization fingerprint mismatch" });
+    }
+  });
+
+export const SprintRunInputSchema = z.discriminatedUnion("mergePolicy", [
+  HumanSprintRunInputSchema,
+  AutomaticSprintRunInputSchema,
+]);
 
 export type SprintRunInput = z.infer<typeof SprintRunInputSchema>;
 
