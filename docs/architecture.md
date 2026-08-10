@@ -157,6 +157,21 @@ validation, live provider adapters, GitHub writes, proposal execution, or
 application AWS compute. Scheduling/reconciliation is fixture-only and does
 not constitute end-to-end Phase 2 completion.
 
+## Automation identity contract
+
+`src/domain/automation-identities/v1` defines the provider-neutral identity
+schema, pure operation authorization, and startup/protection preflight. It
+binds builder, reviewer, and merger to one immutable GitHub App/installation,
+one exact portal audience, one permission ceiling and operation set, a
+configuration revision, and a role-specific secret container. Unknown or
+unavailable identity, permission, audience, configuration, or protection data
+denies without side effects.
+
+The pilot defines three empty GitHub App key containers. Only the builder
+container is in the future runtime read policy; reviewer and merger have no
+workload attachment in this slice. Terraform never stores a key or secret
+version. Provisioning and live attribution remain a human-gated later story.
+
 ## Terraform foundation
 
 `infra/bootstrap` defines the protected S3 state bucket plus separate GitHub

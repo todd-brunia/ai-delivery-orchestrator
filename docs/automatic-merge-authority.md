@@ -12,6 +12,13 @@ GitHub App installation permission is only a technical ceiling. Possessing a
 platform permission never creates runtime authority, and unlisted actions are
 denied.
 
+The governing identity contract is `automation-identities/v1`. Exact App slugs
+are `todd-brunia-ai-delivery-builder`, `todd-brunia-ai-delivery-reviewer`, and
+`todd-brunia-ai-delivery-merger`. Each contract pins immutable App/installation
+IDs, the `todd-brunia` account, exactly the client portal repository, a
+configuration revision, and its own Secrets Manager ARN. IDs are recorded only
+after canonical GitHub reads; placeholders and guessed IDs are invalid.
+
 | Capability | Builder | Reviewer | Merger | Operator | Human owner |
 | --- | --- | --- | --- | --- | --- |
 | Read authorized issue, plan, policy, and canonical PR/check state | Allow, issue scope | Allow, review scope | Allow, exact merge preflight only | Allow, allowlisted operations/evidence | Allow |
@@ -39,3 +46,18 @@ denied.
   control appear satisfied.
 - Human owner remains accountable for installations, permissions, policy,
   sensitive approvals, restoration, release, deployment, and scope expansion.
+
+## Permission ceilings and operations
+
+| Role | GitHub repository permission ceiling | Allowed application operations |
+| --- | --- | --- |
+| Builder | Metadata: read; Contents: write; Pull requests: write | Publish an issue-bound branch and open/update its issue-bound PR |
+| Reviewer | Metadata: read; Contents: read; Checks: read; Pull requests: write | Read canonical evidence and submit one exact-head review |
+| Merger | Metadata: read; Contents: write | Read exact-head readiness and request one squash merge |
+
+Reviewer Pull requests: write is an unavoidable coarse permission used only to
+submit reviews. Merger Contents: write is an unavoidable coarse permission for
+GitHub's merge endpoint. Application policy denies every other source/ref/PR,
+review, merge, settings, bypass, release, and deployment operation outside the
+role. No role receives Administration, Actions, Workflows, Secrets,
+Environments, Deployments, Releases, or installation-management authority.

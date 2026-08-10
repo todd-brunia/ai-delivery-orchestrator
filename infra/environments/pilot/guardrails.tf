@@ -1,6 +1,9 @@
 locals {
   application_secret_names = toset([
     "github-app-private-key",
+    "github-app-builder-private-key",
+    "github-app-reviewer-private-key",
+    "github-app-merger-private-key",
     "github-webhook-secret",
     "openai-api-key",
   ])
