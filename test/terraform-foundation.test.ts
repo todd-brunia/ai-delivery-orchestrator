@@ -101,11 +101,14 @@ describe("Terraform foundation policy", () => {
 
   it("creates named secret containers without managing values", () => {
     expect(pilot).toContain('resource "aws_secretsmanager_secret" "application"');
-    for (const name of ["github-app-private-key", "github-webhook-secret", "openai-api-key"]) {
+    for (const name of ["github-app-private-key", "github-app-builder-private-key", "github-app-reviewer-private-key", "github-app-merger-private-key", "github-webhook-secret", "openai-api-key"]) {
       expect(pilot).toContain(`"${name}"`);
     }
     expect(pilot).toContain("recovery_window_in_days = 30");
     expect(pilot).not.toMatch(/aws_secretsmanager_secret_version|secret_string|secret_binary/i);
+    expect(pilotIam).toContain('"github-app-builder-private-key"');
+    expect(pilotIam).not.toContain('"github-app-reviewer-private-key"');
+    expect(pilotIam).not.toContain('"github-app-merger-private-key"');
   });
 
   it("keeps future runtime secret access scoped and unattached", () => {

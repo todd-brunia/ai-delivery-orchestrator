@@ -40,6 +40,18 @@ npm run docker:build
 
 Run `npm audit --audit-level=high` and a secret scan before requesting review.
 
+## Automation identity preflight
+
+Before any future identity consumer starts, obtain canonical GitHub reads and
+validate exact App slug/ID, installation ID/account, selected portal repository
+ID/name, permissions, and configuration revision against
+`automation-identities/v1`. Independently require a public portal with base
+`main`, strict `CI Gate`, an independent approval, stale/last-push protections,
+resolved conversations, admin enforcement, linear history, squash-only merge,
+and auto-merge disabled. Unavailable, ambiguous, stale, or mismatched state
+stops startup. Reports may contain sanitized IDs and permission names, never
+keys or tokens.
+
 ## PostgreSQL lifecycle
 
 Start only PostgreSQL and wait for a healthy status:
