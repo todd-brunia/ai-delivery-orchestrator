@@ -26,3 +26,9 @@ Repository, issue, comment, diff, webhook, and CI content is untrusted. It must
 not expand tool access, reveal secrets, weaken policy, or authorize an external
 write. Every external action must be checked against trusted configuration and
 live state immediately before execution.
+
+The autonomous-delivery [threat model](./docs/threat-model.md),
+[authority matrix](./docs/automatic-merge-authority.md), and
+[containment and recovery procedures](./docs/operating-runbook.md#automatic-merge-containment-and-recovery)
+govern any future automatic-merge capability. Automatic merge is not currently
+operational.
