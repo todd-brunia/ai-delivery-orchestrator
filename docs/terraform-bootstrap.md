@@ -365,6 +365,15 @@ their expected empty or retained state.
 
 ## Existing pilot IAM state migration
 
+When upgrading an existing pilot, retain the legacy `github-app-private-key`
+container so Terraform does not destroy or expose its existing value. The
+reviewed plan creates new empty builder, reviewer, and merger containers; it
+does not copy or read the legacy value. Require exactly three creates and no
+updates/replacements/deletes. The legacy container is removed from runtime IAM
+by the same change and is therefore disabled for future workloads. Its later
+recovery-aware deletion or value migration requires a separate plan and
+explicit human authorization.
+
 No migration is needed before the first pilot apply. If a future installation
 already has `aws_iam_policy.runtime_secrets` in the main pilot state, migration
 is a separate state-changing operation and is not authorized by an
@@ -385,11 +394,14 @@ authorization.
 
 ## Secrets, logging, and alerts
 
-Terraform creates exactly three empty Secrets Manager containers. Enter the
-GitHub App private key, webhook secret, and OpenAI API key through an authorized
+Terraform creates separate empty builder, reviewer, and merger GitHub App key
+containers alongside the webhook and OpenAI containers. Existing deployments
+also retain the disabled generic GitHub App container until a separately
+authorized cleanup. Enter values through an authorized
 AWS process after provisioning; never put values in Terraform, GitHub Actions
 arguments, logs, fixtures, or state. The runtime read policy is deliberately
-unattached until a later reviewed runtime-role slice.
+unattached until a later reviewed runtime-role slice and excludes reviewer and
+merger containers.
 
 Application log groups retain data for 30 days by default and use CloudWatch's
 encryption at rest. Logs must never contain webhook bodies, credentials,
