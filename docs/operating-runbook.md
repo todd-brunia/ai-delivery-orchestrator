@@ -137,6 +137,13 @@ checkpoint tables.
 
 ## Worker lifecycle
 
+Queue messages use `runtime-envelope/v1`, remain below 32 KiB, and contain only
+attributable correlation data and bounded command payloads. Never include raw
+webhooks, credentials, source, prompts, or reasoning. On retry exhaustion,
+preserve the DLQ message and sanitized receive metadata. Stop producers and
+consumers before replay; reconcile the idempotency key against Aurora, then
+redrive through a reviewed operation. Never purge a queue or delete DLQ evidence.
+
 Start the local stack and inspect structured logs:
 
 ```bash
