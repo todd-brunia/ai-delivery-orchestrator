@@ -1,0 +1,21 @@
+meta {
+  name: Wake workers
+  type: http
+  seq: 9
+}
+post {
+  url: {{baseUrl}}/v1/runtime/wake
+  body: json
+  auth: awsv4
+}
+auth:awsv4 {
+  accessKeyId: {{$processEnv AWS_ACCESS_KEY_ID}}
+  secretAccessKey: {{$processEnv AWS_SECRET_ACCESS_KEY}}
+  sessionToken: {{$processEnv AWS_SESSION_TOKEN}}
+  service: execute-api
+  region: {{region}}
+}
+headers {
+  Idempotency-Key: bruno:wake:replace-me
+}
+body:json { { "apiVersion": "operator-api/v1", "expectedGeneration": 0 } }
