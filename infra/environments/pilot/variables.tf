@@ -128,6 +128,15 @@ variable "worker_image_sha" {
     error_message = "worker_image_sha must be a full lowercase 40-character commit SHA."
   }
 }
+variable "webhook_lambda_role_arn" {
+  description = "Exact role created by the independently owned pilot-IAM root in #66."
+  type        = string
+  default     = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-webhook"
+  validation {
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/ai-delivery-orchestrator-pilot-webhook$", var.webhook_lambda_role_arn))
+    error_message = "webhook_lambda_role_arn must name the exact pilot webhook role."
+  }
+}
 locals {
   name = "ai-delivery-orchestrator-pilot"
   tags = {
