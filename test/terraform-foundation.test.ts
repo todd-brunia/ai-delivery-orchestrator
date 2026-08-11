@@ -95,6 +95,16 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain('source_arn    = "${aws_apigatewayv2_api.operator.execution_arn}/*/POST/github/webhooks"');
   });
 
+  it("requires IAM authorization on every operator route", () => {
+    expect(pilot).toContain('resource "aws_lambda_function" "operator"');
+    expect(pilot).toContain('authorization_type = "AWS_IAM"');
+    for (const route of ["GET /v1/runs", "POST /v1/runs", "GET /v1/runs/{runId}", "GET /v1/runs/{runId}/events", "POST /v1/runs/{runId}/pause", "POST /v1/runs/{runId}/resume", "POST /v1/runs/{runId}/cancel", "POST /v1/runs/{runId}/reconcile", "POST /v1/runtime/wake", "POST /v1/runtime/drain"]) {
+      expect(pilot).toContain(`"${route}"`);
+    }
+    expect(pilot).toContain("ALLOWED_OPERATOR_PRINCIPAL_ARN");
+    expect(pilot).not.toMatch(/authorization_type\s*=\s*"NONE"/);
+  });
+
   it("requires common ownership tags", () => {
     for (const value of [bootstrap, pilot, pilotIam]) {
       expect(value).toMatch(/Project\s*=\s*"ai-delivery-orchestrator"/);

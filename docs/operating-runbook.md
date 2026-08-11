@@ -10,6 +10,17 @@ execution is available only through the internal stub-only dry-run runtime.
 
 ## Scheduling dry run
 
+## Operator API
+
+Use the placeholder-only Bruno collection under `bruno/operator-api` with
+short-lived AWS credentials for the exact allowlisted human operator role.
+Requests are SigV4-signed for `execute-api` in `us-east-1`; there are no API
+keys or bearer tokens. Change an example idempotency key only when intentionally
+creating a new command. A retry with the same validated payload returns the
+original command; different payload reuse is an incident and fails closed.
+`202` means durable acceptance, not completion—follow the `Location` and read
+run/event state. Stale or unavailable projections must be reported explicitly.
+
 Prepare a non-secret JSON fixture containing strict `run`, `request`, `issues`,
 and `feasibility` objects, then run:
 
