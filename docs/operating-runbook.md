@@ -52,6 +52,39 @@ and auto-merge disabled. Unavailable, ambiguous, stale, or mismatched state
 stops startup. Reports may contain sanitized IDs and permission names, never
 keys or tokens.
 
+The human owner runs `scripts/verify-automation-identity.sh` only from an
+isolated trusted operator workstation with an authenticated AWS profile. The
+script keeps the key, JWT, and installation token in a mode-700 temporary
+directory, removes them on exit, and prints only sanitized identity,
+installation, repository, permission, expiry, and optional review metadata.
+Do not run it in CI, a builder/model environment, or with shell tracing.
+
+```bash
+AWS_PROFILE=ai-orchestrator-pilot scripts/verify-automation-identity.sh reviewer
+AWS_PROFILE=ai-orchestrator-pilot scripts/verify-automation-identity.sh merger
+```
+
+Reviewer attribution uses a human-created non-production verification PR. Bind
+the call to its current canonical head SHA; the script refuses a stale head and
+submits a `COMMENT` review that neither approves nor merges:
+
+```bash
+AWS_PROFILE=ai-orchestrator-pilot scripts/verify-automation-identity.sh reviewer PR_NUMBER EXACT_HEAD_SHA
+```
+
+The merger mode never accepts a PR number and never invokes the merge endpoint.
+It proves the exact installation, selected repository, and Contents: write
+ceiling; application policy tests separately prove that build, review, settings,
+and non-merge ref/content writes are denied.
+
+For a controlled rotation, generate a second GitHub App key, update the same
+role-specific secret so the new version becomes `AWSCURRENT`, and rerun the
+ordinary diagnostic. After that succeeds, revoke the old GitHub key and require
+the same diagnostic with `SECRET_VERSION_STAGE=AWSPREVIOUS` to fail
+authentication. Never restore the old stage or print either value. Remove the
+obsolete Secrets Manager stage through a trusted operator action after the
+failure is recorded; derived installation tokens remain live until expiry.
+
 ## PostgreSQL lifecycle
 
 Start only PostgreSQL and wait for a healthy status:
