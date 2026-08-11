@@ -17,3 +17,6 @@ output "database_master_secret_arn" {
 }
 output "application_database_schema" { value = "orchestrator" }
 output "checkpoint_database_schema" { value = "langgraph_checkpoints" }
+output "runtime_queue_arns" { value = { for name, queue in aws_sqs_queue.runtime : name => queue.arn } }
+output "runtime_dlq_arns" { value = { for name, queue in aws_sqs_queue.dead_letter : name => queue.arn } }
+output "runtime_coordination_table_arn" { value = aws_dynamodb_table.runtime_coordination.arn }
