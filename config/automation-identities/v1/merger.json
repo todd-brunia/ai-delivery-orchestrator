@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "automation-identities/v1",
+  "configurationRevision": "42fd3ac7a879287b47e00d736cf3c29fca24f9a80bf71f5f3d5e4fb0aebaeffe",
+  "role": "merger",
+  "appSlug": "todd-brunia-ai-delivery-merger",
+  "appId": "4545894",
+  "installationId": "152629499",
+  "tokenAudience": {
+    "installationAccount": "todd-brunia",
+    "repositoryIds": ["1308170964"],
+    "repositories": ["todd-brunia/ai-consulting-client-portal"]
+  },
+  "permissionCeiling": ["metadata:read", "contents:write"],
+  "allowedOperations": [
+    "read_pull_request_evidence",
+    "request_exact_head_squash_merge"
+  ],
+  "forbiddenOperations": [
+    "build",
+    "review",
+    "source_write_except_exact_merge",
+    "ref_write_except_exact_merge",
+    "settings_write",
+    "protection_bypass",
+    "release",
+    "deployment"
+  ],
+  "secretContainerArn": "arn:aws:secretsmanager:us-east-1:025540956479:secret:ai-delivery-orchestrator/pilot/github-app-merger-private-key-KzYnrf"
+}
