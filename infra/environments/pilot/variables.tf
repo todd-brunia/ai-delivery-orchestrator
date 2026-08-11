@@ -118,6 +118,16 @@ variable "database_client_security_group_ids" {
     error_message = "Every database client must be an explicit security-group ID."
   }
 }
+
+variable "worker_image_sha" {
+  description = "Full immutable commit SHA published by the main-only image workflow; zero value keeps the service inert before deployment."
+  type        = string
+  default     = "0000000000000000000000000000000000000000"
+  validation {
+    condition     = can(regex("^[0-9a-f]{40}$", var.worker_image_sha))
+    error_message = "worker_image_sha must be a full lowercase 40-character commit SHA."
+  }
+}
 locals {
   name = "ai-delivery-orchestrator-pilot"
   tags = {
