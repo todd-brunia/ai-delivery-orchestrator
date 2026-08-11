@@ -3,7 +3,8 @@
 ## Governing rule
 
 This matrix describes maximum application authority, not current capability.
-Builder, reviewer, merger, and live operator identities are not yet enabled.
+Reviewer and merger Apps are provisioned but have no runtime consumer. Builder
+and live operator identities are not enabled.
 Every action must be supported by the exact repository, issue, plan, policy,
 base, and head evidence authorized for the run. Absence, ambiguity, an unknown
 value, unavailable canonical evidence, or a kill state denies the action.

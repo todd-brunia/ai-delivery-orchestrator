@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "automation-identities/v1",
+  "configurationRevision": "42fd3ac7a879287b47e00d736cf3c29fca24f9a80bf71f5f3d5e4fb0aebaeffe",
+  "role": "reviewer",
+  "appSlug": "todd-brunia-ai-delivery-reviewer",
+  "appId": "4545788",
+  "installationId": "152627422",
+  "tokenAudience": {
+    "installationAccount": "todd-brunia",
+    "repositoryIds": ["1308170964"],
+    "repositories": ["todd-brunia/ai-consulting-client-portal"]
+  },
+  "permissionCeiling": [
+    "metadata:read",
+    "contents:read",
+    "checks:read",
+    "pull_requests:write"
+  ],
+  "allowedOperations": [
+    "read_pull_request_evidence",
+    "submit_exact_head_review"
+  ],
+  "forbiddenOperations": [
+    "source_write",
+    "ref_write",
+    "pull_request_mutation",
+    "branch_update",
+    "review_dismissal",
+    "merge",
+    "settings_write",
+    "release",
+    "deployment"
+  ],
+  "secretContainerArn": "arn:aws:secretsmanager:us-east-1:123456789012:secret:ai-delivery-orchestrator/pilot/github-app-reviewer-private-key-Ab12Cd"
+}

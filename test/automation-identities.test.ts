@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -35,6 +36,19 @@ const request = {
 };
 
 describe("automation-identities/v1", () => {
+  it("pins the provisioned reviewer and merger configuration", () => {
+    const load = (role: "reviewer" | "merger") => JSON.parse(
+      readFileSync(`config/automation-identities/v1/${role}.json`, "utf8"),
+    ) as unknown;
+    const reviewer = AutomationIdentityContractSchema.parse(load("reviewer"));
+    const merger = AutomationIdentityContractSchema.parse(load("merger"));
+    expect(reviewer).toMatchObject({ appId: "4545788", installationId: "152627422" });
+    expect(merger).toMatchObject({ appId: "4545894", installationId: "152629499" });
+    expect(reviewer.tokenAudience.repositoryIds).toEqual(["1308170964"]);
+    expect(merger.tokenAudience.repositoryIds).toEqual(["1308170964"]);
+    expect(reviewer.secretContainerArn).not.toBe(merger.secretContainerArn);
+  });
+
   it("accepts a strict role-bound identity", () => {
     expect(AutomationIdentityContractSchema.parse(contract).role).toBe("reviewer");
     expect(() => AutomationIdentityContractSchema.parse({ ...contract, extra: true })).toThrow();
