@@ -72,6 +72,52 @@ variable "alarm_action_arns" {
     error_message = "alarm_action_arns must contain at most five us-east-1 SNS topic ARNs."
   }
 }
+
+variable "aurora_engine_version" {
+  type    = string
+  default = "16.6"
+  validation {
+    condition     = can(regex("^16\\.[0-9]+$", var.aurora_engine_version))
+    error_message = "aurora_engine_version must be an explicitly reviewed Aurora PostgreSQL 16 minor version."
+  }
+}
+
+variable "aurora_min_capacity" {
+  type    = number
+  default = 0
+  validation {
+    condition     = var.aurora_min_capacity >= 0 && var.aurora_min_capacity <= 2
+    error_message = "aurora_min_capacity must be between 0 and 2 ACUs."
+  }
+}
+
+variable "aurora_max_capacity" {
+  type    = number
+  default = 2
+  validation {
+    condition     = var.aurora_max_capacity >= 1 && var.aurora_max_capacity <= 4 && var.aurora_max_capacity >= var.aurora_min_capacity
+    error_message = "aurora_max_capacity must be between 1 and 4 ACUs and not less than the minimum."
+  }
+}
+
+variable "database_backup_retention_days" {
+  type    = number
+  default = 7
+  validation {
+    condition     = var.database_backup_retention_days >= 7 && var.database_backup_retention_days <= 35
+    error_message = "database_backup_retention_days must be between 7 and 35."
+  }
+}
+
+variable "database_client_security_group_ids" {
+  description = "Reviewed worker and migration security groups allowed to connect; empty keeps Aurora isolated."
+  type        = map(string)
+  default     = {}
+  validation {
+    condition     = alltrue([for id in values(var.database_client_security_group_ids) : can(regex("^sg-[0-9a-f]{8,17}$", id))])
+    error_message = "Every database client must be an explicit security-group ID."
+  }
+}
 locals {
   name = "ai-delivery-orchestrator-pilot"
   tags = {
