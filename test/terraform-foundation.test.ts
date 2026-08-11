@@ -42,7 +42,22 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain("force_delete         = true");
     expect(pilot).toContain('resource "aws_subnet" "public"');
     expect(pilot).toContain('resource "aws_subnet" "isolated"');
-    expect(pilot).not.toMatch(/aws_nat_gateway|aws_ecs_|aws_rds_|aws_lambda_|aws_apigateway/);
+    expect(pilot).not.toMatch(/aws_nat_gateway|aws_ecs_|aws_lambda_|aws_apigateway/);
+  });
+
+  it("provisions a protected isolated Aurora Serverless v2 database", () => {
+    expect(pilot).toContain('resource "aws_rds_cluster" "application"');
+    expect(pilot).toContain('engine                          = "aurora-postgresql"');
+    expect(pilot).toContain("manage_master_user_password     = true");
+    expect(pilot).toContain("storage_encrypted               = true");
+    expect(pilot).toContain("deletion_protection             = true");
+    expect(pilot).toContain("skip_final_snapshot             = false");
+    expect(pilot).toContain("copy_tags_to_snapshot           = true");
+    expect(pilot).toContain("serverlessv2_scaling_configuration");
+    expect(pilot).toContain("publicly_accessible  = false");
+    expect(pilot).toContain("referenced_security_group_id = each.value");
+    expect(pilot).not.toMatch(/^\s*(?:master_)?password\s*=/im);
+    expect(pilot).not.toMatch(/cidr_ipv4\s*=\s*"0\.0\.0\.0\/0"[\s\S]{0,100}5432/);
   });
 
   it("requires common ownership tags", () => {
@@ -261,6 +276,6 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain("alarm_actions       = var.alarm_action_arns");
     expect(pilot).toContain('resource "aws_budgets_budget" "monthly"');
     expect(pilot).toContain("subscriber_email_addresses = [var.budget_notification_email]");
-    expect(pilot).not.toMatch(/aws_lambda_|aws_ecs_|aws_rds_|aws_sqs_|aws_dynamodb_/);
+    expect(pilot).not.toMatch(/aws_lambda_|aws_ecs_|aws_sqs_|aws_dynamodb_/);
   });
 });

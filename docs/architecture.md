@@ -184,8 +184,13 @@ passed as validated inputs to `infra/environments/pilot`; neither root reads the
 other's state or guesses resource names. The main pilot root contains no
 managed IAM resources and defines immutable ECR storage, two-AZ
 public/isolated networking, empty secret containers, retained log groups, an
-informational billing alarm, and a monthly budget. There is no NAT Gateway or
-application compute in this slice.
+informational billing alarm, and a monthly budget. The pilot data plane includes
+an encrypted Aurora PostgreSQL Serverless v2 cluster in the isolated subnets.
+Its managed master secret never enters Terraform configuration or output, and
+PostgreSQL ingress is possible only from explicitly supplied worker or migration
+security groups. Application state remains in `orchestrator`; LangGraph uses
+`langgraph_checkpoints`. There is no NAT Gateway or application compute in this
+slice.
 
 Pull requests can produce read-only plans. Provisioning requires manual
 dispatch for an explicit commit already on `main`, approval through the GitHub
