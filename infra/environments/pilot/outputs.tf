@@ -20,3 +20,7 @@ output "checkpoint_database_schema" { value = "langgraph_checkpoints" }
 output "runtime_queue_arns" { value = { for name, queue in aws_sqs_queue.runtime : name => queue.arn } }
 output "runtime_dlq_arns" { value = { for name, queue in aws_sqs_queue.dead_letter : name => queue.arn } }
 output "runtime_coordination_table_arn" { value = aws_dynamodb_table.runtime_coordination.arn }
+output "worker_cluster_arn" { value = aws_ecs_cluster.worker.arn }
+output "worker_service_name" { value = aws_ecs_service.worker.name }
+output "worker_security_group_id" { value = aws_security_group.worker.id }
+output "worker_task_definition_arn" { value = aws_ecs_task_definition.worker.arn }

@@ -92,6 +92,13 @@ consistent status projections. Every projection records its source revision,
 event, and observation time; absence or regression falls back to Aurora rather
 than becoming authoritative.
 
+The worker service is private Fargate capacity bounded from zero to two tasks.
+Its initial desired count is zero and its task definition uses only a full
+commit-SHA ECR tag. Scale-down requires two ordered idle observations covering
+both queues, outbox, leases, runnable work, and an unchanged durable wake
+generation. Drain stops new claims before checkpoint/release. Runtime and task
+execution roles remain unattached until their separately reviewed IAM slice.
+
 ## GitHub webhook trust boundary
 
 `github-webhook/v1` verifies HMAC-SHA256 over exact request bytes before JSON
