@@ -42,7 +42,7 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain("force_delete         = true");
     expect(pilot).toContain('resource "aws_subnet" "public"');
     expect(pilot).toContain('resource "aws_subnet" "isolated"');
-    expect(pilot).not.toMatch(/aws_nat_gateway|aws_lambda_|aws_apigateway/);
+    expect(pilot).not.toMatch(/aws_nat_gateway/);
   });
 
   it("provisions a protected isolated Aurora Serverless v2 database", () => {
@@ -82,6 +82,17 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain('"${aws_ecr_repository.worker.repository_url}:${var.worker_image_sha}"');
     expect(pilot).toContain("stopTimeout = 60");
     expect(pilot).not.toContain(":latest");
+  });
+
+  it("exposes only bounded webhook ingress through API Gateway and Lambda", () => {
+    expect(pilot).toContain('route_key = "POST /github/webhooks"');
+    expect(pilot).toContain('payload_format_version = "2.0"');
+    expect(pilot).toContain("reserved_concurrent_executions = 5");
+    expect(pilot).toContain('entry_point = ["node_modules/.bin/aws-lambda-ric"]');
+    expect(pilot).toContain('command     = ["dist/github/webhooks/v1/lambda-handler.handler"]');
+    expect(pilot).toContain('WEBHOOK_SECRET_ARN');
+    expect(pilot).toContain('CALLBACK_QUEUE_URL');
+    expect(pilot).toContain('source_arn    = "${aws_apigatewayv2_api.operator.execution_arn}/*/POST/github/webhooks"');
   });
 
   it("requires common ownership tags", () => {
@@ -300,6 +311,6 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain("alarm_actions       = var.alarm_action_arns");
     expect(pilot).toContain('resource "aws_budgets_budget" "monthly"');
     expect(pilot).toContain("subscriber_email_addresses = [var.budget_notification_email]");
-    expect(pilot).not.toMatch(/aws_lambda_/);
+    expect(pilot).not.toMatch(/aws_lambda_function\s+"operator/);
   });
 });
