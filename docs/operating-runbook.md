@@ -137,6 +137,12 @@ checkpoint tables.
 
 ## Worker lifecycle
 
+Webhook ingress returns `202` only after signature verification and durable
+enqueue acceptance. A forged signature returns a bounded rejection without
+queue access; an unavailable secret or transport returns a retryable service
+failure. Never log or return the request body, signature, or secret. Duplicate
+delivery IDs are normal and must resolve through the durable deduplication path.
+
 Queue messages use `runtime-envelope/v1`, remain below 32 KiB, and contain only
 attributable correlation data and bounded command payloads. Never include raw
 webhooks, credentials, source, prompts, or reasoning. On retry exhaustion,
