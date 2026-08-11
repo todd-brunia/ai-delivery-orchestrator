@@ -2,10 +2,38 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 
-export async function migrate(pool: Pool, directory = "migrations"): Promise<void> {
-  const client = await pool.connect();
+export interface MigrationOptions {
+  readonly directory?: string;
+  readonly maxConnectionAttempts?: number;
+  readonly initialRetryMilliseconds?: number;
+  readonly sleep?: (milliseconds: number) => Promise<void>;
+}
+
+const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+
+export async function migrate(pool: Pool, options: MigrationOptions | string = {}): Promise<void> {
+  const normalized = typeof options === "string" ? { directory: options } : options;
+  const directory = normalized.directory ?? "migrations";
+  const attempts = normalized.maxConnectionAttempts ?? 6;
+  const initialDelay = normalized.initialRetryMilliseconds ?? 1_000;
+  const sleep = normalized.sleep ?? wait;
+  if (!Number.isSafeInteger(attempts) || attempts < 1 || attempts > 10) {
+    throw new Error("maxConnectionAttempts must be an integer from 1 to 10");
+  }
+
+  let client: PoolClient | undefined;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      client = await pool.connect();
+      break;
+    } catch (error) {
+      if (attempt === attempts) throw error;
+      await sleep(Math.min(initialDelay * 2 ** (attempt - 1), 15_000));
+    }
+  }
+  if (!client) throw new Error("database connection retry exhausted");
   try {
     await client.query("SELECT pg_advisory_lock($1)", [7_324_991]);
     await client.query(`
@@ -48,7 +76,7 @@ export async function migrate(pool: Pool, directory = "migrations"): Promise<voi
       }
     }
   } finally {
-    await client.query("SELECT pg_advisory_unlock($1)", [7_324_991]);
+    await client.query("SELECT pg_advisory_unlock($1)", [7_324_991]).catch(() => undefined);
     client.release();
   }
 }

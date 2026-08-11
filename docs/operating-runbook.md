@@ -87,6 +87,23 @@ failure is recorded; derived installation tokens remain live until expiry.
 
 ## PostgreSQL lifecycle
 
+The pilot Aurora cluster is private, encrypted, deletion-protected, backed up
+for at least seven days, and requires a final snapshot. Terraform manages the
+cluster and an empty connectivity allowlist; AWS manages the master password.
+Do not place the managed secret ARN, endpoint, or connection string in issue or
+workflow output. Worker and migration security groups are added only after
+their owning changes are reviewed.
+
+Before an authorized pilot migration, verify the full commit and image digest,
+cluster availability, expected migration checksums, and that no other migration
+holds the advisory lock. Cold-resume connection attempts use bounded exponential
+backoff. A checksum mismatch or exhausted connection retry is terminal: stop,
+preserve evidence, and reconcile instead of editing migration history.
+
+Restore verification always creates a separate isolated cluster from an
+approved snapshot. Never restore over the authoritative cluster. Deleting the
+verification cluster and its final snapshot is a distinct reviewed checkpoint.
+
 Start only PostgreSQL and wait for a healthy status:
 
 ```bash
