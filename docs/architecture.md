@@ -108,6 +108,13 @@ globally by GitHub delivery ID. Inbox claims use expiring ownership,
 `SKIP LOCKED`, bounded retries, and dead-letter exhaustion. An HTTP/Lambda
 adapter and canonical GitHub refetch are separate future slices.
 
+The HTTP adapter is exposed only as `POST /github/webhooks` through an HTTP API
+and a concurrency-bounded Lambda. It caps request size, preserves exact bytes
+through signature verification, loads the webhook secret only through an
+injected boundary, and publishes only the normalized envelope. Responses are
+bounded receipts and never echo payloads. The Lambda role remains an exact
+validated reference owned by the separate IAM root.
+
 ## Provider ports and local composition
 
 The versioned `providers/v1` boundary separates canonical GitHub reads,
