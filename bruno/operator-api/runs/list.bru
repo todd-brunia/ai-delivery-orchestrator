@@ -1,0 +1,17 @@
+meta {
+  name: List runs
+  type: http
+  seq: 2
+}
+get {
+  url: {{baseUrl}}/v1/runs?limit=50
+  body: none
+  auth: awsv4
+}
+auth:awsv4 {
+  accessKeyId: {{$processEnv AWS_ACCESS_KEY_ID}}
+  secretAccessKey: {{$processEnv AWS_SECRET_ACCESS_KEY}}
+  sessionToken: {{$processEnv AWS_SESSION_TOKEN}}
+  service: execute-api
+  region: {{region}}
+}

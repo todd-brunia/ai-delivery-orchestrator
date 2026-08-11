@@ -115,6 +115,17 @@ injected boundary, and publishes only the normalized envelope. Responses are
 bounded receipts and never echo payloads. The Lambda role remains an exact
 validated reference owned by the separate IAM root.
 
+## Operator API v1
+
+The operator surface uses API Gateway IAM/SigV4 authorization plus an exact
+application-level principal allowlist. Versioned routes support run creation,
+bounded list/detail/event reads, pause/resume/cancel/reconcile, and worker
+wake/drain. Every mutation requires an idempotency key bound to principal,
+route, and validated payload digest and returns `202` with a stable command
+location. Reads label authoritative or projection sources and projection time.
+Unknown routes, versions, fields, principals, stale revisions, pagination, and
+oversized bodies fail closed.
+
 ## Provider ports and local composition
 
 The versioned `providers/v1` boundary separates canonical GitHub reads,

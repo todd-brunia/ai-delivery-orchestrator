@@ -137,6 +137,24 @@ variable "webhook_lambda_role_arn" {
     error_message = "webhook_lambda_role_arn must name the exact pilot webhook role."
   }
 }
+variable "operator_lambda_role_arn" {
+  description = "Exact operator Lambda role created in pilot-IAM by #66."
+  type        = string
+  default     = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-operator-api"
+  validation {
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/ai-delivery-orchestrator-pilot-operator-api$", var.operator_lambda_role_arn))
+    error_message = "operator_lambda_role_arn must name the exact pilot operator API role."
+  }
+}
+variable "allowed_operator_principal_arn" {
+  description = "Single SigV4 principal allowlisted by the operator application boundary."
+  type        = string
+  default     = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-human-operator"
+  validation {
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/ai-delivery-orchestrator-pilot-human-operator$", var.allowed_operator_principal_arn))
+    error_message = "allowed_operator_principal_arn must name the exact pilot human operator role."
+  }
+}
 locals {
   name = "ai-delivery-orchestrator-pilot"
   tags = {
