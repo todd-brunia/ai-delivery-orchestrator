@@ -42,7 +42,7 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain("force_delete         = true");
     expect(pilot).toContain('resource "aws_subnet" "public"');
     expect(pilot).toContain('resource "aws_subnet" "isolated"');
-    expect(pilot).not.toMatch(/aws_nat_gateway|aws_ecs_|aws_lambda_|aws_apigateway/);
+    expect(pilot).not.toMatch(/aws_nat_gateway|aws_lambda_|aws_apigateway/);
   });
 
   it("provisions a protected isolated Aurora Serverless v2 database", () => {
@@ -71,6 +71,17 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain('attribute_name = "expiresAtEpochSeconds"');
     expect(pilot).toContain("point_in_time_recovery");
     expect(pilot).toContain("deletion_protection_enabled = true");
+  });
+
+  it("provisions inert private workers with bounded scale-to-zero capacity", () => {
+    expect(pilot).toContain('resource "aws_ecs_service" "worker"');
+    expect(pilot).toContain("desired_count   = 0");
+    expect(pilot).toContain("min_capacity       = 0");
+    expect(pilot).toContain("max_capacity       = 2");
+    expect(pilot).toContain("assign_public_ip = false");
+    expect(pilot).toContain('"${aws_ecr_repository.worker.repository_url}:${var.worker_image_sha}"');
+    expect(pilot).toContain("stopTimeout = 60");
+    expect(pilot).not.toContain(":latest");
   });
 
   it("requires common ownership tags", () => {
@@ -289,6 +300,6 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain("alarm_actions       = var.alarm_action_arns");
     expect(pilot).toContain('resource "aws_budgets_budget" "monthly"');
     expect(pilot).toContain("subscriber_email_addresses = [var.budget_notification_email]");
-    expect(pilot).not.toMatch(/aws_lambda_|aws_ecs_/);
+    expect(pilot).not.toMatch(/aws_lambda_/);
   });
 });

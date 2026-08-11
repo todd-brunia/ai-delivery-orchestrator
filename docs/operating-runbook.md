@@ -144,6 +144,14 @@ preserve the DLQ message and sanitized receive metadata. Stop producers and
 consumers before replay; reconcile the idempotency key against Aurora, then
 redrive through a reviewed operation. Never purge a queue or delete DLQ evidence.
 
+The pilot ECS service is merged at desired/minimum capacity zero and maximum
+capacity two. Do not raise capacity for the all-zero placeholder image SHA or
+before runtime roles are attached. A graceful stop first blocks new claims,
+persists or releases the current claim according to its lease policy, and exits
+inside the 60-second task stop timeout. A new wake generation observed during
+either idle check cancels scale-down. Emergency containment disables wake and
+sets desired capacity to zero while preserving queues, leases, and checkpoints.
+
 Start the local stack and inspect structured logs:
 
 ```bash
