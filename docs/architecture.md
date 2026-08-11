@@ -84,6 +84,14 @@ items only after their prerequisites merge. Outbox consumers claim bounded
 batches with `SKIP LOCKED`; owner and expiry checks govern completion or retry,
 and expired claims become recoverable without duplicating completed actions.
 
+Runtime transport uses separate encrypted FIFO command and callback queues with
+bounded retries and paired retained DLQs. Application idempotency keys—not SQS
+content hashes—control deduplication. A protected DynamoDB table provides
+TTL-backed delivery claims, wake generations, and explicitly eventually
+consistent status projections. Every projection records its source revision,
+event, and observation time; absence or regression falls back to Aurora rather
+than becoming authoritative.
+
 ## GitHub webhook trust boundary
 
 `github-webhook/v1` verifies HMAC-SHA256 over exact request bytes before JSON

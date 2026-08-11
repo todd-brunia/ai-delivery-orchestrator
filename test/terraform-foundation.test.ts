@@ -60,6 +60,19 @@ describe("Terraform foundation policy", () => {
     expect(pilot).not.toMatch(/cidr_ipv4\s*=\s*"0\.0\.0\.0\/0"[\s\S]{0,100}5432/);
   });
 
+  it("provisions encrypted FIFO queues, DLQs, and non-authoritative coordination", () => {
+    expect(pilot).toContain('resource "aws_sqs_queue" "runtime"');
+    expect(pilot).toContain('resource "aws_sqs_queue" "dead_letter"');
+    expect(pilot).toContain("fifo_queue                  = true");
+    expect(pilot).toContain("content_based_deduplication = false");
+    expect(pilot).toContain("maxReceiveCount     = 5");
+    expect(pilot).toContain("sqs_managed_sse_enabled");
+    expect(pilot).toContain('resource "aws_dynamodb_table" "runtime_coordination"');
+    expect(pilot).toContain('attribute_name = "expiresAtEpochSeconds"');
+    expect(pilot).toContain("point_in_time_recovery");
+    expect(pilot).toContain("deletion_protection_enabled = true");
+  });
+
   it("requires common ownership tags", () => {
     for (const value of [bootstrap, pilot, pilotIam]) {
       expect(value).toMatch(/Project\s*=\s*"ai-delivery-orchestrator"/);
@@ -276,6 +289,6 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain("alarm_actions       = var.alarm_action_arns");
     expect(pilot).toContain('resource "aws_budgets_budget" "monthly"');
     expect(pilot).toContain("subscriber_email_addresses = [var.budget_notification_email]");
-    expect(pilot).not.toMatch(/aws_lambda_|aws_ecs_|aws_sqs_|aws_dynamodb_/);
+    expect(pilot).not.toMatch(/aws_lambda_|aws_ecs_/);
   });
 });
