@@ -113,7 +113,5 @@ the end-to-end Phase 2 workflow.
 
 ## License and reuse
 
-Copyright © 2026 Todd Brunia. No open-source license has been selected yet.
-Until a `LICENSE` file is added through an explicit owner decision, copyright
-law reserves permission to copy, modify, or distribute the software. Public
-visibility by itself will not grant a license.
+Copyright © 2026 Todd Brunia. Licensed under the
+[Apache License 2.0](./LICENSE).
