@@ -128,6 +128,17 @@ Pilot/application IAM is isolated in `infra/environments/pilot-iam` with the
 The roots exchange only an explicit, validated policy ARN; neither reads the
 other's Terraform state.
 
+For the first protected deployment, the apply workflow breaks the generated
+identifier cycle in three fail-closed stages. It first creates the IAM roles
+with narrowly scoped placeholder secret identifiers that do not name existing
+resources. It then applies the main stack while the worker remains scaled to
+zero and secret-dependent ingress cannot succeed with the placeholder policy.
+Finally, it reads only Terraform outputs (never secret values), creates a new
+saved IAM plan using the concrete database and webhook secret identifiers,
+rejects deletes or replacements, and applies that converged plan. A failure at
+any stage stops the job; rerunning the same current-main SHA replans from the
+remote state rather than deleting or rolling back resources.
+
 ```bash
 terraform -chdir=infra/environments/pilot-iam init \
   -backend-config="bucket=REPLACE_WITH_STATE_BUCKET"

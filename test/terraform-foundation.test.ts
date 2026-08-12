@@ -174,12 +174,14 @@ describe("Terraform foundation policy", () => {
   it("rejects delete and replacement actions before ordinary saved plans are applied", () => {
     expect(applyWorkflow).toContain("Reject destructive pilot IAM plan");
     expect(applyWorkflow).toContain("Reject destructive pilot plan");
-    expect(applyWorkflow.match(/show -json pilot(?:-iam)?\.tfplan/g)).toHaveLength(2);
-    expect(applyWorkflow.match(/index\("delete"\)/g)).toHaveLength(2);
+    expect(applyWorkflow.match(/show -json pilot(?:-iam|-iam-converged)?\.tfplan/g)).toHaveLength(3);
+    expect(applyWorkflow.match(/index\("delete"\)/g)).toHaveLength(3);
     expect(applyWorkflow.indexOf("Reject destructive pilot IAM plan")).toBeGreaterThan(applyWorkflow.indexOf("Plan pilot IAM for selected commit"));
     expect(applyWorkflow.indexOf("Reject destructive pilot IAM plan")).toBeLessThan(applyWorkflow.indexOf("Apply selected pilot IAM plan"));
     expect(applyWorkflow.indexOf("Reject destructive pilot plan")).toBeGreaterThan(applyWorkflow.indexOf("Plan selected commit"));
     expect(applyWorkflow.indexOf("Reject destructive pilot plan")).toBeLessThan(applyWorkflow.indexOf("Apply selected plan"));
+    expect(applyWorkflow.indexOf("Reject destructive converged pilot IAM plan")).toBeGreaterThan(applyWorkflow.indexOf("Plan converged pilot IAM"));
+    expect(applyWorkflow.indexOf("Reject destructive converged pilot IAM plan")).toBeLessThan(applyWorkflow.indexOf("Apply converged pilot IAM plan"));
     expect(destroyWorkflow).not.toContain("Reject destructive");
   });
 

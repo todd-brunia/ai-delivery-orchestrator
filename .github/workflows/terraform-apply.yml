@@ -90,8 +90,8 @@ jobs:
           -var="command_queue_arn=arn:aws:sqs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:ai-delivery-orchestrator-pilot-commands.fifo"
           -var="callback_queue_arn=arn:aws:sqs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:ai-delivery-orchestrator-pilot-callbacks.fifo"
           -var="coordination_table_arn=arn:aws:dynamodb:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:table/ai-delivery-orchestrator-pilot-coordination"
-          -var="database_secret_arn=${{ vars.DATABASE_SECRET_ARN }}"
-          -var="webhook_secret_arn=${{ vars.WEBHOOK_SECRET_ARN }}"
+          -var="database_secret_arn=arn:aws:secretsmanager:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:secret:rds!cluster:bootstrap"
+          -var="webhook_secret_arn=arn:aws:secretsmanager:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:secret:ai-delivery-orchestrator/pilot/github-webhook-secret-bootstrap"
           -var="worker_ecr_repository_arn=arn:aws:ecr:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:repository/ai-delivery-orchestrator-worker"
           -var="ingress_log_group_arn=arn:aws:logs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:log-group:/ai-delivery-orchestrator/pilot/ingress"
           -var="operator_log_group_arn=arn:aws:logs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:log-group:/ai-delivery-orchestrator/pilot/operator-api"
@@ -156,3 +156,42 @@ jobs:
           echo "Saved pilot plan contains no delete or replacement actions."
       - name: Apply selected plan
         run: terraform -chdir=infra/environments/pilot apply -input=false -lock-timeout=5m pilot.tfplan
+      - name: Export concrete main-stack references
+        if: ${{ inputs.provision_iam }}
+        run: |
+          set -euo pipefail
+          database_secret_arn="$(terraform -chdir=infra/environments/pilot output -raw database_master_secret_arn)"
+          webhook_secret_arn="$(terraform -chdir=infra/environments/pilot output -json application_secret_arns | jq -r '."github-webhook-secret"')"
+          test "$database_secret_arn" != "null"
+          test "$webhook_secret_arn" != "null"
+          echo "TF_VAR_database_secret_arn=$database_secret_arn" >> "$GITHUB_ENV"
+          echo "TF_VAR_webhook_secret_arn=$webhook_secret_arn" >> "$GITHUB_ENV"
+      - name: Plan converged pilot IAM
+        if: ${{ inputs.provision_iam }}
+        run: >-
+          terraform -chdir=infra/environments/pilot-iam plan -input=false -lock-timeout=5m -out=pilot-iam-converged.tfplan
+          -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+          -var="command_queue_arn=arn:aws:sqs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:ai-delivery-orchestrator-pilot-commands.fifo"
+          -var="callback_queue_arn=arn:aws:sqs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:ai-delivery-orchestrator-pilot-callbacks.fifo"
+          -var="coordination_table_arn=arn:aws:dynamodb:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:table/ai-delivery-orchestrator-pilot-coordination"
+          -var="worker_ecr_repository_arn=arn:aws:ecr:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:repository/ai-delivery-orchestrator-worker"
+          -var="ingress_log_group_arn=arn:aws:logs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:log-group:/ai-delivery-orchestrator/pilot/ingress"
+          -var="operator_log_group_arn=arn:aws:logs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:log-group:/ai-delivery-orchestrator/pilot/operator-api"
+          -var="worker_log_group_arn=arn:aws:logs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:log-group:/ai-delivery-orchestrator/pilot/worker"
+      - name: Reject destructive converged pilot IAM plan
+        if: ${{ inputs.provision_iam }}
+        run: |
+          set -euo pipefail
+          destructive_changes="$(
+            terraform -chdir=infra/environments/pilot-iam show -json pilot-iam-converged.tfplan |
+              jq -r '.resource_changes[]? | select(.change.actions | index("delete")) | "\(.address): \(.change.actions | join(","))"'
+          )"
+          if [ -n "$destructive_changes" ]; then
+            echo "::error::Saved converged pilot IAM plan contains delete or replacement actions"
+            printf '%s\n' "$destructive_changes"
+            exit 1
+          fi
+          echo "Saved converged pilot IAM plan contains no delete or replacement actions."
+      - name: Apply converged pilot IAM plan
+        if: ${{ inputs.provision_iam }}
+        run: terraform -chdir=infra/environments/pilot-iam apply -input=false -lock-timeout=5m pilot-iam-converged.tfplan
