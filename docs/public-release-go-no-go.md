@@ -1,7 +1,7 @@
 # Public Release Go/No-Go Record
 
 - Status: **NO-GO**
-- Audited commit: `01c3e84b3baa3e1a0ebcd8f702c75cea0e230c0d`
+- Audited commit: `7ae862216b6c930687acb08b22d5297d3b460609`
 - Audit date: 2026-08-12
 - Owner sign-off: pending
 
@@ -13,14 +13,23 @@
 - Repository access is limited to the owner.
 - Read-only AWS state inspection reported no tainted resources.
 - The latest speculative Milestone 2 plans contained no deletions.
+- All 32 writable branch refs were rewritten from a protected 69-ref bundle;
+  author and committer email now use the owner's GitHub noreply address.
+- The live AWS account ID and generated reviewer/merger secret ARN suffixes are
+  absent from the rewritten branch history.
+- All 119 inventoried pre-rewrite Actions runs and their 19 artifacts were
+  deleted. Fresh sanitized-main validation runs are retained.
+- Apache License 2.0 was explicitly selected by the owner.
 
 ## Blocking decisions and controls
 
-- [ ] Select and approve an open-source license.
-- [ ] Decide whether the personal author email in Git history is acceptable.
-- [ ] Decide whether live AWS identifiers in Git history require rewriting.
-- [ ] Decide whether Actions runs and Buildx artifacts containing operational or
-      personal identifiers will be retained or deleted.
+- [x] Select and approve Apache License 2.0.
+- [x] Rewrite writable branch history to use the GitHub noreply author email.
+- [x] Remove live AWS identifiers from writable branch history.
+- [x] Delete the exact pre-rewrite Actions run and artifact inventory.
+- [ ] Resolve or explicitly accept immutable closed-PR refs. GitHub retained old
+      `refs/pull/*` snapshots after every writable branch was rewritten; normal
+      Git pushes cannot update or delete these refs.
 - [ ] Re-run scans after approved remediation.
 - [ ] Approve the irreversible visibility transition.
 - [ ] Restore and verify public branch/ruleset protections immediately afterward.
