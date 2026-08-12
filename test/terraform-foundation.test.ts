@@ -241,6 +241,7 @@ describe("Terraform foundation policy", () => {
     expect(bootstrap).toContain('sid = "ManagePilotRuntimeRoles"');
     expect(bootstrap).toContain('"iam:CreateRole"');
     expect(bootstrap).toContain('"iam:PutRolePolicy"');
+    expect(bootstrap.match(/"iam:ListAttachedRolePolicies"/g)).toHaveLength(2);
     expect(bootstrap).toContain('sid       = "PassPilotRuntimeRoles"');
     expect(bootstrap).toContain('variable = "iam:PassedToService"');
     expect(bootstrap).toContain('["ecs-tasks.amazonaws.com", "lambda.amazonaws.com"]');
