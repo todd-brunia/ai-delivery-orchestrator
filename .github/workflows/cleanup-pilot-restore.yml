@@ -1,0 +1,98 @@
+name: Clean up pilot restore verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Exact current main commit containing the reviewed cleanup code
+        required: true
+        type: string
+      verification_id:
+        description: Exact restore verification identifier
+        required: true
+        type: string
+      confirmation:
+        description: Type DELETE RESTORE VERIFY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pilot-restore-verification
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: pilot
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: us-east-1
+    steps:
+      - name: Validate explicit cleanup checkpoint
+        env:
+          SELECTED_SHA: ${{ inputs.commit_sha }}
+          VERIFICATION_ID: ${{ inputs.verification_id }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          test "$CONFIRMATION" = "DELETE RESTORE VERIFY"
+          test "${#SELECTED_SHA}" -eq 40
+          test -z "${SELECTED_SHA//[0-9a-f]/}"
+          test -n "$VERIFICATION_ID"
+          test "${#VERIFICATION_ID}" -le 24
+          test -z "${VERIFICATION_ID//[a-z0-9-]/}"
+          test "$VERIFICATION_ID" != "pilot"
+      - name: Check out exact reviewed main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+      - name: Verify commit is current main
+        env:
+          SELECTED_SHA: ${{ inputs.commit_sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SELECTED_SHA"
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$SELECTED_SHA"
+      - name: Require and assume exact protected deployment role
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_RUNTIME_DEPLOY_ROLE_ARN: ${{ vars.AWS_RUNTIME_DEPLOY_ROLE_ARN }}
+        run: test "$AWS_RUNTIME_DEPLOY_ROLE_ARN" = "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-delivery-orchestrator-pilot-runtime-deploy"
+      - name: Assume protected runtime deployment role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_RUNTIME_DEPLOY_ROLE_ARN }}
+      - name: Prove exact temporary resource boundary
+        env:
+          VERIFICATION_ID: ${{ inputs.verification_id }}
+        run: |
+          cluster="ai-delivery-orchestrator-pilot-restore-$VERIFICATION_ID"
+          test "$cluster" != "ai-delivery-orchestrator-pilot"
+          arn="$(aws rds describe-db-clusters --db-cluster-identifier "$cluster" --query 'DBClusters[0].DBClusterArn' --output text)"
+          tags="$(aws rds list-tags-for-resource --resource-name "$arn" --output json)"
+          test "$(jq -r '.TagList[] | select(.Key == "Purpose") | .Value' <<< "$tags")" = "restore-verification"
+          test "$(jq -r '.TagList[] | select(.Key == "VerificationId") | .Value' <<< "$tags")" = "$VERIFICATION_ID"
+      - name: Delete only the proven temporary restore
+        env:
+          VERIFICATION_ID: ${{ inputs.verification_id }}
+        run: |
+          cluster="ai-delivery-orchestrator-pilot-restore-$VERIFICATION_ID"
+          aws rds delete-db-instance --db-instance-identifier "$cluster-writer" --skip-final-snapshot >/dev/null
+          aws rds wait db-instance-deleted --db-instance-identifier "$cluster-writer"
+          aws rds delete-db-cluster --db-cluster-identifier "$cluster" --skip-final-snapshot >/dev/null
+          aws rds wait db-cluster-deleted --db-cluster-identifier "$cluster"
+      - name: Record sanitized cleanup evidence
+        env:
+          VERIFICATION_ID: ${{ inputs.verification_id }}
+        run: |
+          echo "### Restore verification cleanup" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Verification ID: \`$VERIFICATION_ID\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Temporary cluster deleted: \`true\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Authoritative cluster modified: \`false\`" >> "$GITHUB_STEP_SUMMARY"

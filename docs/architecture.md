@@ -252,8 +252,12 @@ matrix](./runtime-authority-matrix.md). Workload, execution, webhook, operator,
 migration, GitHub role, and target-specific OpenAI authority are separated in
 `pilot-iam`; the main root only attaches exact role ARN inputs. Terraform
 creates containers but never secret values or long-lived AWS credentials.
-Resource-specific queue, compute, and database alarms are deferred until those
-resources exist.
+The pilot observability layer supplies versioned bounded
+telemetry dimensions, redaction helpers, service and recovery alarms, and one
+operational dashboard. CloudWatch is operational evidence only; PostgreSQL
+remains authoritative. Restore verification creates a tagged private copy from
+an approved snapshot, performs read-only schema checks, and leaves deletion to
+a distinct protected workflow checkpoint.
 
 Runtime promotion is a separate protected workflow bound to current `main`, an
 immutable ECR tag and expected digest, non-destructive saved plans, and an exact
