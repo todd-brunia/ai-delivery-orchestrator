@@ -58,7 +58,18 @@ jobs:
           mv infra/environments/pilot-iam/backend.tf infra/environments/pilot-iam/backend.tf.disabled
           terraform -chdir=infra/environments/pilot-iam init -input=false -backend=false
       - name: Create speculative pilot IAM plan
-        run: terraform -chdir=infra/environments/pilot-iam plan -input=false -lock-timeout=5m -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+        run: >-
+          terraform -chdir=infra/environments/pilot-iam plan -input=false -lock-timeout=5m
+          -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+          -var="command_queue_arn=arn:aws:sqs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:ai-delivery-orchestrator-pilot-commands.fifo"
+          -var="callback_queue_arn=arn:aws:sqs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:ai-delivery-orchestrator-pilot-callbacks.fifo"
+          -var="coordination_table_arn=arn:aws:dynamodb:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:table/ai-delivery-orchestrator-pilot-coordination"
+          -var="database_secret_arn=arn:aws:secretsmanager:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:secret:rds!cluster:speculative"
+          -var="webhook_secret_arn=arn:aws:secretsmanager:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:secret:ai-delivery-orchestrator/pilot/github-webhook-secret-abcdef"
+          -var="worker_ecr_repository_arn=arn:aws:ecr:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:repository/ai-delivery-orchestrator-worker"
+          -var="ingress_log_group_arn=arn:aws:logs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:log-group:/ai-delivery-orchestrator/pilot/ingress"
+          -var="operator_log_group_arn=arn:aws:logs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:log-group:/ai-delivery-orchestrator/pilot/operator-api"
+          -var="worker_log_group_arn=arn:aws:logs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:log-group:/ai-delivery-orchestrator/pilot/worker"
       - name: Initialize pilot remote state
         run: terraform -chdir=infra/environments/pilot init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
       - name: Create speculative pilot plan
@@ -66,3 +77,10 @@ jobs:
           terraform -chdir=infra/environments/pilot plan -input=false -lock-timeout=5m
           -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
           -var="runtime_secret_policy_arn=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:policy/ai-delivery-orchestrator-pilot-runtime-secrets"
+          -var="webhook_lambda_role_arn=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-webhook"
+          -var="operator_lambda_role_arn=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-operator-api"
+          -var="allowed_operator_principal_arn=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-human-operator"
+          -var="worker_execution_role_arn=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-worker-execution"
+          -var="worker_task_role_arn=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-worker"
+          -var="migration_execution_role_arn=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-migration-execution"
+          -var="migration_task_role_arn=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-migration"

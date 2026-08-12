@@ -53,6 +53,13 @@ Run `npm audit --audit-level=high` and a secret scan before requesting review.
 
 ## Automation identity preflight
 
+Before enabling any runtime role, compare the synthesized policy digest with
+`docs/runtime-authority-matrix.md`, prove a permitted action and every adjacent
+cross-role denial, and retain sanitized CloudTrail request IDs. A changed trust
+principal, secret ARN, queue/table ARN, ECR repository, or action set is a
+fail-stop policy change. Disable the consumer and revoke or rotate its external
+credential on mismatch; never consolidate containers as a recovery shortcut.
+
 Before any future identity consumer starts, obtain canonical GitHub reads and
 validate exact App slug/ID, installation ID/account, selected portal repository
 ID/name, permissions, and configuration revision against

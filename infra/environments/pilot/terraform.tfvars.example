@@ -3,3 +3,10 @@ runtime_secret_policy_arn = "arn:aws:iam::123456789012:policy/ai-delivery-orches
 budget_notification_email = "operator@example.com"
 # Keep empty until #62 creates reviewed worker/migration security groups.
 database_client_security_group_ids = {}
+webhook_lambda_role_arn    = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-webhook"
+operator_lambda_role_arn   = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-operator-api"
+allowed_operator_principal_arn = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-human-operator"
+worker_execution_role_arn  = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-worker-execution"
+worker_task_role_arn       = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-worker"
+migration_execution_role_arn = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-migration-execution"
+migration_task_role_arn      = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-migration"

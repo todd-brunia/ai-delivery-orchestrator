@@ -155,6 +155,38 @@ variable "allowed_operator_principal_arn" {
     error_message = "allowed_operator_principal_arn must name the exact pilot human operator role."
   }
 }
+variable "worker_execution_role_arn" {
+  type    = string
+  default = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-worker-execution"
+  validation {
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/ai-delivery-orchestrator-pilot-worker-execution$", var.worker_execution_role_arn))
+    error_message = "worker_execution_role_arn must name the exact pilot worker execution role."
+  }
+}
+variable "worker_task_role_arn" {
+  type    = string
+  default = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-worker"
+  validation {
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/ai-delivery-orchestrator-pilot-worker$", var.worker_task_role_arn))
+    error_message = "worker_task_role_arn must name the exact pilot worker role."
+  }
+}
+variable "migration_execution_role_arn" {
+  type    = string
+  default = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-migration-execution"
+  validation {
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/ai-delivery-orchestrator-pilot-migration-execution$", var.migration_execution_role_arn))
+    error_message = "migration_execution_role_arn must name the exact pilot migration execution role."
+  }
+}
+variable "migration_task_role_arn" {
+  type    = string
+  default = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-migration"
+  validation {
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/ai-delivery-orchestrator-pilot-migration$", var.migration_task_role_arn))
+    error_message = "migration_task_role_arn must name the exact pilot migration role."
+  }
+}
 locals {
   name = "ai-delivery-orchestrator-pilot"
   tags = {
