@@ -6,6 +6,9 @@ locals {
     "github-app-merger-private-key",
     "github-webhook-secret",
     "openai-api-key",
+    "portal-openai-builder-api-key",
+    "portal-openai-reviewer-api-key",
+    "orchestrator-openai-reviewer-api-key",
   ])
   log_group_names = toset([
     "ingress",

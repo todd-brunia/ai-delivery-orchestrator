@@ -167,8 +167,8 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain("recovery_window_in_days = 30");
     expect(pilot).not.toMatch(/aws_secretsmanager_secret_version|secret_string|secret_binary/i);
     expect(pilotIam).toContain('"github-app-builder-private-key"');
-    expect(pilotIam).not.toContain('"github-app-reviewer-private-key"');
-    expect(pilotIam).not.toContain('"github-app-merger-private-key"');
+    expect(pilotIam).toContain('"github-app-reviewer-private-key"');
+    expect(pilotIam).toContain('"github-app-merger-private-key"');
   });
 
   it("keeps future runtime secret access scoped and unattached", () => {
@@ -176,6 +176,30 @@ describe("Terraform foundation policy", () => {
     expect(pilotIam).toContain("secret:ai-delivery-orchestrator/pilot/${name}-??????");
     expect(pilotIam).not.toMatch(/resources\s*=\s*\["\*"\][\s\S]{0,200}GetSecretValue/);
     expect(pilotIam).not.toMatch(/aws_iam_(role_)?policy_attachment/);
+  });
+
+  it("separates runtime and provider roles with exact secret boundaries", () => {
+    for (const role of ["webhook", "operator_api", "worker_execution", "worker", "migration", "migration_execution"]) {
+      expect(pilotIam).toContain(`resource "aws_iam_role" "${role}"`);
+    }
+    for (const secret of ["github-app-builder-private-key", "github-app-reviewer-private-key", "github-app-merger-private-key", "portal-openai-builder-api-key", "portal-openai-reviewer-api-key", "orchestrator-openai-reviewer-api-key"]) {
+      expect(pilotIam).toContain(secret);
+      expect(pilot).toContain(secret);
+    }
+    expect(pilotIam).toContain('variable = "secretsmanager:VersionStage"');
+    expect(pilotIam).toMatch(/values\s*=\s*\["AWSCURRENT"\]/);
+    expect(pilotIam).not.toMatch(/iam:PassRole|iam:\*/);
+    expect(pilot).not.toMatch(/resource\s+"aws_iam_/);
+    expect(pilot).not.toMatch(/aws_secretsmanager_secret_version|secret_string|secret_binary/i);
+  });
+
+  it("attaches exact reviewed roles to inert compute", () => {
+    expect(pilot).toContain("execution_role_arn       = var.worker_execution_role_arn");
+    expect(pilot).toContain("task_role_arn            = var.worker_task_role_arn");
+    expect(pilot).toContain("execution_role_arn       = var.migration_execution_role_arn");
+    expect(pilot).toContain("task_role_arn            = var.migration_task_role_arn");
+    expect(pilot).toContain("role                           = var.webhook_lambda_role_arn");
+    expect(pilot).toContain("role                           = var.operator_lambda_role_arn");
   });
 
   it("separates pilot IAM ownership behind an exact reference contract", () => {
