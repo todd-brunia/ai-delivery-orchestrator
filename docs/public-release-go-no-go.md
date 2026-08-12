@@ -28,6 +28,10 @@
 - Post-remediation full-history secret scanning reported zero findings, current
   source contains no live AWS identifiers or personal author email, and CI
   passed on the audited source commit.
+- Read-only live verification matched the distinct reviewer and merger GitHub
+  App identities, selected-repository audience, and role-specific permission
+  ceilings. The future builder secret container has zero configured versions,
+  so no builder credential or active builder authority exists.
 - GitHub's immutable closed-pull-request refs retain non-secret historical
   metadata. The owner explicitly accepted that residual for publication on
   2026-08-12; it does not appear in writable branch history or current source.
@@ -47,7 +51,8 @@
 - [ ] Restore and verify public branch/ruleset protections immediately afterward.
 - [ ] Enable and verify security features and fork policy.
 - [ ] Add the owner as required reviewer for the `pilot` environment.
-- [ ] Empirically verify builder/reviewer/merger permission separation.
+- [x] Empirically verify active reviewer/merger permission separation and
+      confirm the future builder remains unprovisioned and disabled.
 - [ ] Sign the exact-commit GO record.
 
 ## Visibility-transition controls
