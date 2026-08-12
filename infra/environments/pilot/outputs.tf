@@ -30,3 +30,4 @@ output "operator_api_endpoint" {
   sensitive = true
 }
 output "operator_lambda_arn" { value = aws_lambda_function.operator.arn }
+output "pilot_dashboard_name" { value = aws_cloudwatch_dashboard.pilot.dashboard_name }

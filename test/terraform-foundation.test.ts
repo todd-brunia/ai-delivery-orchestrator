@@ -84,6 +84,20 @@ describe("Terraform foundation policy", () => {
     expect(pilot).not.toContain(":latest");
   });
 
+  it("covers pilot failure, backlog, recovery, and cost signals", () => {
+    for (const namespace of ["AWS/Lambda", "AWS/ApiGateway", "AWS/SQS", "AWS/DynamoDB", "ECS/ContainerInsights", "AWS/RDS", "AiDeliveryOrchestrator/Pilot"]) {
+      expect(pilot).toContain(namespace);
+    }
+    for (const metric of ["Errors", "Throttles", "Duration", "5xx", "Latency", "ApproximateAgeOfOldestMessage", "ApproximateNumberOfMessagesVisible", "RunningTaskCount", "AuroraWakeSeconds", "WorkerWakeToReadySeconds", "WorkerHeartbeatAgeSeconds", "ProjectionLagSeconds", "MigrationFailures", "BackupAgeHours", "TelemetryGap"]) {
+      expect(pilot).toContain(metric);
+    }
+    expect(pilot).toContain('resource "aws_cloudwatch_dashboard" "pilot"');
+    expect(pilot).toContain("alarm_actions       = var.alarm_action_arns");
+    expect(pilot).toMatch(/threshold_type\s+= "PERCENTAGE"/);
+    expect(pilot).toMatch(/notification_type\s+= "FORECASTED"/);
+    expect(pilot).toMatch(/notification_type\s+= "ACTUAL"/);
+  });
+
   it("provides private AWS service connectivity without a NAT gateway", () => {
     for (const service of ["ecr.api", "ecr.dkr", "logs", "secretsmanager", "sqs", "s3", "dynamodb"]) {
       expect(pilot).toContain(`"${service}"`);
