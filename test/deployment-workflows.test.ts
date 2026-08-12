@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const read = (name: string) => readFileSync(join(process.cwd(), ".github/workflows", name), "utf8");
 const deploy = read("deploy-pilot.yml");
 const rollback = read("rollback-pilot.yml");
+const terraformApply = read("terraform-apply.yml");
 
 describe("protected pilot deployment workflows", () => {
   it("dispatches only through the protected non-cancelling environment", () => {
@@ -47,5 +48,17 @@ describe("protected pilot deployment workflows", () => {
       expect(references.length).toBeGreaterThan(0);
       expect(references.every((reference) => reference && /^[0-9a-f]{40}$/.test(reference))).toBe(true);
     }
+  });
+  it("bootstraps and then converges IAM without preconfigured generated identifiers", () => {
+    expect(terraformApply).toContain("secret:rds!cluster:bootstrap");
+    expect(terraformApply).toContain("github-webhook-secret-bootstrap");
+    expect(terraformApply).not.toContain("vars.DATABASE_SECRET_ARN");
+    expect(terraformApply).not.toContain("vars.WEBHOOK_SECRET_ARN");
+    expect(terraformApply).toContain("Export concrete main-stack references");
+    expect(terraformApply).toContain("database_master_secret_arn");
+    expect(terraformApply).toContain("application_secret_arns");
+    expect(terraformApply).toContain("pilot-iam-converged.tfplan");
+    expect(terraformApply).toContain("Reject destructive converged pilot IAM plan");
+    expect(terraformApply).toContain("Apply converged pilot IAM plan");
   });
 });
