@@ -29,6 +29,8 @@ resource "aws_ecs_task_definition" "worker" {
   network_mode             = "awsvpc"
   cpu                      = 256
   memory                   = 512
+  execution_role_arn       = var.worker_execution_role_arn
+  task_role_arn            = var.worker_task_role_arn
 
   container_definitions = jsonencode([{
     name        = "worker"
@@ -74,4 +76,40 @@ resource "aws_appautoscaling_target" "worker" {
   resource_id        = "service/${aws_ecs_cluster.worker.name}/${aws_ecs_service.worker.name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
+}
+
+resource "aws_ecs_task_definition" "migration" {
+  family                   = "${local.name}-migration"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = var.migration_execution_role_arn
+  task_role_arn            = var.migration_task_role_arn
+  container_definitions = jsonencode([{
+    name      = "migration"
+    image     = "${aws_ecr_repository.worker.repository_url}:${var.worker_image_sha}"
+    essential = true
+    command   = ["node", "dist/persistence/migrate-cli.js"]
+    environment = [
+      { name = "PGHOST", value = aws_rds_cluster.application.endpoint },
+      { name = "PGPORT", value = "5432" },
+      { name = "PGDATABASE", value = "orchestrator" },
+      { name = "PGSSLMODE", value = "require" },
+      { name = "MIGRATION_IMAGE_SHA", value = var.worker_image_sha }
+    ]
+    secrets = [
+      { name = "PGUSER", valueFrom = "${aws_rds_cluster.application.master_user_secret[0].secret_arn}:username::" },
+      { name = "PGPASSWORD", valueFrom = "${aws_rds_cluster.application.master_user_secret[0].secret_arn}:password::" }
+    ]
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.application["worker"].name
+        awslogs-region        = var.aws_region
+        awslogs-stream-prefix = "migration"
+      }
+    }
+  }])
+  tags = local.tags
 }
