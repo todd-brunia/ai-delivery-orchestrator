@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This private repository implements the governed AI delivery orchestrator
+This repository implements the governed AI delivery orchestrator
 planned in `todd-brunia/ai-consulting-meta`. It coordinates approved work; it
 does not grant AI unbounded authority over source repositories or deployments.
 
@@ -31,6 +31,10 @@ it lands, every tracked-file change requires:
 Never push directly to `main`, approve or merge your own pull request, deploy
 production infrastructure, create credentials, or broaden GitHub/AWS authority
 unless the specific issue and approved plan authorize it.
+
+Repository visibility changes, history rewrites, release licensing, and
+deletion of public evidence are named human checkpoints. A request to prepare
+for publication does not authorize any of those operations implicitly.
 
 ## Engineering principles
 
