@@ -169,7 +169,7 @@ data "aws_iam_policy_document" "github_plan" {
   statement {
     sid = "InspectPilotRuntimeRoles"
     actions = [
-      "iam:GetRole", "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:ListRoleTags",
+      "iam:GetRole", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies", "iam:ListRoleTags",
     ]
     resources = local.pilot_runtime_role_arns
   }
@@ -315,7 +315,7 @@ data "aws_iam_policy_document" "github_apply" {
     sid = "ManagePilotRuntimeRoles"
     actions = [
       "iam:CreateRole", "iam:DeleteRole", "iam:DeleteRolePolicy", "iam:GetRole", "iam:GetRolePolicy",
-      "iam:ListRolePolicies", "iam:ListRoleTags", "iam:PutRolePolicy", "iam:TagRole", "iam:UntagRole",
+      "iam:ListAttachedRolePolicies", "iam:ListRolePolicies", "iam:ListRoleTags", "iam:PutRolePolicy", "iam:TagRole", "iam:UntagRole",
       "iam:UpdateAssumeRolePolicy",
     ]
     resources = local.pilot_runtime_role_arns

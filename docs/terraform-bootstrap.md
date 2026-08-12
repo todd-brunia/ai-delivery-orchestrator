@@ -148,6 +148,14 @@ only. The apply identity receives lifecycle authority over the twelve enumerated
 runtime/provider roles and may pass them only to Lambda or ECS tasks; it cannot
 manage bootstrap or human-operator roles.
 
+If role creation succeeds but Terraform cannot complete its post-create read,
+stop before the main stack. Add the missing read action through a reviewed
+bootstrap policy change, verify the created role count, trust, and tags without
+printing identifiers, and inspect the remote state. Do not accept a replacement
+plan for the roles. Untaint only the exact verified role addresses after a
+separate human checkpoint, then require a fresh pilot-IAM plan with no deletes
+or replacements before retrying the protected workflow.
+
 ```bash
 terraform -chdir=infra/environments/pilot-iam init \
   -backend-config="bucket=REPLACE_WITH_STATE_BUCKET"
