@@ -219,6 +219,34 @@ describe("Terraform foundation policy", () => {
     expect(pilot).not.toMatch(/aws_secretsmanager_secret_version|secret_string|secret_binary/i);
   });
 
+  it("grants bootstrap identities authority over only the exact pilot runtime roles", () => {
+    const bootstrapVariables = read("infra/bootstrap/variables.tf");
+    const runtimeRoleNames = [
+      "ai-delivery-orchestrator-pilot-webhook",
+      "ai-delivery-orchestrator-pilot-operator-api",
+      "ai-delivery-orchestrator-pilot-worker-execution",
+      "ai-delivery-orchestrator-pilot-worker",
+      "ai-delivery-orchestrator-pilot-migration",
+      "ai-delivery-orchestrator-pilot-migration-execution",
+      "ai-delivery-orchestrator-pilot-github-builder",
+      "ai-delivery-orchestrator-pilot-github-reviewer",
+      "ai-delivery-orchestrator-pilot-github-merger",
+      "ai-delivery-orchestrator-pilot-openai-portal-builder",
+      "ai-delivery-orchestrator-pilot-openai-portal-reviewer",
+      "ai-delivery-orchestrator-pilot-openai-orchestrator-reviewer",
+    ];
+    for (const roleName of runtimeRoleNames) expect(bootstrapVariables).toContain(`"${roleName}"`);
+    expect(bootstrapVariables).not.toContain("ai-delivery-orchestrator-pilot-human-operator");
+    expect(bootstrap).toContain('sid = "InspectPilotRuntimeRoles"');
+    expect(bootstrap).toContain('sid = "ManagePilotRuntimeRoles"');
+    expect(bootstrap).toContain('"iam:CreateRole"');
+    expect(bootstrap).toContain('"iam:PutRolePolicy"');
+    expect(bootstrap).toContain('sid       = "PassPilotRuntimeRoles"');
+    expect(bootstrap).toContain('variable = "iam:PassedToService"');
+    expect(bootstrap).toContain('["ecs-tasks.amazonaws.com", "lambda.amazonaws.com"]');
+    expect(bootstrap).not.toMatch(/role\/ai-delivery-orchestrator-pilot-\*/);
+  });
+
   it("attaches exact reviewed roles to inert compute", () => {
     expect(pilot).toContain("execution_role_arn       = var.worker_execution_role_arn");
     expect(pilot).toContain("task_role_arn            = var.worker_task_role_arn");
@@ -295,7 +323,8 @@ describe("Terraform foundation policy", () => {
   });
 
   it("grants the publishing role only exact-repository ECR push authority", () => {
-    const publishPolicy = bootstrap.slice(bootstrap.indexOf('data "aws_iam_policy_document" "github_publish"'));
+    const publishPolicyStart = bootstrap.indexOf('data "aws_iam_policy_document" "github_publish"');
+    const publishPolicy = bootstrap.slice(publishPolicyStart, bootstrap.indexOf('output "state_bucket_name"', publishPolicyStart));
     const expectedActions = [
       "ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:CompleteLayerUpload",
       "ecr:DescribeImages", "ecr:GetAuthorizationToken", "ecr:InitiateLayerUpload",

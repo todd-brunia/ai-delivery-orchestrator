@@ -166,6 +166,13 @@ data "aws_iam_policy_document" "github_plan" {
     ]
     resources = ["arn:aws:iam::${var.aws_account_id}:policy/ai-delivery-orchestrator-pilot-runtime-secrets"]
   }
+  statement {
+    sid = "InspectPilotRuntimeRoles"
+    actions = [
+      "iam:GetRole", "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:ListRoleTags",
+    ]
+    resources = local.pilot_runtime_role_arns
+  }
 }
 
 resource "aws_iam_role_policy" "github_plan" {
@@ -303,6 +310,25 @@ data "aws_iam_policy_document" "github_apply" {
       "iam:SetDefaultPolicyVersion", "iam:TagPolicy", "iam:UntagPolicy",
     ]
     resources = ["arn:aws:iam::${var.aws_account_id}:policy/ai-delivery-orchestrator-pilot-runtime-secrets"]
+  }
+  statement {
+    sid = "ManagePilotRuntimeRoles"
+    actions = [
+      "iam:CreateRole", "iam:DeleteRole", "iam:DeleteRolePolicy", "iam:GetRole", "iam:GetRolePolicy",
+      "iam:ListRolePolicies", "iam:ListRoleTags", "iam:PutRolePolicy", "iam:TagRole", "iam:UntagRole",
+      "iam:UpdateAssumeRolePolicy",
+    ]
+    resources = local.pilot_runtime_role_arns
+  }
+  statement {
+    sid       = "PassPilotRuntimeRoles"
+    actions   = ["iam:PassRole"]
+    resources = local.pilot_runtime_role_arns
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["ecs-tasks.amazonaws.com", "lambda.amazonaws.com"]
+    }
   }
 }
 
