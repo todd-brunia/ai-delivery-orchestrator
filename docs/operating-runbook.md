@@ -161,6 +161,15 @@ preserve the DLQ message and sanitized receive metadata. Stop producers and
 consumers before replay; reconcile the idempotency key against Aurora, then
 redrive through a reviewed operation. Never purge a queue or delete DLQ evidence.
 
+The command consumer acknowledges only after the authoritative PostgreSQL
+commit. If the commit result is ambiguous, retry the same idempotency key; the
+repository reconciles it to the existing transition before transport
+completion. Projection failure never rolls back the transition: retry the
+projection outbox item until its source revision advances or is reported stale.
+After five failed receives, preserve the message in its DLQ with only delivery
+ID, receive count, and sanitized category. Pause/cancel/drain stop future claims
+but do not reverse completed external actions or discard callbacks.
+
 The pilot ECS service is merged at desired/minimum capacity zero and maximum
 capacity two. Do not raise capacity for the all-zero placeholder image SHA or
 before runtime roles are attached. A graceful stop first blocks new claims,
