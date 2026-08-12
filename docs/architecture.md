@@ -126,6 +126,19 @@ location. Reads label authoritative or projection sources and projection time.
 Unknown routes, versions, fields, principals, stale revisions, pagination, and
 oversized bodies fail closed.
 
+## Runtime command processing
+
+`runtime-command/v1` binds command identity, target, expected revision,
+idempotency, actor, causation/correlation, and configuration version. A bounded
+FIFO consumer validates the envelope, acquires an aggregate lease, and lets the
+PostgreSQL repository atomically commit the domain transition and projection
+outbox action before acknowledging transport. Duplicate transition keys return
+the committed result; stale revisions, target drift, unsupported actors, and
+unknown versions do not transition state. DynamoDB projection writes use a
+source-revision conditional update and explicit `projectionAsOf`; regressions
+are ignored and projection outages retry independently. Wake and drain use
+compare-and-swap generations so a racing wake cannot be lost.
+
 ## Provider ports and local composition
 
 The versioned `providers/v1` boundary separates canonical GitHub reads,
