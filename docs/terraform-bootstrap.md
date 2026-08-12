@@ -139,6 +139,15 @@ rejects deletes or replacements, and applies that converged plan. A failure at
 any stage stops the job; rerunning the same current-main SHA replans from the
 remote state rather than deleting or rolling back resources.
 
+Before that first deployment, update the bootstrap plan and apply identities
+with the exact runtime-role authority declared in `infra/bootstrap`. Review a
+saved bootstrap plan that changes only the existing plan/apply inline policies
+in place: no trust-policy, principal, role-name, state-resource, replacement,
+creation, or deletion change is allowed. The plan identity receives inspection
+only. The apply identity receives lifecycle authority over the twelve enumerated
+runtime/provider roles and may pass them only to Lambda or ECS tasks; it cannot
+manage bootstrap or human-operator roles.
+
 ```bash
 terraform -chdir=infra/environments/pilot-iam init \
   -backend-config="bucket=REPLACE_WITH_STATE_BUCKET"

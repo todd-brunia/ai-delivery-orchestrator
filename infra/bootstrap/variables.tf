@@ -50,6 +50,21 @@ variable "pilot_environment_name" {
 locals {
   github_repository_parts     = split("/", var.github_repository)
   github_immutable_repository = "${local.github_repository_parts[0]}@${var.github_repository_owner_id}/${local.github_repository_parts[1]}@${var.github_repository_id}"
+  pilot_runtime_role_names = toset([
+    "ai-delivery-orchestrator-pilot-webhook",
+    "ai-delivery-orchestrator-pilot-operator-api",
+    "ai-delivery-orchestrator-pilot-worker-execution",
+    "ai-delivery-orchestrator-pilot-worker",
+    "ai-delivery-orchestrator-pilot-migration",
+    "ai-delivery-orchestrator-pilot-migration-execution",
+    "ai-delivery-orchestrator-pilot-github-builder",
+    "ai-delivery-orchestrator-pilot-github-reviewer",
+    "ai-delivery-orchestrator-pilot-github-merger",
+    "ai-delivery-orchestrator-pilot-openai-portal-builder",
+    "ai-delivery-orchestrator-pilot-openai-portal-reviewer",
+    "ai-delivery-orchestrator-pilot-openai-orchestrator-reviewer",
+  ])
+  pilot_runtime_role_arns = [for name in local.pilot_runtime_role_names : "arn:aws:iam::${var.aws_account_id}:role/${name}"]
   tags = {
     Project     = "ai-delivery-orchestrator"
     Environment = "bootstrap"
