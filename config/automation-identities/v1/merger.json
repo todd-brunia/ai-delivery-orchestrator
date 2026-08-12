@@ -1,6 +1,6 @@
 {
   "schemaVersion": "automation-identities/v1",
-  "configurationRevision": "42fd3ac7a879287b47e00d736cf3c29fca24f9a80bf71f5f3d5e4fb0aebaeffe",
+  "configurationRevision": "230423a2f2b92e0c607d4989e75942e827a8342de3139e4a8a5c76b671016448",
   "role": "merger",
   "appSlug": "todd-brunia-ai-delivery-merger",
   "appId": "4545894",
@@ -25,5 +25,5 @@
     "release",
     "deployment"
   ],
-  "secretContainerArn": "arn:aws:secretsmanager:us-east-1:123456789012:secret:ai-delivery-orchestrator/pilot/github-app-merger-private-key-Cd34Ef"
+  "secretContainerName": "ai-delivery-orchestrator/pilot/github-app-merger-private-key"
 }

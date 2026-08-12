@@ -18,8 +18,8 @@ workflows, networking, image storage, empty secret containers, bounded logs,
 and cost guardrails. The pilot foundation is deployed and converges with a
 no-op plan; application compute and data-plane infrastructure are not deployed.
 
-The approved implementation direction is maintained in the private owner's
-public planning repository:
+The approved implementation direction is maintained in the owner's planning
+repository:
 
 - `ai-consulting-meta/plans/governed-codex-automation/`
 
@@ -113,5 +113,7 @@ the end-to-end Phase 2 workflow.
 
 ## License and reuse
 
-Copyright © 2026 Todd Brunia. All rights reserved. This private repository does
-not grant permission to copy, modify, distribute, or operate the software.
+Copyright © 2026 Todd Brunia. No open-source license has been selected yet.
+Until a `LICENSE` file is added through an explicit owner decision, copyright
+law reserves permission to copy, modify, or distribute the software. Public
+visibility by itself will not grant a license.

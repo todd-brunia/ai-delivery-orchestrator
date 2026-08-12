@@ -35,7 +35,12 @@ config="config/automation-identities/v1/${role}.json"
 app_id="$(jq -er .appId "$config")"
 app_slug="$(jq -er .appSlug "$config")"
 installation_id="$(jq -er .installationId "$config")"
-secret_arn="$(jq -er .secretContainerArn "$config")"
+secret_name="$(jq -er .secretContainerName "$config")"
+secret_arn="${AUTOMATION_IDENTITY_SECRET_ARN:-}"
+if [[ ! "$secret_arn" =~ ^arn:aws:secretsmanager:us-east-1:[0-9]{12}:secret:${secret_name}-[A-Za-z0-9]{6}$ ]]; then
+  echo "AUTOMATION_IDENTITY_SECRET_ARN must identify the exact configured role secret in us-east-1" >&2
+  exit 1
+fi
 configuration_revision="$(jq -er .configurationRevision "$config")"
 
 work_directory="$(mktemp -d)"

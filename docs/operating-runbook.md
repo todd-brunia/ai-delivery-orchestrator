@@ -78,8 +78,8 @@ installation, repository, permission, expiry, and optional review metadata.
 Do not run it in CI, a builder/model environment, or with shell tracing.
 
 ```bash
-AWS_PROFILE=ai-orchestrator-pilot scripts/verify-automation-identity.sh reviewer
-AWS_PROFILE=ai-orchestrator-pilot scripts/verify-automation-identity.sh merger
+AUTOMATION_IDENTITY_SECRET_ARN="$(aws secretsmanager describe-secret --profile ai-orchestrator-pilot --region us-east-1 --secret-id ai-delivery-orchestrator/pilot/github-app-reviewer-private-key --query ARN --output text)" AWS_PROFILE=ai-orchestrator-pilot scripts/verify-automation-identity.sh reviewer
+AUTOMATION_IDENTITY_SECRET_ARN="$(aws secretsmanager describe-secret --profile ai-orchestrator-pilot --region us-east-1 --secret-id ai-delivery-orchestrator/pilot/github-app-merger-private-key --query ARN --output text)" AWS_PROFILE=ai-orchestrator-pilot scripts/verify-automation-identity.sh merger
 ```
 
 Reviewer attribution uses a human-created non-production verification PR. Bind
@@ -87,7 +87,7 @@ the call to its current canonical head SHA; the script refuses a stale head and
 submits a `COMMENT` review that neither approves nor merges:
 
 ```bash
-AWS_PROFILE=ai-orchestrator-pilot scripts/verify-automation-identity.sh reviewer PR_NUMBER EXACT_HEAD_SHA
+AUTOMATION_IDENTITY_SECRET_ARN="$(aws secretsmanager describe-secret --profile ai-orchestrator-pilot --region us-east-1 --secret-id ai-delivery-orchestrator/pilot/github-app-reviewer-private-key --query ARN --output text)" AWS_PROFILE=ai-orchestrator-pilot scripts/verify-automation-identity.sh reviewer PR_NUMBER EXACT_HEAD_SHA
 ```
 
 The merger mode never accepts a PR number and never invokes the merge endpoint.

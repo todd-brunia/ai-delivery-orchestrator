@@ -25,9 +25,9 @@ export const GitHubPermissionSchema = z.enum([
 
 const positiveId = z.string().regex(/^[1-9][0-9]{0,19}$/);
 const repositoryName = z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/);
-const secretArn = z
+const secretContainerName = z
   .string()
-  .regex(/^arn:aws:secretsmanager:us-east-1:[0-9]{12}:secret:ai-delivery-orchestrator\/pilot\/github-app-(builder|reviewer|merger)-private-key-[A-Za-z0-9]{6}$/);
+  .regex(/^ai-delivery-orchestrator\/pilot\/github-app-(builder|reviewer|merger)-private-key$/);
 
 export const TokenAudienceSchema = z
   .object({
@@ -49,7 +49,7 @@ export const AutomationIdentityContractSchema = z
     permissionCeiling: z.array(GitHubPermissionSchema).min(1),
     allowedOperations: z.array(AutomationOperationSchema).min(1),
     forbiddenOperations: z.array(z.string().min(1).max(100)).min(1),
-    secretContainerArn: secretArn,
+    secretContainerName,
   })
   .strict()
   .superRefine((identity, context) => {
@@ -87,7 +87,7 @@ export const AutomationIdentityContractSchema = z
     if (identity.forbiddenOperations.some((value) => /private.?key|token|credential/i.test(value))) {
       context.addIssue({ code: "custom", message: "forbiddenOperations must not contain credential-shaped values" });
     }
-    if (!identity.secretContainerArn.includes(`github-app-${identity.role}-private-key-`)) {
+    if (!identity.secretContainerName.endsWith(`github-app-${identity.role}-private-key`)) {
       context.addIssue({ code: "custom", message: "secret container must match role" });
     }
   });
@@ -98,7 +98,7 @@ export const AutomationIdentitySetSchema = z
   .array(AutomationIdentityContractSchema)
   .length(3)
   .superRefine((identities, context) => {
-    for (const key of ["role", "appId", "installationId", "secretContainerArn"] as const) {
+    for (const key of ["role", "appId", "installationId", "secretContainerName"] as const) {
       if (new Set(identities.map((identity) => identity[key])).size !== identities.length) {
         context.addIssue({ code: "custom", message: `${key} must be unique across identities` });
       }
