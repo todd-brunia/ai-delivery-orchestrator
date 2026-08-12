@@ -7,8 +7,12 @@ only public/non-secret identifiers and canonical GitHub/AWS metadata. Private
 keys, JWTs, installation tokens, secret values, and value-derived fingerprints
 are deliberately excluded.
 
+Tracked contracts contain role-specific secret container names, never the AWS
+account ID or generated ARN suffix. A trusted operator supplies the exact
+`AUTOMATION_IDENTITY_SECRET_ARN` only while running verification.
+
 Configuration revision:
-`42fd3ac7a879287b47e00d736cf3c29fca24f9a80bf71f5f3d5e4fb0aebaeffe`.
+`230423a2f2b92e0c607d4989e75942e827a8342de3139e4a8a5c76b671016448`.
 
 ## Canonical preflight
 
@@ -31,7 +35,7 @@ value.
 - Repository selection: selected; only portal ID `1308170964`
 - Canonical permissions: Checks read, Contents read, Metadata read, Pull
   requests write
-- Secret container: role-specific reviewer ARN pinned in tracked configuration
+- Secret container: role-specific reviewer name pinned in tracked configuration
 - Attribution proof: disposable client-portal
   [PR #133](https://github.com/todd-brunia/ai-consulting-client-portal/pull/133),
   exact head `cdeac61a0a192f5425ddb9b2d1f2fd4c50aed521`, review ID
@@ -51,7 +55,7 @@ merge.
 - Installation ID/account: `152629499` / `todd-brunia`
 - Repository selection: selected; only portal ID `1308170964`
 - Canonical permissions: Contents write, Metadata read; no Pull requests write
-- Secret container: role-specific merger ARN pinned in tracked configuration
+- Secret container: role-specific merger name pinned in tracked configuration
 - Non-mutation proof: the trusted diagnostic minted a repository-constrained,
   short-lived installation token and read canonical identity, installation,
   repository, and permission metadata; it accepted no PR number and invoked no

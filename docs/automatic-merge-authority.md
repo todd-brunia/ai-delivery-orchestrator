@@ -17,7 +17,7 @@ The governing identity contract is `automation-identities/v1`. Exact App slugs
 are `todd-brunia-ai-delivery-builder`, `todd-brunia-ai-delivery-reviewer`, and
 `todd-brunia-ai-delivery-merger`. Each contract pins immutable App/installation
 IDs, the `todd-brunia` account, exactly the client portal repository, a
-configuration revision, and its own Secrets Manager ARN. IDs are recorded only
+configuration revision, and its own Secrets Manager container name. IDs are recorded only
 after canonical GitHub reads; placeholders and guessed IDs are invalid.
 
 | Capability | Builder | Reviewer | Merger | Operator | Human owner |

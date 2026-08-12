@@ -8,7 +8,7 @@ a promise that AWS console labels or page layouts will remain unchanged. Use
 the current AWS documentation when the interface differs, and preserve the
 verification outcomes below.
 
-This guide does not grant a right to fork the current private repository, apply
+This guide does not grant a right to fork or redistribute the repository, apply
 infrastructure, or incur charges. Distribution terms and each apply remain
 separate human approvals.
 

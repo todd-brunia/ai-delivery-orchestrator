@@ -1,6 +1,6 @@
 # Contributing
 
-This repository is currently maintained as a private implementation project.
+This repository uses an issue-first, human-reviewed implementation process.
 
 After the one-time bootstrap commit, every change begins with a GitHub issue
 whose approved plan fixes the scope, authority, interfaces, acceptance
@@ -15,7 +15,7 @@ Pull requests must describe:
 - Infrastructure, migration, and cost impact.
 - Known limitations and rollback behavior.
 
-Never include credentials, private keys, access tokens, account identifiers,
+Never include credentials, private keys, access tokens, live account identifiers,
 private repository contents, raw webhook payloads, or model reasoning in issues,
 commits, logs, fixtures, or pull requests.
 

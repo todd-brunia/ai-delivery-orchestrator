@@ -7,6 +7,10 @@ authorization bypass, prompt-injection path, or private-data leak. Contact the
 repository owner privately through GitHub and include only the minimum evidence
 needed to reproduce the concern. Do not include live secrets.
 
+Use GitHub's private vulnerability reporting when it is enabled. Until then,
+contact the repository owner through the private contact method listed on the
+owner's GitHub profile; do not send secret values by email or issue comment.
+
 ## Current support boundary
 
 No production release exists. Until a versioned release policy is published,
