@@ -84,6 +84,16 @@ describe("Terraform foundation policy", () => {
     expect(pilot).not.toContain(":latest");
   });
 
+  it("provides private AWS service connectivity without a NAT gateway", () => {
+    for (const service of ["ecr.api", "ecr.dkr", "logs", "secretsmanager", "sqs", "s3", "dynamodb"]) {
+      expect(pilot).toContain(`"${service}"`);
+    }
+    expect(pilot).toContain('vpc_endpoint_type   = "Interface"');
+    expect(pilot).toContain('vpc_endpoint_type = "Gateway"');
+    expect(pilot).toContain("referenced_security_group_id = aws_security_group.worker.id");
+    expect(pilot).not.toContain("aws_nat_gateway");
+  });
+
   it("exposes only bounded webhook ingress through API Gateway and Lambda", () => {
     expect(pilot).toContain('route_key = "POST /github/webhooks"');
     expect(pilot).toContain('payload_format_version = "2.0"');

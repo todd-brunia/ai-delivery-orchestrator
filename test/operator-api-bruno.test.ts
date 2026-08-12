@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const root = join(process.cwd(), "bruno/operator-api");
 const requestFiles = [
+  join(root, "health.bru"),
   ...readdirSync(join(root, "runs")).map((name) => join(root, "runs", name)),
   ...readdirSync(join(root, "runtime")).map((name) => join(root, "runtime", name)),
 ].filter((name) => name.endsWith(".bru"));
@@ -14,8 +15,8 @@ describe("operator Bruno collection", () => {
     for (const path of ["/v1/runs", "/v1/runs/{{runId}}", "/events", "/pause", "/resume", "/cancel", "/reconcile", "/v1/runtime/wake", "/v1/runtime/drain"]) {
       expect(requests).toContain(path);
     }
-    expect(requestFiles).toHaveLength(10);
-    expect(requests.match(/auth: awsv4/g)).toHaveLength(10);
+    expect(requestFiles).toHaveLength(11);
+    expect(requests.match(/auth: awsv4/g)).toHaveLength(11);
     expect(requests.match(/Idempotency-Key:/g)).toHaveLength(7);
   });
   it("uses process credentials and placeholder-only environment values", () => {
