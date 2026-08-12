@@ -33,6 +33,7 @@ jobs:
       TF_IN_AUTOMATION: "true"
       TF_INPUT: "false"
       TF_VAR_budget_notification_email: ${{ secrets.BUDGET_NOTIFICATION_EMAIL }}
+      TF_VAR_allowed_operator_principal_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-human-operator
     steps:
       - name: Validate selected commit
         env:
@@ -83,7 +84,18 @@ jobs:
         run: terraform -chdir=infra/environments/pilot-iam init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
       - name: Plan pilot IAM for selected commit
         if: ${{ inputs.provision_iam }}
-        run: terraform -chdir=infra/environments/pilot-iam plan -input=false -lock-timeout=5m -out=pilot-iam.tfplan -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+        run: >-
+          terraform -chdir=infra/environments/pilot-iam plan -input=false -lock-timeout=5m -out=pilot-iam.tfplan
+          -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+          -var="command_queue_arn=arn:aws:sqs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:ai-delivery-orchestrator-pilot-commands.fifo"
+          -var="callback_queue_arn=arn:aws:sqs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:ai-delivery-orchestrator-pilot-callbacks.fifo"
+          -var="coordination_table_arn=arn:aws:dynamodb:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:table/ai-delivery-orchestrator-pilot-coordination"
+          -var="database_secret_arn=${{ vars.DATABASE_SECRET_ARN }}"
+          -var="webhook_secret_arn=${{ vars.WEBHOOK_SECRET_ARN }}"
+          -var="worker_ecr_repository_arn=arn:aws:ecr:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:repository/ai-delivery-orchestrator-worker"
+          -var="ingress_log_group_arn=arn:aws:logs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:log-group:/ai-delivery-orchestrator/pilot/ingress"
+          -var="operator_log_group_arn=arn:aws:logs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:log-group:/ai-delivery-orchestrator/pilot/operator-api"
+          -var="worker_log_group_arn=arn:aws:logs:us-east-1:${{ vars.AWS_ACCOUNT_ID }}:log-group:/ai-delivery-orchestrator/pilot/worker"
       - name: Reject destructive pilot IAM plan
         if: ${{ inputs.provision_iam }}
         run: |
@@ -103,12 +115,28 @@ jobs:
         run: terraform -chdir=infra/environments/pilot-iam apply -input=false -lock-timeout=5m pilot-iam.tfplan
       - name: Export provisioned IAM references
         if: ${{ inputs.provision_iam }}
-        run: echo "TF_VAR_runtime_secret_policy_arn=$(terraform -chdir=infra/environments/pilot-iam output -raw runtime_secret_policy_arn)" >> "$GITHUB_ENV"
+        run: |
+          echo "TF_VAR_runtime_secret_policy_arn=$(terraform -chdir=infra/environments/pilot-iam output -raw runtime_secret_policy_arn)" >> "$GITHUB_ENV"
+          roles="$(terraform -chdir=infra/environments/pilot-iam output -json runtime_role_arns)"
+          echo "TF_VAR_webhook_lambda_role_arn=$(jq -r .webhook <<< "$roles")" >> "$GITHUB_ENV"
+          echo "TF_VAR_operator_lambda_role_arn=$(jq -r .operator_api <<< "$roles")" >> "$GITHUB_ENV"
+          echo "TF_VAR_worker_execution_role_arn=$(jq -r .worker_execution <<< "$roles")" >> "$GITHUB_ENV"
+          echo "TF_VAR_worker_task_role_arn=$(jq -r .worker <<< "$roles")" >> "$GITHUB_ENV"
+          echo "TF_VAR_migration_execution_role_arn=$(jq -r .migration_execution <<< "$roles")" >> "$GITHUB_ENV"
+          echo "TF_VAR_migration_task_role_arn=$(jq -r .migration <<< "$roles")" >> "$GITHUB_ENV"
       - name: Require configured IAM references
         if: ${{ ! inputs.provision_iam }}
         env:
           RUNTIME_SECRET_POLICY_ARN: ${{ vars.RUNTIME_SECRET_POLICY_ARN }}
-        run: echo "TF_VAR_runtime_secret_policy_arn=$RUNTIME_SECRET_POLICY_ARN" >> "$GITHUB_ENV"
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+        run: |
+          echo "TF_VAR_runtime_secret_policy_arn=$RUNTIME_SECRET_POLICY_ARN" >> "$GITHUB_ENV"
+          echo "TF_VAR_webhook_lambda_role_arn=arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-delivery-orchestrator-pilot-webhook" >> "$GITHUB_ENV"
+          echo "TF_VAR_operator_lambda_role_arn=arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-delivery-orchestrator-pilot-operator-api" >> "$GITHUB_ENV"
+          echo "TF_VAR_worker_execution_role_arn=arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-delivery-orchestrator-pilot-worker-execution" >> "$GITHUB_ENV"
+          echo "TF_VAR_worker_task_role_arn=arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-delivery-orchestrator-pilot-worker" >> "$GITHUB_ENV"
+          echo "TF_VAR_migration_execution_role_arn=arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-delivery-orchestrator-pilot-migration-execution" >> "$GITHUB_ENV"
+          echo "TF_VAR_migration_task_role_arn=arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-delivery-orchestrator-pilot-migration" >> "$GITHUB_ENV"
       - name: Initialize pilot remote state
         run: terraform -chdir=infra/environments/pilot init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
       - name: Plan selected commit

@@ -246,8 +246,14 @@ saved plan is applied before the saved main-stack plan for the same commit. A
 one-time human
 bootstrap creates the state bucket and OIDC roles because that trust cannot
 bootstrap itself. Secret values are entered outside Terraform; the future
-runtime read policy remains unattached. Resource-specific queue, compute, and
-database alarms are deferred until those resources exist.
+runtime read policy remains unattached. Runtime roles and their exact positive
+and negative boundaries are documented in the [pilot runtime authority
+matrix](./runtime-authority-matrix.md). Workload, execution, webhook, operator,
+migration, GitHub role, and target-specific OpenAI authority are separated in
+`pilot-iam`; the main root only attaches exact role ARN inputs. Terraform
+creates containers but never secret values or long-lived AWS credentials.
+Resource-specific queue, compute, and database alarms are deferred until those
+resources exist.
 
 Pilot teardown is a separate manual workflow protected by the same environment,
 commit-identity checks, OIDC role, and non-cancelling concurrency group as

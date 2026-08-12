@@ -24,6 +24,7 @@ output "worker_cluster_arn" { value = aws_ecs_cluster.worker.arn }
 output "worker_service_name" { value = aws_ecs_service.worker.name }
 output "worker_security_group_id" { value = aws_security_group.worker.id }
 output "worker_task_definition_arn" { value = aws_ecs_task_definition.worker.arn }
+output "migration_task_definition_arn" { value = aws_ecs_task_definition.migration.arn }
 output "operator_api_endpoint" {
   value     = aws_apigatewayv2_api.operator.api_endpoint
   sensitive = true
