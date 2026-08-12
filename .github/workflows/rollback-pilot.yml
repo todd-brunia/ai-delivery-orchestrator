@@ -1,0 +1,117 @@
+name: Roll back pilot runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Exact current main Terraform revision
+        required: true
+        type: string
+      rollback_image_sha:
+        description: Previously published immutable application SHA
+        required: true
+        type: string
+      rollback_image_digest:
+        description: Expected digest of the rollback image
+        required: true
+        type: string
+      confirmation:
+        description: Type ROLLBACK PILOT
+        required: true
+        type: string
+
+permissions:
+  contents: read
+concurrency:
+  group: terraform-apply-pilot
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: pilot
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: us-east-1
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      TF_VAR_budget_notification_email: ${{ secrets.BUDGET_NOTIFICATION_EMAIL }}
+      TF_VAR_runtime_secret_policy_arn: ${{ vars.RUNTIME_SECRET_POLICY_ARN }}
+      TF_VAR_allowed_operator_principal_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-human-operator
+      TF_VAR_webhook_lambda_role_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-webhook
+      TF_VAR_operator_lambda_role_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-operator-api
+      TF_VAR_worker_execution_role_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-worker-execution
+      TF_VAR_worker_task_role_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-worker
+      TF_VAR_migration_execution_role_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-migration-execution
+      TF_VAR_migration_task_role_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-migration
+    steps:
+      - name: Validate rollback inputs
+        env:
+          CURRENT_SHA: ${{ inputs.commit_sha }}
+          ROLLBACK_SHA: ${{ inputs.rollback_image_sha }}
+          EXPECTED_DIGEST: ${{ inputs.rollback_image_digest }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          test "$CONFIRMATION" = "ROLLBACK PILOT"
+          test "$CURRENT_SHA" != "$ROLLBACK_SHA"
+          for sha in "$CURRENT_SHA" "$ROLLBACK_SHA"; do test "${#sha}" -eq 40; test -z "${sha//[0-9a-f]/}"; done
+          test "${#EXPECTED_DIGEST}" -eq 71
+          digest_hex="${EXPECTED_DIGEST#sha256:}"
+          test "${#digest_hex}" -eq 64
+          test -z "${digest_hex//[0-9a-f]/}"
+      - name: Check out exact current main revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+      - name: Verify current main revision
+        env:
+          CURRENT_SHA: ${{ inputs.commit_sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$CURRENT_SHA"
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$CURRENT_SHA"
+      - name: Require exact protected deployment role
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_RUNTIME_DEPLOY_ROLE_ARN: ${{ vars.AWS_RUNTIME_DEPLOY_ROLE_ARN }}
+        run: test "$AWS_RUNTIME_DEPLOY_ROLE_ARN" = "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-delivery-orchestrator-pilot-runtime-deploy"
+      - name: Assume protected runtime deployment role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_RUNTIME_DEPLOY_ROLE_ARN }}
+      - name: Verify prior immutable image
+        env:
+          ROLLBACK_SHA: ${{ inputs.rollback_image_sha }}
+          EXPECTED_DIGEST: ${{ inputs.rollback_image_digest }}
+        run: |
+          observed="$(aws ecr describe-images --repository-name ai-delivery-orchestrator-worker --image-ids "imageTag=$ROLLBACK_SHA" --query 'imageDetails[0].imageDigest' --output text)"
+          test "$observed" = "$EXPECTED_DIGEST"
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+      - name: Create non-destructive rollback plan
+        env:
+          TF_VAR_worker_image_sha: ${{ inputs.rollback_image_sha }}
+        run: |
+          terraform -chdir=infra/environments/pilot init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+          terraform -chdir=infra/environments/pilot plan -input=false -lock-timeout=5m -out=pilot-rollback.tfplan -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+          test "$(terraform -chdir=infra/environments/pilot show -json pilot-rollback.tfplan | jq '[.resource_changes[]? | select(.change.actions | index("delete"))] | length')" -eq 0
+      - name: Apply saved rollback plan without reverting migrations
+        run: terraform -chdir=infra/environments/pilot apply -input=false -lock-timeout=5m pilot-rollback.tfplan
+      - name: Return runtime to safe idle
+        if: ${{ always() }}
+        run: aws ecs update-service --cluster ai-delivery-orchestrator-pilot-worker --service ai-delivery-orchestrator-pilot-worker --desired-count 0 >/dev/null || true
+      - name: Record sanitized rollback evidence
+        if: ${{ always() }}
+        run: |
+          echo "### Pilot rollback checkpoint" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Terraform revision: \`${{ inputs.commit_sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Restored image SHA: \`${{ inputs.rollback_image_sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Migrations reverted: \`false\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Final worker desired count: \`0\`" >> "$GITHUB_STEP_SUMMARY"

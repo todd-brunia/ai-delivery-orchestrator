@@ -216,6 +216,25 @@ Do not delete, overwrite, retag, or accept the existing image automatically.
 Investigate the original workflow run and ECR metadata before deciding on a
 new reviewed commit.
 
+## Protected pilot deployment and rollback
+
+The deployment and rollback workflows are manual, use the protected `pilot`
+environment, share the non-cancelling Terraform concurrency group, and require
+an exact separately provisioned `AWS_RUNTIME_DEPLOY_ROLE_ARN`. They reject a
+non-current Terraform commit, malformed or mutable image identity, digest
+mismatch, and any delete/replace plan. Creating these workflows does not
+provision that role or authorize dispatch.
+
+Deploy the exact current-main image with migration and smoke flags off first.
+Review the saved plan and sanitized evidence, then separately authorize the
+migration and bounded synthetic smoke checkpoints. Smoke is blocked until
+`OBSERVABILITY_READY=true`. Both paths return ECS desired capacity to zero on
+exit. Rollback selects a previously published SHA/digest while retaining the
+current Terraform revision and every successful migration; it never retags an
+image, edits state, or reverses database history. Partial failure disables
+runtime progression, preserves queues/database/logs, and requires canonical
+reconciliation before retry.
+
 ## Recovery
 
 - If PostgreSQL is unhealthy, inspect `docker compose logs postgres`, stop the
