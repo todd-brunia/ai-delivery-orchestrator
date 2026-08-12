@@ -1,0 +1,17 @@
+meta {
+  name: Health
+  type: http
+  seq: 1
+}
+get {
+  url: {{baseUrl}}/v1/health
+  body: none
+  auth: awsv4
+}
+auth:awsv4 {
+  accessKeyId: {{$processEnv AWS_ACCESS_KEY_ID}}
+  secretAccessKey: {{$processEnv AWS_SECRET_ACCESS_KEY}}
+  sessionToken: {{$processEnv AWS_SESSION_TOKEN}}
+  service: execute-api
+  region: {{region}}
+}

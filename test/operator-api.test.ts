@@ -14,6 +14,10 @@ describe("operator API v1", () => {
     const result = await handleOperatorHttp({ method: "GET", path: "/v1/runs", headers: {}, principalArn: "arn:wrong" }, port, principal);
     expect(result.statusCode).toBe(403);
   });
+  it("reports bounded health without reading state", async () => {
+    const result = await handleOperatorHttp({ method: "GET", path: "/v1/health", headers: {}, principalArn: principal }, port, principal);
+    expect(result).toMatchObject({ statusCode: 200, body: '{"apiVersion":"operator-api/v1","status":"ok"}' });
+  });
   it("requires idempotency for mutations", async () => {
     const result = await handleOperatorHttp({ method: "POST", path: `/v1/runs/${runId}/pause`, headers: {}, principalArn: principal, body: "{}" }, port, principal);
     expect(result).toMatchObject({ statusCode: 400, body: '{"error":"idempotency_key_required"}' });

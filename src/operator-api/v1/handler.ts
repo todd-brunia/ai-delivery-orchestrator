@@ -22,13 +22,14 @@ const parseBody = (request: OperatorHttpRequest): unknown => {
   if (!request.body || Buffer.byteLength(request.body, "utf8") > 65_536) throw new Error("invalid_body");
   return JSON.parse(request.body) as unknown;
 };
-const readRoute = /^(?:GET \/v1\/runs|GET \/v1\/runs\/[0-9a-f-]{36}|GET \/v1\/runs\/[0-9a-f-]{36}\/events)$/;
+const readRoute = /^(?:GET \/v1\/health|GET \/v1\/runs|GET \/v1\/runs\/[0-9a-f-]{36}|GET \/v1\/runs\/[0-9a-f-]{36}\/events)$/;
 const mutationRoute = /^(?:POST \/v1\/runs|POST \/v1\/runs\/[0-9a-f-]{36}\/(?:pause|resume|cancel|reconcile)|POST \/v1\/runtime\/(?:wake|drain))$/;
 
 export async function handleOperatorHttp(request: OperatorHttpRequest, port: OperatorApiPort, allowedPrincipalArn: string): Promise<OperatorHttpResponse> {
   if (!request.principalArn || request.principalArn !== allowedPrincipalArn) return json(403, { error: "forbidden" });
   const route = `${request.method.toUpperCase()} ${request.path}`;
   if (!readRoute.test(route) && !mutationRoute.test(route)) return json(404, { error: "not_found" });
+  if (route === "GET /v1/health") return json(200, { apiVersion: "operator-api/v1", status: "ok" });
   if (request.method.toUpperCase() === "GET") {
     const limit = Number(request.query?.limit ?? "50");
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) return json(400, { error: "invalid_pagination" });
