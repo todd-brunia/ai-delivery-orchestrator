@@ -22,11 +22,12 @@ describe("public repository readiness", () => {
     expect(record).toContain("Owner sign-off: pending");
   });
 
-  it("does not claim private-only status or an unselected open-source license", () => {
+  it("does not claim private-only status and identifies the selected license", () => {
     const readme = readFileSync("README.md", "utf8");
     const contributing = readFileSync("CONTRIBUTING.md", "utf8");
     expect(`${readme}\n${contributing}`).not.toMatch(/This private repository|private implementation project/);
-    expect(readme).toContain("No open-source license has been selected yet");
+    expect(readme).toContain("Apache License 2.0");
+    expect(readFileSync("LICENSE", "utf8")).toContain("Apache License");
   });
 
   it("pins every third-party workflow action to a full commit", () => {
