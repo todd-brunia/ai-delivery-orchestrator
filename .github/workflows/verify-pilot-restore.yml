@@ -1,0 +1,130 @@
+name: Verify pilot database restore
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Exact current main commit containing the reviewed verification code
+        required: true
+        type: string
+      snapshot_identifier:
+        description: Exact approved Aurora cluster snapshot identifier
+        required: true
+        type: string
+      verification_id:
+        description: Lowercase identifier used only for the isolated verification cluster
+        required: true
+        type: string
+      confirmation:
+        description: Type RESTORE VERIFY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pilot-restore-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: pilot
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: us-east-1
+    steps:
+      - name: Validate bounded restore inputs
+        env:
+          SELECTED_SHA: ${{ inputs.commit_sha }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_identifier }}
+          VERIFICATION_ID: ${{ inputs.verification_id }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          test "$CONFIRMATION" = "RESTORE VERIFY"
+          test "${#SELECTED_SHA}" -eq 40
+          test -z "${SELECTED_SHA//[0-9a-f]/}"
+          test -n "$SNAPSHOT_ID"
+          test -n "$VERIFICATION_ID"
+          test "${#VERIFICATION_ID}" -le 24
+          test -z "${VERIFICATION_ID//[a-z0-9-]/}"
+          test "$VERIFICATION_ID" != "pilot"
+      - name: Check out exact reviewed main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+      - name: Verify commit is current main
+        env:
+          SELECTED_SHA: ${{ inputs.commit_sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SELECTED_SHA"
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$SELECTED_SHA"
+      - name: Require exact protected deployment role
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_RUNTIME_DEPLOY_ROLE_ARN: ${{ vars.AWS_RUNTIME_DEPLOY_ROLE_ARN }}
+        run: test "$AWS_RUNTIME_DEPLOY_ROLE_ARN" = "arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-delivery-orchestrator-pilot-runtime-deploy"
+      - name: Assume protected runtime deployment role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_RUNTIME_DEPLOY_ROLE_ARN }}
+      - name: Validate source snapshot and authoritative boundary
+        env:
+          SNAPSHOT_ID: ${{ inputs.snapshot_identifier }}
+        run: |
+          source_cluster="$(aws rds describe-db-cluster-snapshots --db-cluster-snapshot-identifier "$SNAPSHOT_ID" --query 'DBClusterSnapshots[0].DBClusterIdentifier' --output text)"
+          test "$source_cluster" = "ai-delivery-orchestrator-pilot"
+          test "$(aws rds describe-db-cluster-snapshots --db-cluster-snapshot-identifier "$SNAPSHOT_ID" --query 'DBClusterSnapshots[0].Status' --output text)" = "available"
+          snapshot_created="$(aws rds describe-db-cluster-snapshots --db-cluster-snapshot-identifier "$SNAPSHOT_ID" --query 'DBClusterSnapshots[0].SnapshotCreateTime' --output text)"
+          echo "SNAPSHOT_CREATED_EPOCH=$(date -d "$snapshot_created" +%s)" >> "$GITHUB_ENV"
+      - name: Create isolated restore verification cluster
+        env:
+          SNAPSHOT_ID: ${{ inputs.snapshot_identifier }}
+          VERIFICATION_ID: ${{ inputs.verification_id }}
+        run: |
+          cluster="ai-delivery-orchestrator-pilot-restore-$VERIFICATION_ID"
+          test "$cluster" != "ai-delivery-orchestrator-pilot"
+          echo "RESTORE_REQUEST_EPOCH=$(date +%s)" >> "$GITHUB_ENV"
+          aws rds restore-db-cluster-from-snapshot --db-cluster-identifier "$cluster" --snapshot-identifier "$SNAPSHOT_ID" --engine aurora-postgresql --db-subnet-group-name ai-delivery-orchestrator-pilot-database --vpc-security-group-ids "$(aws ec2 describe-security-groups --filters Name=group-name,Values=ai-delivery-orchestrator-pilot-database --query 'SecurityGroups[0].GroupId' --output text)" --serverless-v2-scaling-configuration MinCapacity=0.5,MaxCapacity=1 --tags Key=Project,Value=ai-delivery-orchestrator Key=Environment,Value=pilot Key=Purpose,Value=restore-verification Key=VerificationId,Value="$VERIFICATION_ID" >/dev/null
+          aws rds wait db-cluster-available --db-cluster-identifier "$cluster"
+          aws rds create-db-instance --db-instance-identifier "$cluster-writer" --db-cluster-identifier "$cluster" --engine aurora-postgresql --db-instance-class db.serverless --no-publicly-accessible --tags Key=Project,Value=ai-delivery-orchestrator Key=Environment,Value=pilot Key=Purpose,Value=restore-verification Key=VerificationId,Value="$VERIFICATION_ID" >/dev/null
+          aws rds wait db-instance-available --db-instance-identifier "$cluster-writer"
+      - name: Verify restored schema and checkpoint integrity
+        env:
+          VERIFICATION_ID: ${{ inputs.verification_id }}
+        run: |
+          cluster="ai-delivery-orchestrator-pilot-restore-$VERIFICATION_ID"
+          endpoint="$(aws rds describe-db-clusters --db-cluster-identifier "$cluster" --query 'DBClusters[0].Endpoint' --output text)"
+          ecs_cluster="$(aws ecs describe-clusters --clusters ai-delivery-orchestrator-pilot-worker --query 'clusters[0].clusterArn' --output text)"
+          task="$(aws ecs list-task-definitions --family-prefix ai-delivery-orchestrator-pilot-migration --sort DESC --max-items 1 --query 'taskDefinitionArns[0]' --output text)"
+          subnets="$(aws ec2 describe-subnets --filters Name=tag:Project,Values=ai-delivery-orchestrator Name=tag:Environment,Values=pilot Name=tag:Tier,Values=isolated --query 'Subnets[].SubnetId' --output text | tr '\t' ',')"
+          security_group="$(aws ec2 describe-security-groups --filters Name=group-name,Values=ai-delivery-orchestrator-pilot-worker --query 'SecurityGroups[0].GroupId' --output text)"
+          overrides="$(jq -cn --arg endpoint "$endpoint" '{containerOverrides:[{name:"migration",command:["node","dist/persistence/restore-verify-cli.js"],environment:[{name:"PGHOST",value:$endpoint},{name:"PGDATABASE",value:"orchestrator"}]}]}')"
+          task_arn="$(aws ecs run-task --cluster "$ecs_cluster" --task-definition "$task" --launch-type FARGATE --network-configuration "awsvpcConfiguration={subnets=[$subnets],securityGroups=[$security_group],assignPublicIp=DISABLED}" --overrides "$overrides" --query 'tasks[0].taskArn' --output text)"
+          test "$task_arn" != "None"
+          aws ecs wait tasks-stopped --cluster "$ecs_cluster" --tasks "$task_arn"
+          test "$(aws ecs describe-tasks --cluster "$ecs_cluster" --tasks "$task_arn" --query 'tasks[0].containers[0].exitCode' --output text)" = "0"
+      - name: Record sanitized verification evidence
+        if: ${{ always() }}
+        env:
+          VERIFICATION_ID: ${{ inputs.verification_id }}
+          SNAPSHOT_CREATED_EPOCH: ${{ env.SNAPSHOT_CREATED_EPOCH }}
+          RESTORE_REQUEST_EPOCH: ${{ env.RESTORE_REQUEST_EPOCH }}
+        run: |
+          completed_epoch="$(date +%s)"
+          echo "### Isolated restore verification" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Verification ID: \`$VERIFICATION_ID\`" >> "$GITHUB_STEP_SUMMARY"
+          if test -n "$SNAPSHOT_CREATED_EPOCH" && test -n "$RESTORE_REQUEST_EPOCH"; then
+            echo "- Observed RPO at request: \`$((RESTORE_REQUEST_EPOCH - SNAPSHOT_CREATED_EPOCH)) seconds\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Observed restore RTO: \`$((completed_epoch - RESTORE_REQUEST_EPOCH)) seconds\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "- Authoritative cluster modified: \`false\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Automatic cleanup performed: \`false\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Next checkpoint: separately approve and dispatch cleanup for this exact ID." >> "$GITHUB_STEP_SUMMARY"

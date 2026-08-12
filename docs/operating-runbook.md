@@ -216,6 +216,38 @@ Do not delete, overwrite, retag, or accept the existing image automatically.
 Investigate the original workflow run and ECR metadata before deciding on a
 new reviewed commit.
 
+## Pilot observability and recovery
+
+Use the `ai-delivery-orchestrator-pilot` dashboard as the first view. Alerts
+cover Lambda errors, throttles and p95 duration; API 5xx and p95 latency; queue
+age and DLQ depth; DynamoDB throttling; ECS capacity and worker heartbeat age;
+Aurora connections/capacity; projection lag; migration failures; backup age;
+and telemetry gaps. Production readiness requires a reviewed non-empty alarm
+destination and `OBSERVABILITY_READY=true`; an alarm without delivery is not a
+ready control.
+
+Telemetry uses the versioned `observability/v1` taxonomy and bounded enum
+dimensions. Never emit credentials, authorization/cookie headers, database
+URLs, request bodies, payloads, prompts, reasoning, source, or user-provided
+identifiers. Hash opaque identifiers before using them as dimensions. Treat a
+redaction or telemetry-gap signal as an incident, not as permission to increase
+logging detail.
+
+On queue age or DLQ alarms, stop producers and claims, preserve the message,
+reconcile its idempotency key against PostgreSQL, and redrive only after review.
+On worker heartbeat or projection lag, keep desired capacity bounded, inspect
+the last sanitized heartbeat/outbox revision, and reconcile before restarting.
+On Aurora alarms, avoid repeated wake attempts; measure wake-to-ready time and
+use bounded connection retries. On migration failure, do not edit migration
+history. On backup-age alarm, confirm snapshot status and escalate before any
+write-heavy operation. For cost alarms, remember Cost Explorer and Budgets data
+can lag; verify tagged resources directly, stop compute safely, and never purge
+queues or delete the database as a cost response.
+
+Restore verification and cleanup are separate protected human checkpoints. See
+`docs/restore-verification.md`. Neither workflow has been executed merely
+because its code was merged.
+
 ## Protected pilot deployment and rollback
 
 The deployment and rollback workflows are manual, use the protected `pilot`
