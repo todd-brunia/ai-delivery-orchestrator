@@ -23,6 +23,7 @@ resource "aws_lambda_function" "operator" {
 
 locals {
   operator_routes = toset([
+    "GET /v1/health",
     "GET /v1/runs",
     "POST /v1/runs",
     "GET /v1/runs/{runId}",

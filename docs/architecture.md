@@ -255,6 +255,13 @@ creates containers but never secret values or long-lived AWS credentials.
 Resource-specific queue, compute, and database alarms are deferred until those
 resources exist.
 
+Runtime promotion is a separate protected workflow bound to current `main`, an
+immutable ECR tag and expected digest, non-destructive saved plans, and an exact
+deployment role that is intentionally not provisioned by this slice. Migration
+and synthetic smoke are opt-in named checkpoints. Rollback changes only the
+immutable application image under the current Terraform revision and never
+reverses migration history.
+
 Pilot teardown is a separate manual workflow protected by the same environment,
 commit-identity checks, OIDC role, and non-cancelling concurrency group as
 apply. It applies a saved main-stack destroy plan first and retains pilot IAM by
