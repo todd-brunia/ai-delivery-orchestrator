@@ -502,6 +502,12 @@ for new Serverless v2 clusters in the pilot region before this revision. Recheck
 regional engine availability before a later upgrade or first provision in a
 different account or region.
 
+Aurora explicitly uses the enabled AWS-managed `alias/aws/rds` key. The
+protected apply role may describe and use only a key carrying that alias and
+only through the regional RDS service. Grant creation additionally requires
+`kms:GrantIsForAWSResource=true`. It cannot create, administer, rotate, disable,
+delete, or alias KMS keys.
+
 Ingress-rule creation evaluates both the tagged new security-group-rule and the
 already-tagged target security group, so protected authority treats those
 resource types separately. The RDS boundary names the exact Terraform cluster,
@@ -519,6 +525,15 @@ verify exactly one active task definition for the expected family and inspect
 the state for a single matching taint. Do not accept replacement. Untaint only
 that verified address after an explicit human checkpoint, then regenerate the
 main plan.
+
+If `skip_destroy = true` was introduced after an existing task definition was
+already tainted, untainting alone is insufficient: the state still records the
+old false value. After separately approving the untaint, create a targeted saved
+plan for only that task definition while supplying its currently recorded image
+SHA. Require an in-place state-only change from `skip_destroy=false` to `true`
+with no AWS create, update, deregistration, or replacement. Apply that exact
+saved plan only after a second explicit checkpoint, then regenerate the full
+plan with the current-main image.
 
 AWS does not support resource-level authorization for
 `ecs:DescribeTaskDefinition`. The protected apply policy therefore grants that

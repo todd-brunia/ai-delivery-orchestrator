@@ -53,6 +53,7 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain('default = "16.14"');
     expect(pilot).toContain("manage_master_user_password     = true");
     expect(pilot).toContain("storage_encrypted               = true");
+    expect(pilot).toContain('kms_key_id                      = "arn:aws:kms:${var.aws_region}:${var.aws_account_id}:alias/aws/rds"');
     expect(pilot).toContain("deletion_protection             = true");
     expect(pilot).toContain("skip_final_snapshot             = false");
     expect(pilot).toContain("copy_tags_to_snapshot           = true");
@@ -295,6 +296,13 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('"arn:aws:rds:${var.aws_region}:${var.aws_account_id}:db:${local.pilot_name}-writer"');
     expect(runtimeAuthority).not.toContain('cluster:${local.pilot_name}-database');
     expect(runtimeAuthority).not.toContain('db:${local.pilot_name}-database-1');
+    expect(runtimeAuthority).toContain('sid = "UseAwsManagedRdsKey"');
+    expect(runtimeAuthority).toContain('sid       = "GrantAwsManagedRdsKeyToRds"');
+    expect(runtimeAuthority).toContain('values   = ["alias/aws/rds"]');
+    expect(runtimeAuthority).toContain('variable = "kms:ViaService"');
+    expect(runtimeAuthority).toContain('values   = ["rds.${var.aws_region}.amazonaws.com"]');
+    expect(runtimeAuthority).toContain('variable = "kms:GrantIsForAWSResource"');
+    expect(runtimeAuthority).not.toMatch(/"kms:(?:CreateKey|DisableKey|ScheduleKeyDeletion|PutKeyPolicy|CreateAlias)"/);
     expect(runtimeAuthority).toContain('"lambda:PutFunctionConcurrency"');
     expect(runtimeAuthority).toContain('"lambda:DeleteFunctionConcurrency"');
     expect(runtimeAuthority).toContain('"lambda:ListVersionsByFunction"');
