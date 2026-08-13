@@ -261,6 +261,16 @@ data "aws_iam_policy_document" "github_apply_rds_kms" {
     resources = [data.aws_kms_alias.rds.target_key_arn]
   }
   statement {
+    sid       = "UseAwsManagedRdsKeyThroughRds"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+    resources = [data.aws_kms_alias.rds.target_key_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["rds.${var.aws_region}.amazonaws.com"]
+    }
+  }
+  statement {
     sid       = "GrantAwsManagedRdsKeyToRds"
     actions   = ["kms:CreateGrant"]
     resources = [data.aws_kms_alias.rds.target_key_arn]

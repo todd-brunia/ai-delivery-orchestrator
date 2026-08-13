@@ -310,11 +310,16 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('name = "alias/aws/rds"');
     expect(runtimeAuthority).toContain('sid       = "DescribeAwsManagedRdsKey"');
     expect(runtimeAuthority).toContain('actions   = ["kms:DescribeKey"]');
+    expect(runtimeAuthority).toContain('sid       = "UseAwsManagedRdsKeyThroughRds"');
+    expect(runtimeAuthority).toContain('actions   = ["kms:Decrypt", "kms:GenerateDataKey"]');
+    expect(runtimeAuthority).toContain('variable = "kms:ViaService"');
+    expect(runtimeAuthority).toContain('values   = ["rds.${var.aws_region}.amazonaws.com"]');
     expect(runtimeAuthority).toContain('sid       = "GrantAwsManagedRdsKeyToRds"');
     expect(runtimeAuthority).toContain('actions   = ["kms:CreateGrant"]');
     expect(runtimeAuthority).toContain('resources = [data.aws_kms_alias.rds.target_key_arn]');
     expect(runtimeAuthority).toContain('variable = "kms:GrantIsForAWSResource"');
-    expect(runtimeAuthority).not.toMatch(/"kms:(?:Decrypt|Encrypt|GenerateDataKey)/);
+    expect(runtimeAuthority).not.toContain('"kms:Encrypt"');
+    expect(runtimeAuthority.match(/variable = "kms:ViaService"/g)).toHaveLength(1);
     expect(runtimeAuthority).not.toMatch(/"kms:(?:CreateKey|DisableKey|ScheduleKeyDeletion|PutKeyPolicy|CreateAlias)"/);
     expect(runtimeAuthority).toContain('"lambda:PutFunctionConcurrency"');
     expect(runtimeAuthority).toContain('"lambda:DeleteFunctionConcurrency"');
