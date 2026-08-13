@@ -254,11 +254,20 @@ data "aws_kms_alias" "rds" {
   name = "alias/aws/rds"
 }
 
+data "aws_kms_alias" "secretsmanager" {
+  name = "alias/aws/secretsmanager"
+}
+
 data "aws_iam_policy_document" "github_apply_rds_kms" {
   statement {
     sid       = "DescribeAwsManagedRdsKey"
     actions   = ["kms:DescribeKey"]
     resources = [data.aws_kms_alias.rds.target_key_arn]
+  }
+  statement {
+    sid       = "DescribeAwsManagedSecretsManagerKey"
+    actions   = ["kms:DescribeKey"]
+    resources = [data.aws_kms_alias.secretsmanager.target_key_arn]
   }
   statement {
     sid       = "UseAwsManagedRdsKeyThroughRds"

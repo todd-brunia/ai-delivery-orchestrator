@@ -519,6 +519,11 @@ create or administer keys, manage aliases, disable keys, or schedule deletion.
 Selecting a customer-managed key would require a separate key-policy and IAM
 review and is outside this pilot's current scope.
 
+RDS-managed master credentials are stored in Secrets Manager. Bootstrap also
+resolves `alias/aws/secretsmanager` and permits the protected apply role only to
+describe that exact key during cluster creation. It grants no encrypt, decrypt,
+data-key, grant, or administrative action on the Secrets Manager key.
+
 Ingress-rule creation evaluates both the tagged new security-group-rule and the
 already-tagged target security group, so protected authority treats those
 resource types separately. The RDS boundary names the exact Terraform cluster,
