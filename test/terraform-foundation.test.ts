@@ -248,6 +248,28 @@ describe("Terraform foundation policy", () => {
     expect(bootstrap).not.toMatch(/role\/ai-delivery-orchestrator-pilot-\*/);
   });
 
+  it("separates complete pilot service planning from protected lifecycle authority", () => {
+    const runtimeAuthority = read("infra/bootstrap/runtime-service-authority.tf");
+    expect(runtimeAuthority).toContain('resource "aws_iam_role_policy" "github_plan_runtime_services"');
+    expect(runtimeAuthority).toContain('name   = "pilot-runtime-services-read-only"');
+    expect(runtimeAuthority).toContain('resource "aws_iam_role_policy" "github_apply_runtime_services"');
+    expect(runtimeAuthority).toContain('name   = "pilot-runtime-services-apply"');
+    for (const action of [
+      "ecs:CreateCluster", "ecs:RegisterTaskDefinition", "ec2:CreateSecurityGroup", "ec2:CreateVpcEndpoint",
+      "sqs:CreateQueue", "dynamodb:CreateTable", "rds:CreateDBCluster", "lambda:CreateFunction",
+      "apigateway:POST", "application-autoscaling:RegisterScalableTarget", "cloudwatch:PutDashboard",
+    ]) expect(runtimeAuthority).toContain(`"${action}"`);
+    const planPolicy = runtimeAuthority.slice(runtimeAuthority.indexOf('data "aws_iam_policy_document" "github_plan_runtime_services"'), runtimeAuthority.indexOf('resource "aws_iam_role_policy" "github_plan_runtime_services"'));
+    expect(planPolicy).not.toMatch(/:(?:Create|Delete|Put|Post|Patch|Update|Modify|Register|Deregister|Authorize|Revoke|Tag|Untag)/i);
+    expect(runtimeAuthority).toContain('variable = "aws:RequestTag/Project"');
+    expect(runtimeAuthority).toContain('variable = "aws:RequestTag/Environment"');
+    expect(runtimeAuthority).toContain('variable = "aws:ResourceTag/Project"');
+    expect(runtimeAuthority).toContain('variable = "application-autoscaling:service-namespace"');
+    expect(runtimeAuthority).toMatch(/values\s+= \["ecs"\]/);
+    expect(runtimeAuthority).toContain('resources = ["arn:aws:apigateway:${var.aws_region}::/apis*"]');
+    expect(runtimeAuthority).not.toContain("iam:PassRole");
+  });
+
   it("attaches exact reviewed roles to inert compute", () => {
     expect(pilot).toContain("execution_role_arn       = var.worker_execution_role_arn");
     expect(pilot).toContain("task_role_arn            = var.worker_task_role_arn");
