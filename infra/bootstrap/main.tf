@@ -266,7 +266,10 @@ data "aws_iam_policy_document" "github_apply" {
       "secretsmanager:ListSecretVersionIds", "secretsmanager:TagResource", "secretsmanager:UntagResource",
       "secretsmanager:UpdateSecret",
     ]
-    resources = ["arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:ai-delivery-orchestrator/pilot/*"]
+    resources = [
+      "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:ai-delivery-orchestrator/pilot/*",
+      "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:rds!cluster-*"
+    ]
   }
   statement {
     sid = "ManagePilotLogs"
