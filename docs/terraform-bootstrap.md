@@ -489,11 +489,18 @@ exact worker repository for this preflight; this grants no publication,
 overwrite, retag, or image-deletion authority.
 
 ECS task definitions are immutable. Image promotion therefore appears as a
-Terraform `delete,create` replacement even though AWS registers a new revision
-before deregistering the prior revision. Foundation, deploy, and rollback gates
+Terraform `delete,create` replacement even though AWS registers a new revision.
+Both task definitions set `skip_destroy = true`, retaining superseded revisions
+and eliminating the need for wildcard `ecs:DeregisterTaskDefinition` authority.
+Foundation, deploy, and rollback gates
 allow that exact action pair only for the worker and migration task-definition
 addresses. Standalone deletes, every other replacement, and unrelated runtime
 deployment changes remain fail-closed.
+
+The reviewed Aurora PostgreSQL engine default is `16.14`, confirmed available
+for new Serverless v2 clusters in the pilot region before this revision. Recheck
+regional engine availability before a later upgrade or first provision in a
+different account or region.
 
 Ingress-rule creation evaluates both the tagged new security-group-rule and the
 already-tagged target security group, so protected authority treats those
@@ -515,8 +522,9 @@ main plan.
 
 AWS does not support resource-level authorization for
 `ecs:DescribeTaskDefinition`. The protected apply policy therefore grants that
-single read-only action on `Resource: "*"`; task registration, deregistration,
-service lifecycle, and role passing remain independently constrained.
+single read-only action on `Resource: "*"`; task registration, service
+lifecycle, and role passing remain independently constrained. The apply role has
+no task-definition deregistration permission.
 
 This repository change costs nothing until applied. S3 state, ECR
 storage/scanning, public IPv4 usage, Secrets Manager containers, CloudWatch,
