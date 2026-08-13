@@ -283,6 +283,7 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toMatch(/sid\s*= "UseTaggedPilotNetworkForCreate"/);
     expect(runtimeAuthority).toContain('"arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:vpc/*"');
     expect(runtimeAuthority).toContain('"ecr:SetRepositoryPolicy"');
+    expect(runtimeAuthority).toContain('"ecr:DescribeImages"');
     expect(runtimeAuthority).toContain('"ec2:RevokeSecurityGroupEgress"');
     expect(runtimeAuthority).not.toContain("iam:PassRole");
   });

@@ -480,7 +480,9 @@ Foundation provisioning requires the immutable image for the exact selected
 current-main commit to have been published first. The protected workflow proves
 that tag exists and supplies the selected commit as `worker_image_sha` before it
 creates the saved main plan; it never plans Lambda against the all-zero inert
-placeholder.
+placeholder. The protected apply role may inspect image metadata only on the
+exact worker repository for this preflight; this grants no publication,
+overwrite, retag, or image-deletion authority.
 
 ECS task definitions are immutable. Image promotion therefore appears as a
 Terraform `delete,create` replacement even though AWS registers a new revision
