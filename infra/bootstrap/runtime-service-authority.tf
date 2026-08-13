@@ -27,7 +27,7 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
   statement {
     sid = "ManagePilotEcs"
     actions = [
-      "ecs:CreateCluster", "ecs:CreateService", "ecs:DeleteCluster", "ecs:DeleteService", "ecs:DeregisterTaskDefinition",
+      "ecs:CreateCluster", "ecs:CreateService", "ecs:DeleteCluster", "ecs:DeleteService",
       "ecs:DescribeClusters", "ecs:DescribeServices", "ecs:ListTagsForResource",
       "ecs:PutClusterCapacityProviders", "ecs:TagResource", "ecs:UntagResource", "ecs:UpdateService",
     ]

@@ -75,7 +75,7 @@ variable "alarm_action_arns" {
 
 variable "aurora_engine_version" {
   type    = string
-  default = "16.6"
+  default = "16.14"
   validation {
     condition     = can(regex("^16\\.[0-9]+$", var.aurora_engine_version))
     error_message = "aurora_engine_version must be an explicitly reviewed Aurora PostgreSQL 16 minor version."

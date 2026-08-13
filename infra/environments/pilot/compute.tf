@@ -31,6 +31,7 @@ resource "aws_ecs_task_definition" "worker" {
   memory                   = 512
   execution_role_arn       = var.worker_execution_role_arn
   task_role_arn            = var.worker_task_role_arn
+  skip_destroy             = true
 
   container_definitions = jsonencode([{
     name        = "worker"
@@ -86,6 +87,7 @@ resource "aws_ecs_task_definition" "migration" {
   memory                   = 512
   execution_role_arn       = var.migration_execution_role_arn
   task_role_arn            = var.migration_task_role_arn
+  skip_destroy             = true
   container_definitions = jsonencode([{
     name      = "migration"
     image     = "${aws_ecr_repository.worker.repository_url}:${var.worker_image_sha}"

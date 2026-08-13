@@ -50,6 +50,7 @@ describe("Terraform foundation policy", () => {
     expect(bootstrap).toContain('aws_service_name = "rds.amazonaws.com"');
     expect(pilot).toContain('resource "aws_rds_cluster" "application"');
     expect(pilot).toContain('engine                          = "aurora-postgresql"');
+    expect(pilot).toContain('default = "16.14"');
     expect(pilot).toContain("manage_master_user_password     = true");
     expect(pilot).toContain("storage_encrypted               = true");
     expect(pilot).toContain("deletion_protection             = true");
@@ -321,6 +322,8 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain("task_role_arn            = var.migration_task_role_arn");
     expect(pilot).toContain("role          = var.webhook_lambda_role_arn");
     expect(pilot).toContain("role          = var.operator_lambda_role_arn");
+    expect(pilot.match(/skip_destroy\s*=\s*true/g)).toHaveLength(2);
+    expect(bootstrap).not.toContain("ecs:DeregisterTaskDefinition");
   });
 
   it("separates pilot IAM ownership behind an exact reference contract", () => {
