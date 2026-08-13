@@ -294,6 +294,7 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).not.toContain('db:${local.pilot_name}-database-1');
     expect(runtimeAuthority).toContain('"lambda:PutFunctionConcurrency"');
     expect(runtimeAuthority).toContain('"lambda:DeleteFunctionConcurrency"');
+    expect(runtimeAuthority).toContain('"lambda:ListVersionsByFunction"');
     expect(runtimeAuthority).toContain('"apigateway:TagResource"');
     expect(runtimeAuthority).toContain('"apigateway:UntagResource"');
     expect(runtimeAuthority).not.toContain("iam:PassRole");

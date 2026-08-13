@@ -9,7 +9,8 @@ data "aws_iam_policy_document" "github_plan_runtime_services" {
       "apigateway:GET", "application-autoscaling:DescribeScalableTargets", "cloudwatch:GetDashboard",
       "dynamodb:DescribeContinuousBackups", "dynamodb:DescribeTable", "dynamodb:DescribeTimeToLive", "dynamodb:ListTagsOfResource",
       "ec2:Describe*", "ecs:DescribeClusters", "ecs:DescribeServices", "ecs:DescribeTaskDefinition", "ecs:ListTagsForResource",
-      "lambda:GetFunction", "lambda:GetFunctionConcurrency", "lambda:GetPolicy", "lambda:ListTags", "rds:DescribeDBClusters", "rds:DescribeDBInstances",
+      "lambda:GetFunction", "lambda:GetFunctionConcurrency", "lambda:GetPolicy", "lambda:ListTags", "lambda:ListVersionsByFunction",
+      "rds:DescribeDBClusters", "rds:DescribeDBInstances",
       "rds:DescribeDBSubnetGroups", "rds:ListTagsForResource", "sqs:GetQueueAttributes", "sqs:ListQueueTags",
     ]
     resources = ["*"]
@@ -84,8 +85,8 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     sid = "ManagePilotLambda"
     actions = [
       "lambda:AddPermission", "lambda:CreateFunction", "lambda:DeleteFunction", "lambda:DeleteFunctionConcurrency",
-      "lambda:GetFunction", "lambda:GetFunctionConcurrency", "lambda:GetPolicy", "lambda:ListTags", "lambda:PutFunctionConcurrency",
-      "lambda:RemovePermission", "lambda:TagResource", "lambda:UntagResource",
+      "lambda:GetFunction", "lambda:GetFunctionConcurrency", "lambda:GetPolicy", "lambda:ListTags", "lambda:ListVersionsByFunction",
+      "lambda:PutFunctionConcurrency", "lambda:RemovePermission", "lambda:TagResource", "lambda:UntagResource",
       "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration",
     ]
     resources = ["arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:${local.pilot_name}-*"]

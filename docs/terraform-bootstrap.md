@@ -496,7 +496,8 @@ already-tagged target security group, so protected authority treats those
 resource types separately. The RDS boundary names the exact Terraform cluster,
 writer, and subnet group. Lambda concurrency and API Gateway resource tags are
 part of their normal create/update lifecycle and remain restricted to the exact
-pilot function and API paths.
+pilot function and API paths. Terraform refresh also inspects Lambda concurrency
+and published-version metadata without granting invocation or code access.
 
 If task-definition registration succeeds but its immediate provider read fails,
 verify exactly one active task definition for the expected family and inspect
