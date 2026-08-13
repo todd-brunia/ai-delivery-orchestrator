@@ -325,6 +325,11 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('variable = "kms:GrantIsForAWSResource"');
     expect(runtimeAuthority).not.toContain('"kms:Encrypt"');
     expect(runtimeAuthority.match(/data\.aws_kms_alias\.secretsmanager\.target_key_arn/g)).toHaveLength(1);
+    expect(runtimeAuthority).toContain('sid       = "CreateRdsManagedMasterSecret"');
+    expect(runtimeAuthority).toContain('actions   = ["secretsmanager:CreateSecret"]');
+    expect(runtimeAuthority).toContain('resources = ["arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:rds!cluster-*"]');
+    expect(runtimeAuthority.match(/"secretsmanager:CreateSecret"/g)).toHaveLength(1);
+    expect(runtimeAuthority).not.toMatch(/"secretsmanager:(?:GetSecretValue|PutSecretValue|UpdateSecret|DeleteSecret|RotateSecret|ReplicateSecretToRegions)"/);
     expect(runtimeAuthority.match(/variable = "kms:ViaService"/g)).toHaveLength(1);
     expect(runtimeAuthority).not.toMatch(/"kms:(?:CreateKey|DisableKey|ScheduleKeyDeletion|PutKeyPolicy|CreateAlias)"/);
     expect(runtimeAuthority).toContain('"lambda:PutFunctionConcurrency"');
