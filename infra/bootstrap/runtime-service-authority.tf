@@ -87,43 +87,6 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     ]
   }
   statement {
-    sid = "UseAwsManagedRdsKey"
-    actions = [
-      "kms:Decrypt", "kms:DescribeKey", "kms:GenerateDataKey",
-    ]
-    resources = ["arn:aws:kms:${var.aws_region}:${var.aws_account_id}:key/*"]
-    condition {
-      test     = "ForAnyValue:StringEquals"
-      variable = "kms:ResourceAliases"
-      values   = ["alias/aws/rds"]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "kms:ViaService"
-      values   = ["rds.${var.aws_region}.amazonaws.com"]
-    }
-  }
-  statement {
-    sid       = "GrantAwsManagedRdsKeyToRds"
-    actions   = ["kms:CreateGrant"]
-    resources = ["arn:aws:kms:${var.aws_region}:${var.aws_account_id}:key/*"]
-    condition {
-      test     = "ForAnyValue:StringEquals"
-      variable = "kms:ResourceAliases"
-      values   = ["alias/aws/rds"]
-    }
-    condition {
-      test     = "Bool"
-      variable = "kms:GrantIsForAWSResource"
-      values   = ["true"]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "kms:ViaService"
-      values   = ["rds.${var.aws_region}.amazonaws.com"]
-    }
-  }
-  statement {
     sid = "ManagePilotLambda"
     actions = [
       "lambda:AddPermission", "lambda:CreateFunction", "lambda:DeleteFunction", "lambda:DeleteFunctionConcurrency",
@@ -267,4 +230,54 @@ resource "aws_iam_policy" "github_apply_runtime_services" {
 resource "aws_iam_role_policy_attachment" "github_apply_runtime_services" {
   role       = aws_iam_role.github_apply.name
   policy_arn = aws_iam_policy.github_apply_runtime_services.arn
+}
+
+data "aws_iam_policy_document" "github_apply_rds_kms" {
+  statement {
+    sid = "UseAwsManagedRdsKey"
+    actions = [
+      "kms:Decrypt", "kms:DescribeKey", "kms:GenerateDataKey",
+    ]
+    resources = ["arn:aws:kms:${var.aws_region}:${var.aws_account_id}:key/*"]
+    condition {
+      test     = "ForAnyValue:StringEquals"
+      variable = "kms:ResourceAliases"
+      values   = ["alias/aws/rds"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["rds.${var.aws_region}.amazonaws.com"]
+    }
+  }
+  statement {
+    sid       = "GrantAwsManagedRdsKeyToRds"
+    actions   = ["kms:CreateGrant"]
+    resources = ["arn:aws:kms:${var.aws_region}:${var.aws_account_id}:key/*"]
+    condition {
+      test     = "ForAnyValue:StringEquals"
+      variable = "kms:ResourceAliases"
+      values   = ["alias/aws/rds"]
+    }
+    condition {
+      test     = "Bool"
+      variable = "kms:GrantIsForAWSResource"
+      values   = ["true"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["rds.${var.aws_region}.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_policy" "github_apply_rds_kms" {
+  name   = "ai-delivery-orchestrator-pilot-rds-kms-apply"
+  policy = data.aws_iam_policy_document.github_apply_rds_kms.json
+}
+
+resource "aws_iam_role_policy_attachment" "github_apply_rds_kms" {
+  role       = aws_iam_role.github_apply.name
+  policy_arn = aws_iam_policy.github_apply_rds_kms.arn
 }

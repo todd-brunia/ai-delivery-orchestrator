@@ -506,7 +506,10 @@ Aurora explicitly uses the enabled AWS-managed `alias/aws/rds` key. The
 protected apply role may describe and use only a key carrying that alias and
 only through the regional RDS service. Grant creation additionally requires
 `kms:GrantIsForAWSResource=true`. It cannot create, administer, rotate, disable,
-delete, or alias KMS keys.
+delete, or alias KMS keys. This authority is a dedicated managed policy because
+the independently scoped runtime-services policy is already near AWS's managed
+policy size quota; splitting it preserves the constraints without compression
+or permission broadening.
 
 Ingress-rule creation evaluates both the tagged new security-group-rule and the
 already-tagged target security group, so protected authority treats those

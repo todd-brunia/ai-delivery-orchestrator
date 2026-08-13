@@ -298,6 +298,11 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).not.toContain('db:${local.pilot_name}-database-1');
     expect(runtimeAuthority).toContain('sid = "UseAwsManagedRdsKey"');
     expect(runtimeAuthority).toContain('sid       = "GrantAwsManagedRdsKeyToRds"');
+    expect(runtimeAuthority).toContain('data "aws_iam_policy_document" "github_apply_rds_kms"');
+    expect(runtimeAuthority).toContain('resource "aws_iam_policy" "github_apply_rds_kms"');
+    expect(runtimeAuthority).toContain('name   = "ai-delivery-orchestrator-pilot-rds-kms-apply"');
+    expect(runtimeAuthority).toContain('resource "aws_iam_role_policy_attachment" "github_apply_rds_kms"');
+    expect(runtimeAuthority).toContain("policy_arn = aws_iam_policy.github_apply_rds_kms.arn");
     expect(runtimeAuthority).toContain('values   = ["alias/aws/rds"]');
     expect(runtimeAuthority).toContain('variable = "kms:ViaService"');
     expect(runtimeAuthority).toContain('values   = ["rds.${var.aws_region}.amazonaws.com"]');
