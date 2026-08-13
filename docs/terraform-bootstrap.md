@@ -445,6 +445,24 @@ Lambda, ECS, and Aurora alarms remain deferred until those resources exist.
 
 ## Cost, rollback, and recovery
 
+The protected plan and apply identities use separate inline policies for the
+runtime service slice. The plan policy is inspection-only. The apply policy
+covers the explicitly named/tagged pilot ECS, SQS, DynamoDB, RDS, Lambda,
+API Gateway, application-autoscaling, CloudWatch dashboard, security-group,
+and VPC-endpoint resources. API Gateway paths, ECS task-definition creation,
+application autoscaling, and EC2 create/manage APIs require wildcard resource
+scope; constrain them by pilot account/region paths, immutable service
+namespace, and `Project=ai-delivery-orchestrator` plus `Environment=pilot`
+request/resource tags wherever AWS supports those condition keys. The separate
+exact-role `iam:PassRole` boundary remains unchanged.
+
+After any partial main-stack apply, preserve remote state and generate a fresh
+residual plan. Do not clean up successful resources or retry against the old
+saved plan. Expand a missing permission only through a reviewed bootstrap plan,
+require zero bootstrap drift after apply, and then require fresh pilot-IAM and
+main plans with no deletion, replacement, or taint before another protected
+deployment attempt.
+
 This repository change costs nothing until applied. S3 state, ECR
 storage/scanning, public IPv4 usage, Secrets Manager containers, CloudWatch,
 and notifications can incur charges after creation. AWS Budgets may also have
