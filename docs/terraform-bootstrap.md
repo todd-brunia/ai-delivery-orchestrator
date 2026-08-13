@@ -476,9 +476,9 @@ tag-resource paths explicitly. Lambda container-image creation also requires a
 repository resource policy: only the Lambda service may pull, only from the
 pilot account, and only for pilot-prefixed function source ARNs.
 
-The human-controlled bootstrap root owns the no-cost RDS service-linked role
-required for the account's first database cluster. GitHub plan and apply roles
-cannot create service-linked roles.
+The human-controlled bootstrap root owns the no-cost RDS and ECS service-linked
+roles required for the account's first database cluster and worker service.
+GitHub plan and apply roles cannot create service-linked roles.
 
 Foundation provisioning requires the immutable image for the exact selected
 current-main commit to have been published first. The protected workflow proves
@@ -503,10 +503,13 @@ regional engine availability before a later upgrade or first provision in a
 different account or region.
 
 Aurora explicitly uses the enabled AWS-managed `alias/aws/rds` key. The
-protected apply role may describe and use only a key carrying that alias and
-only through the regional RDS service. Grant creation additionally requires
-`kms:GrantIsForAWSResource=true`. It cannot create, administer, rotate, disable,
-delete, or alias KMS keys. This authority is a dedicated managed policy because
+protected apply role may describe only a key carrying that alias. Decrypt and
+data-key use additionally require the regional RDS service path. Grant creation
+requires the same alias plus `kms:GrantIsForAWSResource=true`; its RDS control-
+plane prerequisite does not provide `kms:ViaService`, so that condition must not
+be applied to the grant or describe statements. The role cannot create,
+administer, rotate, disable, delete, or alias KMS keys. This authority is a
+dedicated managed policy because
 the independently scoped runtime-services policy is already near AWS's managed
 policy size quota; splitting it preserves the constraints without compression
 or permission broadening.

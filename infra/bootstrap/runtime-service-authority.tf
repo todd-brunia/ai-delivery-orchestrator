@@ -234,10 +234,18 @@ resource "aws_iam_role_policy_attachment" "github_apply_runtime_services" {
 
 data "aws_iam_policy_document" "github_apply_rds_kms" {
   statement {
-    sid = "UseAwsManagedRdsKey"
-    actions = [
-      "kms:Decrypt", "kms:DescribeKey", "kms:GenerateDataKey",
-    ]
+    sid       = "DescribeAwsManagedRdsKey"
+    actions   = ["kms:DescribeKey"]
+    resources = ["arn:aws:kms:${var.aws_region}:${var.aws_account_id}:key/*"]
+    condition {
+      test     = "ForAnyValue:StringEquals"
+      variable = "kms:ResourceAliases"
+      values   = ["alias/aws/rds"]
+    }
+  }
+  statement {
+    sid       = "UseAwsManagedRdsKeyThroughRds"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
     resources = ["arn:aws:kms:${var.aws_region}:${var.aws_account_id}:key/*"]
     condition {
       test     = "ForAnyValue:StringEquals"
@@ -263,11 +271,6 @@ data "aws_iam_policy_document" "github_apply_rds_kms" {
       test     = "Bool"
       variable = "kms:GrantIsForAWSResource"
       values   = ["true"]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "kms:ViaService"
-      values   = ["rds.${var.aws_region}.amazonaws.com"]
     }
   }
 }

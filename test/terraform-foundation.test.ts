@@ -48,6 +48,8 @@ describe("Terraform foundation policy", () => {
   it("provisions a protected isolated Aurora Serverless v2 database", () => {
     expect(bootstrap).toContain('resource "aws_iam_service_linked_role" "rds"');
     expect(bootstrap).toContain('aws_service_name = "rds.amazonaws.com"');
+    expect(bootstrap).toContain('resource "aws_iam_service_linked_role" "ecs"');
+    expect(bootstrap).toContain('aws_service_name = "ecs.amazonaws.com"');
     expect(pilot).toContain('resource "aws_rds_cluster" "application"');
     expect(pilot).toContain('engine                          = "aurora-postgresql"');
     expect(pilot).toContain('default = "16.14"');
@@ -296,7 +298,8 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('"arn:aws:rds:${var.aws_region}:${var.aws_account_id}:db:${local.pilot_name}-writer"');
     expect(runtimeAuthority).not.toContain('cluster:${local.pilot_name}-database');
     expect(runtimeAuthority).not.toContain('db:${local.pilot_name}-database-1');
-    expect(runtimeAuthority).toContain('sid = "UseAwsManagedRdsKey"');
+    expect(runtimeAuthority).toContain('sid       = "DescribeAwsManagedRdsKey"');
+    expect(runtimeAuthority).toContain('sid       = "UseAwsManagedRdsKeyThroughRds"');
     expect(runtimeAuthority).toContain('sid       = "GrantAwsManagedRdsKeyToRds"');
     expect(runtimeAuthority).toContain('data "aws_iam_policy_document" "github_apply_rds_kms"');
     expect(runtimeAuthority).toContain('resource "aws_iam_policy" "github_apply_rds_kms"');
@@ -307,6 +310,7 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('variable = "kms:ViaService"');
     expect(runtimeAuthority).toContain('values   = ["rds.${var.aws_region}.amazonaws.com"]');
     expect(runtimeAuthority).toContain('variable = "kms:GrantIsForAWSResource"');
+    expect(runtimeAuthority.match(/variable = "kms:ViaService"/g)).toHaveLength(1);
     expect(runtimeAuthority).not.toMatch(/"kms:(?:CreateKey|DisableKey|ScheduleKeyDeletion|PutKeyPolicy|CreateAlias)"/);
     expect(runtimeAuthority).toContain('"lambda:PutFunctionConcurrency"');
     expect(runtimeAuthority).toContain('"lambda:DeleteFunctionConcurrency"');
