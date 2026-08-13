@@ -32,7 +32,6 @@ resource "aws_rds_cluster" "application" {
   master_username                 = "orchestrator_admin"
   manage_master_user_password     = true
   storage_encrypted               = true
-  kms_key_id                      = "arn:aws:kms:${var.aws_region}:${var.aws_account_id}:alias/aws/rds"
   db_subnet_group_name            = aws_db_subnet_group.application.name
   vpc_security_group_ids          = [aws_security_group.database.id]
   backup_retention_period         = var.database_backup_retention_days
