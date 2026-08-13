@@ -6,7 +6,7 @@ data "aws_iam_policy_document" "github_plan_runtime_services" {
   statement {
     sid = "InspectPilotRuntimeServices"
     actions = [
-      "apigateway:GET", "application-autoscaling:DescribeScalableTargets", "cloudwatch:GetDashboard",
+      "apigateway:GET", "application-autoscaling:DescribeScalableTargets", "application-autoscaling:ListTagsForResource", "cloudwatch:GetDashboard",
       "dynamodb:DescribeContinuousBackups", "dynamodb:DescribeTable", "dynamodb:DescribeTimeToLive", "dynamodb:ListTagsOfResource",
       "ec2:Describe*", "ecs:DescribeClusters", "ecs:DescribeServices", "ecs:DescribeTaskDefinition", "ecs:ListTagsForResource",
       "lambda:GetFunction", "lambda:GetFunctionConcurrency", "lambda:GetPolicy", "lambda:ListTags", "lambda:ListVersionsByFunction",
@@ -123,6 +123,11 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     }
   }
   statement {
+    sid       = "InspectPilotAutoscalingTags"
+    actions   = ["application-autoscaling:ListTagsForResource"]
+    resources = ["arn:aws:application-autoscaling:${var.aws_region}:${var.aws_account_id}:scalable-target/*"]
+  }
+  statement {
     sid       = "ManagePilotDashboard"
     actions   = ["cloudwatch:DeleteDashboards", "cloudwatch:GetDashboard", "cloudwatch:PutDashboard"]
     resources = ["arn:aws:cloudwatch::${var.aws_account_id}:dashboard/${local.pilot_name}"]
@@ -230,4 +235,36 @@ resource "aws_iam_policy" "github_apply_runtime_services" {
 resource "aws_iam_role_policy_attachment" "github_apply_runtime_services" {
   role       = aws_iam_role.github_apply.name
   policy_arn = aws_iam_policy.github_apply_runtime_services.arn
+}
+
+data "aws_kms_alias" "rds" {
+  name = "alias/aws/rds"
+}
+
+data "aws_iam_policy_document" "github_apply_rds_kms" {
+  statement {
+    sid       = "DescribeAwsManagedRdsKey"
+    actions   = ["kms:DescribeKey"]
+    resources = [data.aws_kms_alias.rds.target_key_arn]
+  }
+  statement {
+    sid       = "GrantAwsManagedRdsKeyToRds"
+    actions   = ["kms:CreateGrant"]
+    resources = [data.aws_kms_alias.rds.target_key_arn]
+    condition {
+      test     = "Bool"
+      variable = "kms:GrantIsForAWSResource"
+      values   = ["true"]
+    }
+  }
+}
+
+resource "aws_iam_policy" "github_apply_rds_kms" {
+  name   = "ai-delivery-orchestrator-pilot-rds-kms-apply"
+  policy = data.aws_iam_policy_document.github_apply_rds_kms.json
+}
+
+resource "aws_iam_role_policy_attachment" "github_apply_rds_kms" {
+  role       = aws_iam_role.github_apply.name
+  policy_arn = aws_iam_policy.github_apply_rds_kms.arn
 }

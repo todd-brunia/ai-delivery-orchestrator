@@ -504,8 +504,11 @@ regional engine availability before a later upgrade or first provision in a
 different account or region.
 
 Aurora keeps storage encryption enabled and intentionally leaves `kms_key_id`
-unset so RDS uses its default AWS-managed `aws/rds` key. The protected plan and
-apply roles therefore have no caller KMS permissions. Selecting a
+unset so RDS uses its default AWS-managed `aws/rds` key. The human bootstrap
+root resolves that alias to its exact backing key and permits the protected
+apply role only to describe that key and create an AWS-resource grant on it.
+The role cannot encrypt, decrypt, generate data keys, create or administer
+keys, manage aliases, disable keys, or schedule deletion. Selecting a
 customer-managed key would require a separate key-policy and IAM review and is
 outside this pilot's current scope.
 

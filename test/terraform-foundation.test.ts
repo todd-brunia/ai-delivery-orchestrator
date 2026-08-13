@@ -284,6 +284,9 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('variable = "aws:RequestTag/Environment"');
     expect(runtimeAuthority).toContain('variable = "aws:ResourceTag/Project"');
     expect(runtimeAuthority).toContain('variable = "application-autoscaling:service-namespace"');
+    expect(runtimeAuthority).toContain('sid       = "InspectPilotAutoscalingTags"');
+    expect(runtimeAuthority).toContain('"application-autoscaling:ListTagsForResource"');
+    expect(runtimeAuthority).toContain('resources = ["arn:aws:application-autoscaling:${var.aws_region}:${var.aws_account_id}:scalable-target/*"]');
     expect(runtimeAuthority).toMatch(/values\s+= \["ecs"\]/);
     expect(runtimeAuthority).toContain('"arn:aws:apigateway:${var.aws_region}::/apis"');
     expect(runtimeAuthority).toContain('"arn:aws:apigateway:${var.aws_region}::/apis/*"');
@@ -300,7 +303,15 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('"arn:aws:rds:${var.aws_region}:${var.aws_account_id}:db:${local.pilot_name}-writer"');
     expect(runtimeAuthority).not.toContain('cluster:${local.pilot_name}-database');
     expect(runtimeAuthority).not.toContain('db:${local.pilot_name}-database-1');
-    expect(runtimeAuthority).not.toMatch(/"kms:/);
+    expect(runtimeAuthority).toContain('data "aws_kms_alias" "rds"');
+    expect(runtimeAuthority).toContain('name = "alias/aws/rds"');
+    expect(runtimeAuthority).toContain('sid       = "DescribeAwsManagedRdsKey"');
+    expect(runtimeAuthority).toContain('actions   = ["kms:DescribeKey"]');
+    expect(runtimeAuthority).toContain('sid       = "GrantAwsManagedRdsKeyToRds"');
+    expect(runtimeAuthority).toContain('actions   = ["kms:CreateGrant"]');
+    expect(runtimeAuthority).toContain('resources = [data.aws_kms_alias.rds.target_key_arn]');
+    expect(runtimeAuthority).toContain('variable = "kms:GrantIsForAWSResource"');
+    expect(runtimeAuthority).not.toMatch(/"kms:(?:Decrypt|Encrypt|GenerateDataKey)/);
     expect(runtimeAuthority).not.toMatch(/"kms:(?:CreateKey|DisableKey|ScheduleKeyDeletion|PutKeyPolicy|CreateAlias)"/);
     expect(runtimeAuthority).toContain('"lambda:PutFunctionConcurrency"');
     expect(runtimeAuthority).toContain('"lambda:DeleteFunctionConcurrency"');
