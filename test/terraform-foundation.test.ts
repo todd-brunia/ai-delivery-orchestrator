@@ -175,7 +175,7 @@ describe("Terraform foundation policy", () => {
     expect(applyWorkflow).toContain("apply -input=false -lock-timeout=5m pilot-iam.tfplan");
   });
 
-  it("rejects delete and replacement actions before ordinary saved plans are applied", () => {
+  it("rejects deletes and every replacement except exact ECS task-definition revision promotion", () => {
     expect(applyWorkflow).toContain("Reject destructive pilot IAM plan");
     expect(applyWorkflow).toContain("Reject destructive pilot plan");
     expect(applyWorkflow.match(/show -json pilot(?:-iam|-iam-converged)?\.tfplan/g)).toHaveLength(3);
@@ -186,6 +186,10 @@ describe("Terraform foundation policy", () => {
     expect(applyWorkflow.indexOf("Reject destructive pilot plan")).toBeLessThan(applyWorkflow.indexOf("Apply selected plan"));
     expect(applyWorkflow.indexOf("Reject destructive converged pilot IAM plan")).toBeGreaterThan(applyWorkflow.indexOf("Plan converged pilot IAM"));
     expect(applyWorkflow.indexOf("Reject destructive converged pilot IAM plan")).toBeLessThan(applyWorkflow.indexOf("Apply converged pilot IAM plan"));
+    expect(applyWorkflow).toContain("allowed_task_definition_replacement");
+    expect(applyWorkflow).toContain('.change.actions == ["delete", "create"]');
+    expect(applyWorkflow).toContain('.address == "aws_ecs_task_definition.worker"');
+    expect(applyWorkflow).toContain('.address == "aws_ecs_task_definition.migration"');
     expect(destroyWorkflow).not.toContain("Reject destructive");
   });
 

@@ -28,6 +28,19 @@ describe("protected pilot deployment workflows", () => {
     expect(deploy).toContain('index("delete")');
     expect(deploy).not.toMatch(/:latest|terraform destroy|force-unlock/);
   });
+  it("allows only exact ECS task-definition revision replacements", () => {
+    for (const workflow of [terraformApply, deploy, rollback]) {
+      expect(workflow).toContain("allowed_task_definition_replacement");
+      expect(workflow).toContain('aws_ecs_task_definition.worker');
+      expect(workflow).toContain('aws_ecs_task_definition.migration');
+      expect(workflow).toContain('["delete", "create"]');
+      expect(workflow).toContain('select(allowed_task_definition_replacement | not)');
+    }
+    for (const workflow of [deploy, rollback]) {
+      expect(workflow).toContain("disallowed_destructive");
+      expect(workflow).toContain("unexpected");
+    }
+  });
   it("fails migration and smoke on nonzero results and returns capacity to zero", () => {
     expect(deploy).toContain("aws ecs wait tasks-stopped");
     expect(deploy.match(/containers\[0\]\.exitCode/g)).toHaveLength(2);

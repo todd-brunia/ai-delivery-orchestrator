@@ -113,7 +113,12 @@ jobs:
       - name: Reject destructive or unrelated deployment plan
         run: |
           changes="$(terraform -chdir=infra/environments/pilot show -json pilot-deploy.tfplan | jq -c '[.resource_changes[]? | select(.change.actions != ["no-op"]) | {address,actions:.change.actions}]')"
-          test "$(jq '[.[] | select(.actions | index("delete"))] | length' <<< "$changes")" -eq 0
+          disallowed_destructive="$(jq -r '
+            def allowed_task_definition_replacement:
+              ((.address == "aws_ecs_task_definition.worker" or .address == "aws_ecs_task_definition.migration") and .actions == ["delete", "create"]);
+            .[] | select(.actions | index("delete")) | select(allowed_task_definition_replacement | not) | .address
+          ' <<< "$changes")"
+          test -z "$disallowed_destructive"
           unexpected="$(jq -r '.[] | select(.address | test("^(aws_ecs_task_definition\\.(worker|migration)|aws_lambda_function\\.(webhook|operator)|aws_ecs_service\\.worker)$") | not) | .address' <<< "$changes")"
           test -z "$unexpected"
       - name: Apply exact-image saved plan
