@@ -508,9 +508,10 @@ for new Serverless v2 clusters in the pilot region before this revision. Recheck
 regional engine availability before a later upgrade or first provision in a
 different account or region.
 
-Aurora keeps storage encryption enabled and intentionally leaves `kms_key_id`
-unset so RDS uses its default AWS-managed `aws/rds` key. The human bootstrap
-root resolves that alias to its exact backing key and permits the protected
+Aurora keeps storage encryption enabled and explicitly selects the AWS-managed
+`alias/aws/rds` key so the create request cannot resolve to a null implicit
+default. The human bootstrap root resolves that alias to its exact backing key
+and permits the protected
 apply role only to describe that key, create an AWS-resource grant on it, and
 decrypt or generate data keys when the request is routed through RDS in the
 pilot region. The role cannot encrypt directly, use key material outside RDS,
