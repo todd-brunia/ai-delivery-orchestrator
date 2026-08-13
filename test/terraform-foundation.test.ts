@@ -165,6 +165,10 @@ describe("Terraform foundation policy", () => {
     expect(applyWorkflow).toContain("commit_sha:");
     expect(applyWorkflow).toContain('test "$(git rev-parse HEAD)" = "$SELECTED_SHA"');
     expect(applyWorkflow).toContain('test "$(git rev-parse origin/main)" = "$SELECTED_SHA"');
+    expect(applyWorkflow).toContain('TF_VAR_worker_image_sha: ${{ inputs.commit_sha }}');
+    expect(applyWorkflow).toContain("Require published immutable image");
+    expect(applyWorkflow).toContain('--image-ids "imageTag=$SELECTED_SHA"');
+    expect(applyWorkflow.indexOf("Require published immutable image")).toBeLessThan(applyWorkflow.indexOf("Plan selected commit"));
     expect(applyWorkflow).toContain("-out=pilot.tfplan");
     expect(applyWorkflow).toContain("apply -input=false -lock-timeout=5m pilot.tfplan");
     expect(applyWorkflow).toContain("-out=pilot-iam.tfplan");
@@ -271,9 +275,11 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toMatch(/values\s+= \["ecs"\]/);
     expect(runtimeAuthority).toContain('"arn:aws:apigateway:${var.aws_region}::/apis"');
     expect(runtimeAuthority).toContain('"arn:aws:apigateway:${var.aws_region}::/apis/*"');
+    expect(runtimeAuthority).toContain('"arn:aws:apigateway:${var.aws_region}::/tags/*"');
     expect(runtimeAuthority).toMatch(/sid\s*= "UseTaggedPilotNetworkForCreate"/);
     expect(runtimeAuthority).toContain('"arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:vpc/*"');
     expect(runtimeAuthority).toContain('"ecr:SetRepositoryPolicy"');
+    expect(runtimeAuthority).toContain('"ec2:RevokeSecurityGroupEgress"');
     expect(runtimeAuthority).not.toContain("iam:PassRole");
   });
 

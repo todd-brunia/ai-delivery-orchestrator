@@ -95,6 +95,7 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     resources = [
       "arn:aws:apigateway:${var.aws_region}::/apis",
       "arn:aws:apigateway:${var.aws_region}::/apis/*",
+      "arn:aws:apigateway:${var.aws_region}::/tags/*",
     ]
   }
   statement {
@@ -158,7 +159,7 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     sid = "ManageTaggedPilotEc2Resources"
     actions = [
       "ec2:CreateTags", "ec2:DeleteSecurityGroup", "ec2:DeleteTags", "ec2:DeleteVpcEndpoints",
-      "ec2:ModifyVpcEndpoint", "ec2:RevokeSecurityGroupIngress",
+      "ec2:ModifyVpcEndpoint", "ec2:RevokeSecurityGroupEgress", "ec2:RevokeSecurityGroupIngress",
     ]
     resources = ["*"]
     condition {

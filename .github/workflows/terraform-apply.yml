@@ -32,6 +32,7 @@ jobs:
     env:
       TF_IN_AUTOMATION: "true"
       TF_INPUT: "false"
+      TF_VAR_worker_image_sha: ${{ inputs.commit_sha }}
       TF_VAR_budget_notification_email: ${{ secrets.BUDGET_NOTIFICATION_EMAIL }}
       TF_VAR_allowed_operator_principal_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-human-operator
     steps:
@@ -79,6 +80,13 @@ jobs:
         with:
           aws-region: us-east-1
           role-to-assume: ${{ vars.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+      - name: Require published immutable image
+        env:
+          SELECTED_SHA: ${{ inputs.commit_sha }}
+        run: |
+          digest="$(aws ecr describe-images --repository-name ai-delivery-orchestrator-worker --image-ids "imageTag=$SELECTED_SHA" --query 'imageDetails[0].imageDigest' --output text)"
+          test "${#digest}" -eq 71
+          test "${digest#sha256:}" != "$digest"
       - name: Initialize pilot IAM remote state
         if: ${{ inputs.provision_iam }}
         run: terraform -chdir=infra/environments/pilot-iam init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"

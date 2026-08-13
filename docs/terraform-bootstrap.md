@@ -469,10 +469,18 @@ deployment attempt.
 Security-group and VPC-endpoint creation authorizes tagged new target resources
 separately from the existing pilot VPC, subnet, route-table, and security-group
 dependencies; those dependencies must already carry the pilot project and
-environment tags. API Gateway authority names the create collection and child
-paths explicitly. Lambda container-image creation also requires a repository
-resource policy: only the Lambda service may pull, only from the pilot account,
-and only for pilot-prefixed function source ARNs.
+environment tags. Tagged pilot security-group authority includes revoking
+AWS's default egress rule so Terraform can establish the declared outbound
+boundary. API Gateway authority names the create collection, child, and
+tag-resource paths explicitly. Lambda container-image creation also requires a
+repository resource policy: only the Lambda service may pull, only from the
+pilot account, and only for pilot-prefixed function source ARNs.
+
+Foundation provisioning requires the immutable image for the exact selected
+current-main commit to have been published first. The protected workflow proves
+that tag exists and supplies the selected commit as `worker_image_sha` before it
+creates the saved main plan; it never plans Lambda against the all-zero inert
+placeholder.
 
 If task-definition registration succeeds but its immediate provider read fails,
 verify exactly one active task definition for the expected family and inspect
