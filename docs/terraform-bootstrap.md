@@ -523,9 +523,13 @@ RDS-managed master credentials are stored in Secrets Manager. Bootstrap also
 resolves `alias/aws/secretsmanager` and permits the protected apply role only to
 describe that exact key during cluster creation. It grants no encrypt, decrypt,
 data-key, grant, or administrative action on the Secrets Manager key.
-The same dedicated policy permits only `CreateSecret` on the regional/account
-RDS-managed `rds!cluster-*` secret prefix. It grants no secret-value read,
-update, deletion, rotation, replication, or general secret-management access.
+The same dedicated policy permits only `CreateSecret`. RDS invokes that API
+before a secret resource exists, so AWS evaluates it against wildcard resource
+scope; the statement instead requires a forwarded AWS-service call whose last
+service is RDS and whose requested region is the pilot region. Direct calls and
+calls through any other service remain unauthorized. It grants no secret-value
+read, update, deletion, rotation, replication, or general secret-management
+access.
 
 Ingress-rule creation evaluates both the tagged new security-group-rule and the
 already-tagged target security group, so protected authority treats those
