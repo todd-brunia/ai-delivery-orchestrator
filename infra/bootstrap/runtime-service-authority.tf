@@ -191,7 +191,7 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
   statement {
     sid = "ManagePilotEcrLambdaPolicy"
     actions = [
-      "ecr:DeleteRepositoryPolicy", "ecr:GetRepositoryPolicy", "ecr:SetRepositoryPolicy",
+      "ecr:DeleteRepositoryPolicy", "ecr:DescribeImages", "ecr:GetRepositoryPolicy", "ecr:SetRepositoryPolicy",
     ]
     resources = ["arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/ai-delivery-orchestrator-worker"]
   }
