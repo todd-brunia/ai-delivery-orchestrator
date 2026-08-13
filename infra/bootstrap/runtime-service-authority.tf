@@ -123,11 +123,6 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     }
   }
   statement {
-    sid       = "InspectPilotAutoscalingTags"
-    actions   = ["application-autoscaling:ListTagsForResource"]
-    resources = ["arn:aws:application-autoscaling:${var.aws_region}:${var.aws_account_id}:scalable-target/*"]
-  }
-  statement {
     sid       = "ManagePilotDashboard"
     actions   = ["cloudwatch:DeleteDashboards", "cloudwatch:GetDashboard", "cloudwatch:PutDashboard"]
     resources = ["arn:aws:cloudwatch::${var.aws_account_id}:dashboard/${local.pilot_name}"]
@@ -235,6 +230,24 @@ resource "aws_iam_policy" "github_apply_runtime_services" {
 resource "aws_iam_role_policy_attachment" "github_apply_runtime_services" {
   role       = aws_iam_role.github_apply.name
   policy_arn = aws_iam_policy.github_apply_runtime_services.arn
+}
+
+data "aws_iam_policy_document" "github_apply_autoscaling_tags" {
+  statement {
+    sid       = "InspectPilotAutoscalingTags"
+    actions   = ["application-autoscaling:ListTagsForResource"]
+    resources = ["arn:aws:application-autoscaling:${var.aws_region}:${var.aws_account_id}:scalable-target/*"]
+  }
+}
+
+resource "aws_iam_policy" "github_apply_autoscaling_tags" {
+  name   = "ai-delivery-orchestrator-pilot-autoscaling-tags-apply"
+  policy = data.aws_iam_policy_document.github_apply_autoscaling_tags.json
+}
+
+resource "aws_iam_role_policy_attachment" "github_apply_autoscaling_tags" {
+  role       = aws_iam_role.github_apply.name
+  policy_arn = aws_iam_policy.github_apply_autoscaling_tags.arn
 }
 
 data "aws_kms_alias" "rds" {

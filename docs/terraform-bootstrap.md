@@ -459,6 +459,11 @@ namespace, and `Project=ai-delivery-orchestrator` plus `Environment=pilot`
 request/resource tags wherever AWS supports those condition keys. The separate
 exact-role `iam:PassRole` boundary remains unchanged.
 
+The runtime-services managed policy is itself at AWS's managed-policy size
+quota. Application Auto Scaling tag inspection therefore uses a second,
+single-action managed policy scoped to scalable-target resources in the pilot
+account and region; it grants no autoscaling mutation authority.
+
 After any partial main-stack apply, preserve remote state and generate a fresh
 residual plan. Do not clean up successful resources or retry against the old
 saved plan. Expand a missing permission only through a reviewed bootstrap plan,

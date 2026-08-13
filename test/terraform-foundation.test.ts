@@ -287,6 +287,9 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('sid       = "InspectPilotAutoscalingTags"');
     expect(runtimeAuthority).toContain('"application-autoscaling:ListTagsForResource"');
     expect(runtimeAuthority).toContain('resources = ["arn:aws:application-autoscaling:${var.aws_region}:${var.aws_account_id}:scalable-target/*"]');
+    expect(runtimeAuthority).toContain('resource "aws_iam_policy" "github_apply_autoscaling_tags"');
+    expect(runtimeAuthority).toContain('name   = "ai-delivery-orchestrator-pilot-autoscaling-tags-apply"');
+    expect(runtimeAuthority).toContain('resource "aws_iam_role_policy_attachment" "github_apply_autoscaling_tags"');
     expect(runtimeAuthority).toMatch(/values\s+= \["ecs"\]/);
     expect(runtimeAuthority).toContain('"arn:aws:apigateway:${var.aws_region}::/apis"');
     expect(runtimeAuthority).toContain('"arn:aws:apigateway:${var.aws_region}::/apis/*"');
