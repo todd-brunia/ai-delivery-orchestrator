@@ -28,7 +28,7 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     sid = "ManagePilotEcs"
     actions = [
       "ecs:CreateCluster", "ecs:CreateService", "ecs:DeleteCluster", "ecs:DeleteService", "ecs:DeregisterTaskDefinition",
-      "ecs:DescribeClusters", "ecs:DescribeServices", "ecs:DescribeTaskDefinition", "ecs:ListTagsForResource",
+      "ecs:DescribeClusters", "ecs:DescribeServices", "ecs:ListTagsForResource",
       "ecs:PutClusterCapacityProviders", "ecs:TagResource", "ecs:UntagResource", "ecs:UpdateService",
     ]
     resources = [
@@ -37,6 +37,11 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
       "arn:aws:ecs:${var.aws_region}:${var.aws_account_id}:task-definition/${local.pilot_name}-worker:*",
       "arn:aws:ecs:${var.aws_region}:${var.aws_account_id}:task-definition/${local.pilot_name}-migration:*",
     ]
+  }
+  statement {
+    sid       = "InspectTaskDefinitions"
+    actions   = ["ecs:DescribeTaskDefinition"]
+    resources = ["*"]
   }
   statement {
     sid       = "RegisterPilotTaskDefinitions"

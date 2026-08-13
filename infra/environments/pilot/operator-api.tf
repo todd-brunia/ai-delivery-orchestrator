@@ -1,11 +1,10 @@
 resource "aws_lambda_function" "operator" {
-  function_name                  = "${local.name}-operator"
-  package_type                   = "Image"
-  image_uri                      = "${aws_ecr_repository.worker.repository_url}:${var.worker_image_sha}"
-  role                           = var.operator_lambda_role_arn
-  timeout                        = 10
-  memory_size                    = 256
-  reserved_concurrent_executions = 5
+  function_name = "${local.name}-operator"
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.worker.repository_url}:${var.worker_image_sha}"
+  role          = var.operator_lambda_role_arn
+  timeout       = 10
+  memory_size   = 256
   image_config {
     entry_point = ["node_modules/.bin/aws-lambda-ric"]
     command     = ["dist/operator-api/v1/lambda-handler.handler"]

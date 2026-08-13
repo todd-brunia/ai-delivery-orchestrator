@@ -1,11 +1,10 @@
 resource "aws_lambda_function" "webhook" {
-  function_name                  = "${local.name}-webhook"
-  package_type                   = "Image"
-  image_uri                      = "${aws_ecr_repository.worker.repository_url}:${var.worker_image_sha}"
-  role                           = var.webhook_lambda_role_arn
-  timeout                        = 10
-  memory_size                    = 256
-  reserved_concurrent_executions = 5
+  function_name = "${local.name}-webhook"
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.worker.repository_url}:${var.worker_image_sha}"
+  role          = var.webhook_lambda_role_arn
+  timeout       = 10
+  memory_size   = 256
   image_config {
     entry_point = ["node_modules/.bin/aws-lambda-ric"]
     command     = ["dist/github/webhooks/v1/lambda-handler.handler"]
