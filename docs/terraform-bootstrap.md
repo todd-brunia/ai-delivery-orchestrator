@@ -491,6 +491,13 @@ allow that exact action pair only for the worker and migration task-definition
 addresses. Standalone deletes, every other replacement, and unrelated runtime
 deployment changes remain fail-closed.
 
+Ingress-rule creation evaluates both the tagged new security-group-rule and the
+already-tagged target security group, so protected authority treats those
+resource types separately. The RDS boundary names the exact Terraform cluster,
+writer, and subnet group. Lambda concurrency and API Gateway resource tags are
+part of their normal create/update lifecycle and remain restricted to the exact
+pilot function and API paths.
+
 If task-definition registration succeeds but its immediate provider read fails,
 verify exactly one active task definition for the expected family and inspect
 the state for a single matching taint. Do not accept replacement. Untaint only

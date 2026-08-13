@@ -9,7 +9,7 @@ data "aws_iam_policy_document" "github_plan_runtime_services" {
       "apigateway:GET", "application-autoscaling:DescribeScalableTargets", "cloudwatch:GetDashboard",
       "dynamodb:DescribeContinuousBackups", "dynamodb:DescribeTable", "dynamodb:DescribeTimeToLive", "dynamodb:ListTagsOfResource",
       "ec2:Describe*", "ecs:DescribeClusters", "ecs:DescribeServices", "ecs:DescribeTaskDefinition", "ecs:ListTagsForResource",
-      "lambda:GetFunction", "lambda:GetPolicy", "lambda:ListTags", "rds:DescribeDBClusters", "rds:DescribeDBInstances",
+      "lambda:GetFunction", "lambda:GetFunctionConcurrency", "lambda:GetPolicy", "lambda:ListTags", "rds:DescribeDBClusters", "rds:DescribeDBInstances",
       "rds:DescribeDBSubnetGroups", "rds:ListTagsForResource", "sqs:GetQueueAttributes", "sqs:ListQueueTags",
     ]
     resources = ["*"]
@@ -75,23 +75,27 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
       "rds:ModifyDBSubnetGroup", "rds:RemoveTagsFromResource",
     ]
     resources = [
-      "arn:aws:rds:${var.aws_region}:${var.aws_account_id}:cluster:${local.pilot_name}-database",
-      "arn:aws:rds:${var.aws_region}:${var.aws_account_id}:db:${local.pilot_name}-database-1",
+      "arn:aws:rds:${var.aws_region}:${var.aws_account_id}:cluster:${local.pilot_name}",
+      "arn:aws:rds:${var.aws_region}:${var.aws_account_id}:db:${local.pilot_name}-writer",
       "arn:aws:rds:${var.aws_region}:${var.aws_account_id}:subgrp:${local.pilot_name}-database",
     ]
   }
   statement {
     sid = "ManagePilotLambda"
     actions = [
-      "lambda:AddPermission", "lambda:CreateFunction", "lambda:DeleteFunction", "lambda:GetFunction", "lambda:GetPolicy",
-      "lambda:ListTags", "lambda:RemovePermission", "lambda:TagResource", "lambda:UntagResource",
+      "lambda:AddPermission", "lambda:CreateFunction", "lambda:DeleteFunction", "lambda:DeleteFunctionConcurrency",
+      "lambda:GetFunction", "lambda:GetFunctionConcurrency", "lambda:GetPolicy", "lambda:ListTags", "lambda:PutFunctionConcurrency",
+      "lambda:RemovePermission", "lambda:TagResource", "lambda:UntagResource",
       "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration",
     ]
     resources = ["arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:${local.pilot_name}-*"]
   }
   statement {
-    sid     = "ManagePilotApiGateway"
-    actions = ["apigateway:DELETE", "apigateway:GET", "apigateway:PATCH", "apigateway:POST", "apigateway:PUT"]
+    sid = "ManagePilotApiGateway"
+    actions = [
+      "apigateway:DELETE", "apigateway:GET", "apigateway:PATCH", "apigateway:POST", "apigateway:PUT",
+      "apigateway:TagResource", "apigateway:UntagResource",
+    ]
     resources = [
       "arn:aws:apigateway:${var.aws_region}::/apis",
       "arn:aws:apigateway:${var.aws_region}::/apis/*",
@@ -174,9 +178,24 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     }
   }
   statement {
-    sid       = "CreatePilotSecurityGroupIngress"
+    sid       = "CreateTaggedPilotSecurityGroupRules"
     actions   = ["ec2:AuthorizeSecurityGroupIngress"]
-    resources = ["*"]
+    resources = ["arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:security-group-rule/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Project"
+      values   = ["ai-delivery-orchestrator"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Environment"
+      values   = ["pilot"]
+    }
+  }
+  statement {
+    sid       = "UseTaggedPilotSecurityGroupsForIngress"
+    actions   = ["ec2:AuthorizeSecurityGroupIngress"]
+    resources = ["arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:security-group/*"]
     condition {
       test     = "StringEquals"
       variable = "aws:ResourceTag/Project"

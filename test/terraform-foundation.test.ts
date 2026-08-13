@@ -285,6 +285,17 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('"ecr:SetRepositoryPolicy"');
     expect(runtimeAuthority).toContain('"ecr:DescribeImages"');
     expect(runtimeAuthority).toContain('"ec2:RevokeSecurityGroupEgress"');
+    expect(runtimeAuthority).toContain('"arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:security-group-rule/*"');
+    expect(runtimeAuthority).toMatch(/sid\s*= "CreateTaggedPilotSecurityGroupRules"/);
+    expect(runtimeAuthority).toMatch(/sid\s*= "UseTaggedPilotSecurityGroupsForIngress"/);
+    expect(runtimeAuthority).toContain('"arn:aws:rds:${var.aws_region}:${var.aws_account_id}:cluster:${local.pilot_name}"');
+    expect(runtimeAuthority).toContain('"arn:aws:rds:${var.aws_region}:${var.aws_account_id}:db:${local.pilot_name}-writer"');
+    expect(runtimeAuthority).not.toContain('cluster:${local.pilot_name}-database');
+    expect(runtimeAuthority).not.toContain('db:${local.pilot_name}-database-1');
+    expect(runtimeAuthority).toContain('"lambda:PutFunctionConcurrency"');
+    expect(runtimeAuthority).toContain('"lambda:DeleteFunctionConcurrency"');
+    expect(runtimeAuthority).toContain('"apigateway:TagResource"');
+    expect(runtimeAuthority).toContain('"apigateway:UntagResource"');
     expect(runtimeAuthority).not.toContain("iam:PassRole");
   });
 
