@@ -163,8 +163,12 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
   }
 }
 
-resource "aws_iam_role_policy" "github_apply_runtime_services" {
-  name   = "pilot-runtime-services-apply"
-  role   = aws_iam_role.github_apply.id
+resource "aws_iam_policy" "github_apply_runtime_services" {
+  name   = "ai-delivery-orchestrator-pilot-runtime-services-apply"
   policy = data.aws_iam_policy_document.github_apply_runtime_services.json
+}
+
+resource "aws_iam_role_policy_attachment" "github_apply_runtime_services" {
+  role       = aws_iam_role.github_apply.name
+  policy_arn = aws_iam_policy.github_apply_runtime_services.arn
 }

@@ -252,8 +252,11 @@ describe("Terraform foundation policy", () => {
     const runtimeAuthority = read("infra/bootstrap/runtime-service-authority.tf");
     expect(runtimeAuthority).toContain('resource "aws_iam_role_policy" "github_plan_runtime_services"');
     expect(runtimeAuthority).toContain('name   = "pilot-runtime-services-read-only"');
-    expect(runtimeAuthority).toContain('resource "aws_iam_role_policy" "github_apply_runtime_services"');
-    expect(runtimeAuthority).toContain('name   = "pilot-runtime-services-apply"');
+    expect(runtimeAuthority).toContain('resource "aws_iam_policy" "github_apply_runtime_services"');
+    expect(runtimeAuthority).toContain('name   = "ai-delivery-orchestrator-pilot-runtime-services-apply"');
+    expect(runtimeAuthority).toContain('resource "aws_iam_role_policy_attachment" "github_apply_runtime_services"');
+    expect(runtimeAuthority).toContain("role       = aws_iam_role.github_apply.name");
+    expect(runtimeAuthority).not.toContain("role       = aws_iam_role.github_plan.name");
     for (const action of [
       "ecs:CreateCluster", "ecs:RegisterTaskDefinition", "ec2:CreateSecurityGroup", "ec2:CreateVpcEndpoint",
       "sqs:CreateQueue", "dynamodb:CreateTable", "rds:CreateDBCluster", "lambda:CreateFunction",

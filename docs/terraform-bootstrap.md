@@ -445,8 +445,11 @@ Lambda, ECS, and Aurora alarms remain deferred until those resources exist.
 
 ## Cost, rollback, and recovery
 
-The protected plan and apply identities use separate inline policies for the
-runtime service slice. The plan policy is inspection-only. The apply policy
+The protected plan and apply identities use separate policies for the runtime
+service slice. The plan policy is inspection-only and inline. The apply policy
+is an exact-named customer-managed policy attached only to the protected apply
+role because the pre-existing apply inline policy plus the service lifecycle
+document exceeds AWS's 10,240-byte aggregate inline-policy quota. The apply policy
 covers the explicitly named/tagged pilot ECS, SQS, DynamoDB, RDS, Lambda,
 API Gateway, application-autoscaling, CloudWatch dashboard, security-group,
 and VPC-endpoint resources. API Gateway paths, ECS task-definition creation,
