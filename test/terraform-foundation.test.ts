@@ -269,8 +269,23 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('variable = "aws:ResourceTag/Project"');
     expect(runtimeAuthority).toContain('variable = "application-autoscaling:service-namespace"');
     expect(runtimeAuthority).toMatch(/values\s+= \["ecs"\]/);
-    expect(runtimeAuthority).toContain('resources = ["arn:aws:apigateway:${var.aws_region}::/apis*"]');
+    expect(runtimeAuthority).toContain('"arn:aws:apigateway:${var.aws_region}::/apis"');
+    expect(runtimeAuthority).toContain('"arn:aws:apigateway:${var.aws_region}::/apis/*"');
+    expect(runtimeAuthority).toMatch(/sid\s*= "UseTaggedPilotNetworkForCreate"/);
+    expect(runtimeAuthority).toContain('"arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:vpc/*"');
+    expect(runtimeAuthority).toContain('"ecr:SetRepositoryPolicy"');
     expect(runtimeAuthority).not.toContain("iam:PassRole");
+  });
+
+  it("allows only same-account pilot Lambda functions to pull the worker image", () => {
+    const ecr = read("infra/environments/pilot/ecr.tf");
+    expect(ecr).toContain('resource "aws_ecr_repository_policy" "worker_lambda_pull"');
+    expect(ecr).toContain('identifiers = ["lambda.amazonaws.com"]');
+    expect(ecr).toContain('variable = "aws:SourceAccount"');
+    expect(ecr).toContain('values   = [var.aws_account_id]');
+    expect(ecr).toContain('variable = "aws:SourceArn"');
+    expect(ecr).toContain('function:${local.name}-*');
+    expect(ecr).not.toMatch(/principals\s*\{[\s\S]{0,100}identifiers\s*=\s*\["\*"\]/);
   });
 
   it("attaches exact reviewed roles to inert compute", () => {
@@ -333,7 +348,7 @@ describe("Terraform foundation policy", () => {
 
   it("uses the exact ECR repository ARN for plan, apply, and publish permissions", () => {
     const expectedArn = "repository/ai-delivery-orchestrator-worker";
-    expect(bootstrap.match(new RegExp(expectedArn, "g"))).toHaveLength(3);
+    expect(bootstrap.match(new RegExp(expectedArn, "g"))).toHaveLength(4);
     expect(bootstrap).not.toContain("repository/ai-delivery-orchestrator-pilot-worker");
   });
 

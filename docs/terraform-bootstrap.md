@@ -466,6 +466,20 @@ require zero bootstrap drift after apply, and then require fresh pilot-IAM and
 main plans with no deletion, replacement, or taint before another protected
 deployment attempt.
 
+Security-group and VPC-endpoint creation authorizes tagged new target resources
+separately from the existing pilot VPC, subnet, route-table, and security-group
+dependencies; those dependencies must already carry the pilot project and
+environment tags. API Gateway authority names the create collection and child
+paths explicitly. Lambda container-image creation also requires a repository
+resource policy: only the Lambda service may pull, only from the pilot account,
+and only for pilot-prefixed function source ARNs.
+
+If task-definition registration succeeds but its immediate provider read fails,
+verify exactly one active task definition for the expected family and inspect
+the state for a single matching taint. Do not accept replacement. Untaint only
+that verified address after an explicit human checkpoint, then regenerate the
+main plan.
+
 This repository change costs nothing until applied. S3 state, ECR
 storage/scanning, public IPv4 usage, Secrets Manager containers, CloudWatch,
 and notifications can incur charges after creation. AWS Budgets may also have

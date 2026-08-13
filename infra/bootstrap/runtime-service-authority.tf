@@ -90,9 +90,12 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     resources = ["arn:aws:lambda:${var.aws_region}:${var.aws_account_id}:function:${local.pilot_name}-*"]
   }
   statement {
-    sid       = "ManagePilotApiGateway"
-    actions   = ["apigateway:DELETE", "apigateway:GET", "apigateway:PATCH", "apigateway:POST", "apigateway:PUT"]
-    resources = ["arn:aws:apigateway:${var.aws_region}::/apis*"]
+    sid     = "ManagePilotApiGateway"
+    actions = ["apigateway:DELETE", "apigateway:GET", "apigateway:PATCH", "apigateway:POST", "apigateway:PUT"]
+    resources = [
+      "arn:aws:apigateway:${var.aws_region}::/apis",
+      "arn:aws:apigateway:${var.aws_region}::/apis/*",
+    ]
   }
   statement {
     sid = "ManagePilotAutoscaling"
@@ -114,9 +117,12 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     resources = ["arn:aws:cloudwatch::${var.aws_account_id}:dashboard/${local.pilot_name}"]
   }
   statement {
-    sid       = "CreateTaggedPilotEc2Resources"
-    actions   = ["ec2:CreateSecurityGroup", "ec2:CreateVpcEndpoint"]
-    resources = ["*"]
+    sid     = "CreateTaggedPilotEc2Resources"
+    actions = ["ec2:CreateSecurityGroup", "ec2:CreateVpcEndpoint"]
+    resources = [
+      "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:security-group/*",
+      "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:vpc-endpoint/*",
+    ]
     condition {
       test     = "StringEquals"
       variable = "aws:RequestTag/Project"
@@ -125,6 +131,26 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     condition {
       test     = "StringEquals"
       variable = "aws:RequestTag/Environment"
+      values   = ["pilot"]
+    }
+  }
+  statement {
+    sid     = "UseTaggedPilotNetworkForCreate"
+    actions = ["ec2:CreateSecurityGroup", "ec2:CreateVpcEndpoint"]
+    resources = [
+      "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:route-table/*",
+      "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:security-group/*",
+      "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:subnet/*",
+      "arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:vpc/*",
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Project"
+      values   = ["ai-delivery-orchestrator"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Environment"
       values   = ["pilot"]
     }
   }
@@ -160,6 +186,13 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
       variable = "aws:ResourceTag/Environment"
       values   = ["pilot"]
     }
+  }
+  statement {
+    sid = "ManagePilotEcrLambdaPolicy"
+    actions = [
+      "ecr:DeleteRepositoryPolicy", "ecr:GetRepositoryPolicy", "ecr:SetRepositoryPolicy",
+    ]
+    resources = ["arn:aws:ecr:${var.aws_region}:${var.aws_account_id}:repository/ai-delivery-orchestrator-worker"]
   }
 }
 
