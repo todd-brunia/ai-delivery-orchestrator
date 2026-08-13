@@ -289,6 +289,11 @@ data "aws_iam_policy_document" "github_apply_rds_kms" {
       values   = ["true"]
     }
   }
+  statement {
+    sid       = "CreateRdsManagedMasterSecret"
+    actions   = ["secretsmanager:CreateSecret"]
+    resources = ["arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:rds!cluster-*"]
+  }
 }
 
 resource "aws_iam_policy" "github_apply_rds_kms" {
