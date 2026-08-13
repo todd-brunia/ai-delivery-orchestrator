@@ -476,6 +476,10 @@ tag-resource paths explicitly. Lambda container-image creation also requires a
 repository resource policy: only the Lambda service may pull, only from the
 pilot account, and only for pilot-prefixed function source ARNs.
 
+The human-controlled bootstrap root owns the no-cost RDS service-linked role
+required for the account's first database cluster. GitHub plan and apply roles
+cannot create service-linked roles.
+
 Foundation provisioning requires the immutable image for the exact selected
 current-main commit to have been published first. The protected workflow proves
 that tag exists and supplies the selected commit as `worker_image_sha` before it
@@ -498,12 +502,21 @@ writer, and subnet group. Lambda concurrency and API Gateway resource tags are
 part of their normal create/update lifecycle and remain restricted to the exact
 pilot function and API paths. Terraform refresh also inspects Lambda concurrency
 and published-version metadata without granting invocation or code access.
+The pilot account currently has the minimum Lambda concurrency quota, which AWS
+requires to remain entirely unreserved. That account-wide quota bounds both
+functions; per-function reservations remain unset until a separately reviewed
+quota increase can preserve AWS's required unreserved pool.
 
 If task-definition registration succeeds but its immediate provider read fails,
 verify exactly one active task definition for the expected family and inspect
 the state for a single matching taint. Do not accept replacement. Untaint only
 that verified address after an explicit human checkpoint, then regenerate the
 main plan.
+
+AWS does not support resource-level authorization for
+`ecs:DescribeTaskDefinition`. The protected apply policy therefore grants that
+single read-only action on `Resource: "*"`; task registration, deregistration,
+service lifecycle, and role passing remain independently constrained.
 
 This repository change costs nothing until applied. S3 state, ECR
 storage/scanning, public IPv4 usage, Secrets Manager containers, CloudWatch,

@@ -46,6 +46,8 @@ describe("Terraform foundation policy", () => {
   });
 
   it("provisions a protected isolated Aurora Serverless v2 database", () => {
+    expect(bootstrap).toContain('resource "aws_iam_service_linked_role" "rds"');
+    expect(bootstrap).toContain('aws_service_name = "rds.amazonaws.com"');
     expect(pilot).toContain('resource "aws_rds_cluster" "application"');
     expect(pilot).toContain('engine                          = "aurora-postgresql"');
     expect(pilot).toContain("manage_master_user_password     = true");
@@ -111,7 +113,7 @@ describe("Terraform foundation policy", () => {
   it("exposes only bounded webhook ingress through API Gateway and Lambda", () => {
     expect(pilot).toContain('route_key = "POST /github/webhooks"');
     expect(pilot).toContain('payload_format_version = "2.0"');
-    expect(pilot).toContain("reserved_concurrent_executions = 5");
+    expect(pilot).not.toContain("reserved_concurrent_executions");
     expect(pilot).toContain('entry_point = ["node_modules/.bin/aws-lambda-ric"]');
     expect(pilot).toContain('command     = ["dist/github/webhooks/v1/lambda-handler.handler"]');
     expect(pilot).toContain('WEBHOOK_SECRET_ARN');
@@ -295,6 +297,7 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('"lambda:PutFunctionConcurrency"');
     expect(runtimeAuthority).toContain('"lambda:DeleteFunctionConcurrency"');
     expect(runtimeAuthority).toContain('"lambda:ListVersionsByFunction"');
+    expect(runtimeAuthority).toMatch(/sid\s*= "InspectTaskDefinitions"[\s\S]*?actions\s*= \["ecs:DescribeTaskDefinition"\][\s\S]*?resources = \["\*"\]/);
     expect(runtimeAuthority).toContain('"apigateway:TagResource"');
     expect(runtimeAuthority).toContain('"apigateway:UntagResource"');
     expect(runtimeAuthority).not.toContain("iam:PassRole");
@@ -316,8 +319,8 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain("task_role_arn            = var.worker_task_role_arn");
     expect(pilot).toContain("execution_role_arn       = var.migration_execution_role_arn");
     expect(pilot).toContain("task_role_arn            = var.migration_task_role_arn");
-    expect(pilot).toContain("role                           = var.webhook_lambda_role_arn");
-    expect(pilot).toContain("role                           = var.operator_lambda_role_arn");
+    expect(pilot).toContain("role          = var.webhook_lambda_role_arn");
+    expect(pilot).toContain("role          = var.operator_lambda_role_arn");
   });
 
   it("separates pilot IAM ownership behind an exact reference contract", () => {
