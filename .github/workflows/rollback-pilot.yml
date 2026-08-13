@@ -101,7 +101,15 @@ jobs:
         run: |
           terraform -chdir=infra/environments/pilot init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
           terraform -chdir=infra/environments/pilot plan -input=false -lock-timeout=5m -out=pilot-rollback.tfplan -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
-          test "$(terraform -chdir=infra/environments/pilot show -json pilot-rollback.tfplan | jq '[.resource_changes[]? | select(.change.actions | index("delete"))] | length')" -eq 0
+          changes="$(terraform -chdir=infra/environments/pilot show -json pilot-rollback.tfplan | jq -c '[.resource_changes[]? | select(.change.actions != ["no-op"]) | {address,actions:.change.actions}]')"
+          disallowed_destructive="$(jq -r '
+            def allowed_task_definition_replacement:
+              ((.address == "aws_ecs_task_definition.worker" or .address == "aws_ecs_task_definition.migration") and .actions == ["delete", "create"]);
+            .[] | select(.actions | index("delete")) | select(allowed_task_definition_replacement | not) | .address
+          ' <<< "$changes")"
+          test -z "$disallowed_destructive"
+          unexpected="$(jq -r '.[] | select(.address | test("^(aws_ecs_task_definition\\.(worker|migration)|aws_lambda_function\\.(webhook|operator)|aws_ecs_service\\.worker)$") | not) | .address' <<< "$changes")"
+          test -z "$unexpected"
       - name: Apply saved rollback plan without reverting migrations
         run: terraform -chdir=infra/environments/pilot apply -input=false -lock-timeout=5m pilot-rollback.tfplan
       - name: Return runtime to safe idle

@@ -154,14 +154,21 @@ jobs:
           set -euo pipefail
           destructive_changes="$(
             terraform -chdir=infra/environments/pilot show -json pilot.tfplan |
-              jq -r '.resource_changes[]? | select(.change.actions | index("delete")) | "\(.address): \(.change.actions | join(","))"'
+              jq -r '
+                def allowed_task_definition_replacement:
+                  ((.address == "aws_ecs_task_definition.worker" or .address == "aws_ecs_task_definition.migration") and .change.actions == ["delete", "create"]);
+                .resource_changes[]?
+                | select(.change.actions | index("delete"))
+                | select(allowed_task_definition_replacement | not)
+                | "\(.address): \(.change.actions | join(","))"
+              '
           )"
           if [ -n "$destructive_changes" ]; then
             echo "::error::Saved pilot plan contains delete or replacement actions"
             printf '%s\n' "$destructive_changes"
             exit 1
           fi
-          echo "Saved pilot plan contains no delete or replacement actions."
+          echo "Saved pilot plan contains no unapproved delete or replacement actions."
       - name: Apply selected plan
         run: terraform -chdir=infra/environments/pilot apply -input=false -lock-timeout=5m pilot.tfplan
       - name: Export concrete main-stack references

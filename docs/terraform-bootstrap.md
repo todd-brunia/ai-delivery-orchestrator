@@ -482,6 +482,13 @@ that tag exists and supplies the selected commit as `worker_image_sha` before it
 creates the saved main plan; it never plans Lambda against the all-zero inert
 placeholder.
 
+ECS task definitions are immutable. Image promotion therefore appears as a
+Terraform `delete,create` replacement even though AWS registers a new revision
+before deregistering the prior revision. Foundation, deploy, and rollback gates
+allow that exact action pair only for the worker and migration task-definition
+addresses. Standalone deletes, every other replacement, and unrelated runtime
+deployment changes remain fail-closed.
+
 If task-definition registration succeeds but its immediate provider read fails,
 verify exactly one active task definition for the expected family and inspect
 the state for a single matching taint. Do not accept replacement. Untaint only
