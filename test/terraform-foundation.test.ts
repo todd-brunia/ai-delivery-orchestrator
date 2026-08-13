@@ -308,8 +308,13 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).not.toContain('db:${local.pilot_name}-database-1');
     expect(runtimeAuthority).toContain('data "aws_kms_alias" "rds"');
     expect(runtimeAuthority).toContain('name = "alias/aws/rds"');
+    expect(runtimeAuthority).toContain('data "aws_kms_alias" "secretsmanager"');
+    expect(runtimeAuthority).toContain('name = "alias/aws/secretsmanager"');
     expect(runtimeAuthority).toContain('sid       = "DescribeAwsManagedRdsKey"');
     expect(runtimeAuthority).toContain('actions   = ["kms:DescribeKey"]');
+    expect(runtimeAuthority).toContain('sid       = "DescribeAwsManagedSecretsManagerKey"');
+    expect(runtimeAuthority).toContain('resources = [data.aws_kms_alias.secretsmanager.target_key_arn]');
+    expect(runtimeAuthority).toMatch(/sid\s*= "DescribeAwsManagedSecretsManagerKey"[\s\S]*?actions\s*= \["kms:DescribeKey"\][\s\S]*?resources = \[data\.aws_kms_alias\.secretsmanager\.target_key_arn\]/);
     expect(runtimeAuthority).toContain('sid       = "UseAwsManagedRdsKeyThroughRds"');
     expect(runtimeAuthority).toContain('actions   = ["kms:Decrypt", "kms:GenerateDataKey"]');
     expect(runtimeAuthority).toContain('variable = "kms:ViaService"');
@@ -319,6 +324,7 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('resources = [data.aws_kms_alias.rds.target_key_arn]');
     expect(runtimeAuthority).toContain('variable = "kms:GrantIsForAWSResource"');
     expect(runtimeAuthority).not.toContain('"kms:Encrypt"');
+    expect(runtimeAuthority.match(/data\.aws_kms_alias\.secretsmanager\.target_key_arn/g)).toHaveLength(1);
     expect(runtimeAuthority.match(/variable = "kms:ViaService"/g)).toHaveLength(1);
     expect(runtimeAuthority).not.toMatch(/"kms:(?:CreateKey|DisableKey|ScheduleKeyDeletion|PutKeyPolicy|CreateAlias)"/);
     expect(runtimeAuthority).toContain('"lambda:PutFunctionConcurrency"');
