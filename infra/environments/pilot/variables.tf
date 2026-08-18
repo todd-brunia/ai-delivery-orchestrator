@@ -109,6 +109,24 @@ variable "database_backup_retention_days" {
   }
 }
 
+variable "database_deletion_protection" {
+  description = "Enable deletion protection on the Aurora cluster; defaults to false for the ephemeral pilot environment."
+  type        = bool
+  default     = false
+}
+
+variable "database_skip_final_snapshot" {
+  description = "Skip final snapshot when destroying the Aurora cluster; defaults to true for the ephemeral pilot environment."
+  type        = bool
+  default     = true
+}
+
+variable "coordination_table_deletion_protection_enabled" {
+  description = "Enable deletion protection on the coordination DynamoDB table; defaults to false for the ephemeral pilot environment."
+  type        = bool
+  default     = false
+}
+
 variable "database_client_security_group_ids" {
   description = "Reviewed worker and migration security groups allowed to connect; empty keeps Aurora isolated."
   type        = map(string)

@@ -58,8 +58,8 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain("manage_master_user_password     = true");
     expect(pilot).toContain("storage_encrypted               = true");
     expect(pilot).toContain('kms_key_id                      = "arn:aws:kms:${var.aws_region}:${var.aws_account_id}:alias/aws/rds"');
-    expect(pilot).toContain("deletion_protection             = true");
-    expect(pilot).toContain("skip_final_snapshot             = false");
+    expect(pilot).toContain("deletion_protection             = var.database_deletion_protection");
+    expect(pilot).toContain("skip_final_snapshot             = var.database_skip_final_snapshot");
     expect(pilot).toContain("copy_tags_to_snapshot           = true");
     expect(pilot).toContain("serverlessv2_scaling_configuration");
     expect(pilot).toContain("publicly_accessible  = false");
@@ -78,7 +78,7 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain('resource "aws_dynamodb_table" "runtime_coordination"');
     expect(pilot).toContain('attribute_name = "expiresAtEpochSeconds"');
     expect(pilot).toContain("point_in_time_recovery");
-    expect(pilot).toContain("deletion_protection_enabled = true");
+    expect(pilot).toContain("deletion_protection_enabled = var.coordination_table_deletion_protection_enabled");
   });
 
   it("provisions inert private workers with bounded scale-to-zero capacity", () => {
@@ -301,8 +301,11 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('"ec2:RevokeSecurityGroupEgress"');
     expect(runtimeAuthority).toContain('"arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:security-group-rule/*"');
     expect(runtimeAuthority).toMatch(/sid\s*= "CreateTaggedPilotSecurityGroupRules"/);
-    expect(runtimeAuthority).toMatch(/sid\s*= "UseTaggedPilotSecurityGroupsForIngress"/);
+    expect(runtimeAuthority).toContain('"rds:CreateDBClusterSnapshot"');
+    expect(runtimeAuthority).toContain('"rds:DeleteDBClusterSnapshot"');
+    expect(runtimeAuthority).toContain('"rds:DescribeDBClusterSnapshots"');
     expect(runtimeAuthority).toContain('"arn:aws:rds:${var.aws_region}:${var.aws_account_id}:cluster:${local.pilot_name}"');
+    expect(runtimeAuthority).toContain('"arn:aws:rds:${var.aws_region}:${var.aws_account_id}:cluster-snapshot:${local.pilot_name}-*"');
     expect(runtimeAuthority).toContain('"arn:aws:rds:${var.aws_region}:${var.aws_account_id}:db:${local.pilot_name}-writer"');
     expect(runtimeAuthority).not.toContain('cluster:${local.pilot_name}-database');
     expect(runtimeAuthority).not.toContain('db:${local.pilot_name}-database-1');
@@ -477,6 +480,9 @@ describe("Terraform foundation policy", () => {
     expect(applyPolicy.match(/budgets:ListTagsForResource/g)).toHaveLength(1);
     expect(bootstrap).toContain("secret:ai-delivery-orchestrator/pilot/*");
     expect(bootstrap).toContain("budget/ai-delivery-orchestrator-pilot-monthly");
+    expect(bootstrap).not.toContain('"budgets:CreateBudget"');
+    expect(bootstrap).not.toContain('"budgets:DeleteBudget"');
+    expect(bootstrap).not.toContain('"budgets:DescribeBudget"');
   });
 
   it("documents the exact four-address tainted-state recovery contract", () => {

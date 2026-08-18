@@ -38,8 +38,8 @@ resource "aws_rds_cluster" "application" {
   backup_retention_period         = var.database_backup_retention_days
   preferred_backup_window         = "07:00-08:00"
   preferred_maintenance_window    = "sun:08:00-sun:09:00"
-  deletion_protection             = true
-  skip_final_snapshot             = false
+  deletion_protection             = var.database_deletion_protection
+  skip_final_snapshot             = var.database_skip_final_snapshot
   final_snapshot_identifier       = "${local.name}-final"
   copy_tags_to_snapshot           = true
   enabled_cloudwatch_logs_exports = ["postgresql"]

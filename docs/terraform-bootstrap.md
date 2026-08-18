@@ -533,8 +533,8 @@ access.
 
 Ingress-rule creation evaluates both the tagged new security-group-rule and the
 already-tagged target security group, so protected authority treats those
-resource types separately. The RDS boundary names the exact Terraform cluster,
-writer, and subnet group. Lambda concurrency and API Gateway resource tags are
+resource types separately. The RDS boundary names the exact Terraform cluster, writer, subnet group,
+and cluster snapshot prefix. Lambda concurrency and API Gateway resource tags are
 part of their normal create/update lifecycle and remain restricted to the exact
 pilot function and API paths. Terraform refresh also inspects Lambda concurrency
 and published-version metadata without granting invocation or code access.

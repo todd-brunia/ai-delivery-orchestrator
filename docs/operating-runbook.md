@@ -105,8 +105,9 @@ failure is recorded; derived installation tokens remain live until expiry.
 
 ## PostgreSQL lifecycle
 
-The pilot Aurora cluster is private, encrypted, deletion-protected, backed up
-for at least seven days, and requires a final snapshot. Terraform manages the
+The pilot Aurora cluster is private, encrypted, backed up
+for at least seven days, and manages deletion protection and final snapshot behavior
+through explicit variables (defaulting to clean destroy in the ephemeral pilot). Terraform manages the
 cluster and an empty connectivity allowlist; AWS manages the master password.
 Do not place the managed secret ARN, endpoint, or connection string in issue or
 workflow output. Worker and migration security groups are added only after
