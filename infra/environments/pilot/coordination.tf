@@ -53,6 +53,6 @@ resource "aws_dynamodb_table" "runtime_coordination" {
   server_side_encryption {
     enabled = true
   }
-  deletion_protection_enabled = true
+  deletion_protection_enabled = var.coordination_table_deletion_protection_enabled
   tags                        = local.tags
 }

@@ -151,7 +151,7 @@ data "aws_iam_policy_document" "github_plan" {
   }
   statement {
     sid       = "InspectPilotBudget"
-    actions   = ["budgets:DescribeBudget", "budgets:ListTagsForResource", "budgets:ViewBudget"]
+    actions   = ["budgets:ListTagsForResource", "budgets:ViewBudget"]
     resources = ["arn:aws:budgets::${var.aws_account_id}:budget/ai-delivery-orchestrator-pilot-monthly"]
   }
   statement {
@@ -297,8 +297,8 @@ data "aws_iam_policy_document" "github_apply" {
   statement {
     sid = "ManagePilotBudget"
     actions = [
-      "budgets:CreateBudget", "budgets:DeleteBudget", "budgets:DescribeBudget", "budgets:ViewBudget",
       "budgets:ListTagsForResource", "budgets:ModifyBudget", "budgets:TagResource", "budgets:UntagResource",
+      "budgets:ViewBudget",
     ]
     resources = ["arn:aws:budgets::${var.aws_account_id}:budget/ai-delivery-orchestrator-pilot-monthly"]
   }
