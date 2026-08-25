@@ -31,7 +31,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1108.0",
+    "@aws-sdk/client-dynamodb": "^3.1116.0",
     "@aws-sdk/client-secrets-manager": "^3.1116.0",
     "@aws-sdk/client-sqs": "^3.1112.0",
     "@langchain/langgraph": "^1.4.9",
