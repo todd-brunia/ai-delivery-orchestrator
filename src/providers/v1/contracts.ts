@@ -4,6 +4,88 @@ import { ConflictDomainSchema, DependencyEdgeSchema, RepositoryNameSchema, RiskA
 
 export const PROVIDER_CONTRACT_VERSION = "providers/v1" as const;
 const shaSchema = z.string().regex(/^[a-f0-9]{40}$/);
+const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
+const repositoryIdSchema = z.string().regex(/^[1-9][0-9]{0,19}$/);
+
+export const GitHubReadConfigV1Schema = z.object({
+  version: z.literal("github-read/v1"),
+  repository: RepositoryNameSchema,
+  repositoryId: repositoryIdSchema,
+  appId: repositoryIdSchema,
+  installationId: repositoryIdSchema,
+  installationAccount: z.string().regex(/^[A-Za-z0-9-]{1,39}$/),
+  apiBaseUrl: z.literal("https://api.github.com"),
+  apiVersion: z.literal("2022-11-28"),
+  maxPages: z.number().int().min(1).max(20),
+  maxItems: z.number().int().min(1).max(500),
+  maxResponseBytes: z.number().int().min(1_024).max(5_000_000),
+  timeoutMilliseconds: z.number().int().min(100).max(30_000),
+  tokenTtlSeconds: z.number().int().min(60).max(3_600),
+}).strict();
+export type GitHubReadConfigV1 = z.infer<typeof GitHubReadConfigV1Schema>;
+
+export const GitHubReadEvidenceSchema = z.object({
+  uri: z.string().min(1).max(2_000),
+  observedAt: z.iso.datetime({ offset: true }),
+  sha256: sha256Schema.optional(),
+}).strict();
+export type GitHubReadEvidence = z.infer<typeof GitHubReadEvidenceSchema>;
+
+export const CanonicalPlanSchema = z.object({
+  issueNumber: z.number().int().positive(),
+  commentId: repositoryIdSchema,
+  bodySha256: sha256Schema,
+  createdAt: z.iso.datetime({ offset: true }),
+  updatedAt: z.iso.datetime({ offset: true }),
+  evidence: GitHubReadEvidenceSchema,
+}).strict();
+export type CanonicalPlan = z.infer<typeof CanonicalPlanSchema>;
+
+export const CanonicalCheckSchema = z.object({
+  name: z.string().min(1).max(500),
+  status: z.enum(["queued", "in_progress", "completed"]),
+  conclusion: z.enum(["success", "failure", "cancelled", "skipped", "neutral", "timed_out", "action_required", "stale", "unknown"]).optional(),
+  headSha: shaSchema,
+  evidence: GitHubReadEvidenceSchema,
+}).strict();
+export type CanonicalCheck = z.infer<typeof CanonicalCheckSchema>;
+
+export const OpenAiAnalysisConfigV1Schema = z.object({
+  version: z.literal("openai-analysis/v1"),
+  projectId: z.string().regex(/^proj_[A-Za-z0-9_-]{8,100}$/),
+  credentialReference: z.string().regex(/^ai-delivery-orchestrator\/pilot\/(portal|orchestrator)-openai-(builder|reviewer)-api-key$/),
+  timeoutMilliseconds: z.number().int().min(100).max(30_000),
+  maxRetries: z.number().int().min(0).max(3),
+  maxOutputTokens: z.number().int().min(64).max(16_384),
+}).strict();
+export type OpenAiAnalysisConfigV1 = z.infer<typeof OpenAiAnalysisConfigV1Schema>;
+
+export const ModelArtifactSchema = z.object({
+  kind: z.enum(["issue_bundle", "exact_pull_request_diff"]),
+  sha256: sha256Schema,
+  bytes: z.string().min(1).max(500_000),
+}).strict();
+export type ModelArtifact = z.infer<typeof ModelArtifactSchema>;
+
+const mutationBase = {
+  version: z.literal("github-mutation/v1"),
+  idempotencyKey: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]{7,199}$/),
+  repository: RepositoryNameSchema,
+  repositoryId: repositoryIdSchema,
+  actorRole: z.enum(["builder", "reviewer"]),
+  issueNumber: z.number().int().positive().optional(),
+  pullRequestNumber: z.number().int().positive().optional(),
+  expectedHeadSha: shaSchema.optional(),
+  expectedStateSha256: sha256Schema,
+  expiresAt: z.iso.datetime({ offset: true }),
+};
+export const GitHubExecutionIntentSchema = z.discriminatedUnion("type", [
+  z.object({ ...mutationBase, type: z.literal("set_labels"), actorRole: z.literal("builder"), issueNumber: z.number().int().positive(), labels: z.array(z.string().min(1).max(50)).min(1).max(8) }).strict(),
+  z.object({ ...mutationBase, type: z.literal("dispatch_workflow"), actorRole: z.literal("builder"), issueNumber: z.number().int().positive(), workflow: z.string().regex(/^[A-Za-z0-9_.-]+\.ya?ml$/), ref: shaSchema, inputs: z.record(z.string(), z.string().max(500)) }).strict(),
+  z.object({ ...mutationBase, type: z.literal("submit_review"), actorRole: z.literal("reviewer"), pullRequestNumber: z.number().int().positive(), expectedHeadSha: shaSchema, event: z.enum(["COMMENT", "REQUEST_CHANGES"]), body: z.string().min(1).max(20_000) }).strict(),
+  z.object({ ...mutationBase, type: z.literal("mark_ready_for_review"), actorRole: z.literal("builder"), pullRequestNumber: z.number().int().positive(), expectedHeadSha: shaSchema }).strict(),
+]);
+export type GitHubExecutionIntent = z.infer<typeof GitHubExecutionIntentSchema>;
 
 export const CanonicalIssueSchema = z.object({ version: z.literal(PROVIDER_CONTRACT_VERSION), repository: RepositoryNameSchema, number: z.number().int().positive(), nodeId: z.string().min(1), title: z.string().max(1000), body: z.string().max(100_000), state: z.enum(["open", "closed"]), labels: z.array(z.string().min(1)).max(100), updatedAt: z.iso.datetime({ offset: true }) }).strict();
 export type CanonicalIssue = z.infer<typeof CanonicalIssueSchema>;
