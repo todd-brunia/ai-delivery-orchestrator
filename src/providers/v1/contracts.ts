@@ -67,6 +67,26 @@ export const ModelArtifactSchema = z.object({
 }).strict();
 export type ModelArtifact = z.infer<typeof ModelArtifactSchema>;
 
+const mutationBase = {
+  version: z.literal("github-mutation/v1"),
+  idempotencyKey: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]{7,199}$/),
+  repository: RepositoryNameSchema,
+  repositoryId: repositoryIdSchema,
+  actorRole: z.enum(["builder", "reviewer"]),
+  issueNumber: z.number().int().positive().optional(),
+  pullRequestNumber: z.number().int().positive().optional(),
+  expectedHeadSha: shaSchema.optional(),
+  expectedStateSha256: sha256Schema,
+  expiresAt: z.iso.datetime({ offset: true }),
+};
+export const GitHubExecutionIntentSchema = z.discriminatedUnion("type", [
+  z.object({ ...mutationBase, type: z.literal("set_labels"), actorRole: z.literal("builder"), issueNumber: z.number().int().positive(), labels: z.array(z.string().min(1).max(50)).min(1).max(8) }).strict(),
+  z.object({ ...mutationBase, type: z.literal("dispatch_workflow"), actorRole: z.literal("builder"), issueNumber: z.number().int().positive(), workflow: z.string().regex(/^[A-Za-z0-9_.-]+\.ya?ml$/), ref: shaSchema, inputs: z.record(z.string(), z.string().max(500)) }).strict(),
+  z.object({ ...mutationBase, type: z.literal("submit_review"), actorRole: z.literal("reviewer"), pullRequestNumber: z.number().int().positive(), expectedHeadSha: shaSchema, event: z.enum(["COMMENT", "REQUEST_CHANGES"]), body: z.string().min(1).max(20_000) }).strict(),
+  z.object({ ...mutationBase, type: z.literal("mark_ready_for_review"), actorRole: z.literal("builder"), pullRequestNumber: z.number().int().positive(), expectedHeadSha: shaSchema }).strict(),
+]);
+export type GitHubExecutionIntent = z.infer<typeof GitHubExecutionIntentSchema>;
+
 export const CanonicalIssueSchema = z.object({ version: z.literal(PROVIDER_CONTRACT_VERSION), repository: RepositoryNameSchema, number: z.number().int().positive(), nodeId: z.string().min(1), title: z.string().max(1000), body: z.string().max(100_000), state: z.enum(["open", "closed"]), labels: z.array(z.string().min(1)).max(100), updatedAt: z.iso.datetime({ offset: true }) }).strict();
 export type CanonicalIssue = z.infer<typeof CanonicalIssueSchema>;
 
