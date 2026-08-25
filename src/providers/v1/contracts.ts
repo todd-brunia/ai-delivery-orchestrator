@@ -4,6 +4,51 @@ import { ConflictDomainSchema, DependencyEdgeSchema, RepositoryNameSchema, RiskA
 
 export const PROVIDER_CONTRACT_VERSION = "providers/v1" as const;
 const shaSchema = z.string().regex(/^[a-f0-9]{40}$/);
+const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
+const repositoryIdSchema = z.string().regex(/^[1-9][0-9]{0,19}$/);
+
+export const GitHubReadConfigV1Schema = z.object({
+  version: z.literal("github-read/v1"),
+  repository: RepositoryNameSchema,
+  repositoryId: repositoryIdSchema,
+  appId: repositoryIdSchema,
+  installationId: repositoryIdSchema,
+  installationAccount: z.string().regex(/^[A-Za-z0-9-]{1,39}$/),
+  apiBaseUrl: z.literal("https://api.github.com"),
+  apiVersion: z.literal("2022-11-28"),
+  maxPages: z.number().int().min(1).max(20),
+  maxItems: z.number().int().min(1).max(500),
+  maxResponseBytes: z.number().int().min(1_024).max(5_000_000),
+  timeoutMilliseconds: z.number().int().min(100).max(30_000),
+  tokenTtlSeconds: z.number().int().min(60).max(3_600),
+}).strict();
+export type GitHubReadConfigV1 = z.infer<typeof GitHubReadConfigV1Schema>;
+
+export const GitHubReadEvidenceSchema = z.object({
+  uri: z.string().min(1).max(2_000),
+  observedAt: z.iso.datetime({ offset: true }),
+  sha256: sha256Schema.optional(),
+}).strict();
+export type GitHubReadEvidence = z.infer<typeof GitHubReadEvidenceSchema>;
+
+export const CanonicalPlanSchema = z.object({
+  issueNumber: z.number().int().positive(),
+  commentId: repositoryIdSchema,
+  bodySha256: sha256Schema,
+  createdAt: z.iso.datetime({ offset: true }),
+  updatedAt: z.iso.datetime({ offset: true }),
+  evidence: GitHubReadEvidenceSchema,
+}).strict();
+export type CanonicalPlan = z.infer<typeof CanonicalPlanSchema>;
+
+export const CanonicalCheckSchema = z.object({
+  name: z.string().min(1).max(500),
+  status: z.enum(["queued", "in_progress", "completed"]),
+  conclusion: z.enum(["success", "failure", "cancelled", "skipped", "neutral", "timed_out", "action_required", "stale", "unknown"]).optional(),
+  headSha: shaSchema,
+  evidence: GitHubReadEvidenceSchema,
+}).strict();
+export type CanonicalCheck = z.infer<typeof CanonicalCheckSchema>;
 
 export const CanonicalIssueSchema = z.object({ version: z.literal(PROVIDER_CONTRACT_VERSION), repository: RepositoryNameSchema, number: z.number().int().positive(), nodeId: z.string().min(1), title: z.string().max(1000), body: z.string().max(100_000), state: z.enum(["open", "closed"]), labels: z.array(z.string().min(1)).max(100), updatedAt: z.iso.datetime({ offset: true }) }).strict();
 export type CanonicalIssue = z.infer<typeof CanonicalIssueSchema>;
