@@ -50,6 +50,23 @@ export const CanonicalCheckSchema = z.object({
 }).strict();
 export type CanonicalCheck = z.infer<typeof CanonicalCheckSchema>;
 
+export const OpenAiAnalysisConfigV1Schema = z.object({
+  version: z.literal("openai-analysis/v1"),
+  projectId: z.string().regex(/^proj_[A-Za-z0-9_-]{8,100}$/),
+  credentialReference: z.string().regex(/^ai-delivery-orchestrator\/pilot\/(portal|orchestrator)-openai-(builder|reviewer)-api-key$/),
+  timeoutMilliseconds: z.number().int().min(100).max(30_000),
+  maxRetries: z.number().int().min(0).max(3),
+  maxOutputTokens: z.number().int().min(64).max(16_384),
+}).strict();
+export type OpenAiAnalysisConfigV1 = z.infer<typeof OpenAiAnalysisConfigV1Schema>;
+
+export const ModelArtifactSchema = z.object({
+  kind: z.enum(["issue_bundle", "exact_pull_request_diff"]),
+  sha256: sha256Schema,
+  bytes: z.string().min(1).max(500_000),
+}).strict();
+export type ModelArtifact = z.infer<typeof ModelArtifactSchema>;
+
 export const CanonicalIssueSchema = z.object({ version: z.literal(PROVIDER_CONTRACT_VERSION), repository: RepositoryNameSchema, number: z.number().int().positive(), nodeId: z.string().min(1), title: z.string().max(1000), body: z.string().max(100_000), state: z.enum(["open", "closed"]), labels: z.array(z.string().min(1)).max(100), updatedAt: z.iso.datetime({ offset: true }) }).strict();
 export type CanonicalIssue = z.infer<typeof CanonicalIssueSchema>;
 
