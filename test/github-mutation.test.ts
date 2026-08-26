@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { GitHubMutationExecutor } from "../src/providers/v1/index.js";
+import { GitHubMutationExecutor, GitHubMutationOutboxConsumer } from "../src/providers/v1/index.js";
+import type { SprintRunRepository } from "../src/persistence/contracts.js";
 
 const repository = "todd-brunia/ai-consulting-client-portal";
 const sha = "a".repeat(40);
@@ -34,5 +35,26 @@ describe("GitHub mutation executor", () => {
     await expect(drift.execute(labelIntent)).rejects.toMatchObject({ code: "precondition_failed" });
     const ambiguous = new GitHubMutationExecutor({ assertCurrent: () => Promise.resolve() }, new FixtureTransport(503), new Set(["set_labels"]), () => new Date("2026-08-25T12:00:00.000Z"));
     await expect(ambiguous.execute(labelIntent)).rejects.toMatchObject({ code: "ambiguous" });
+  });
+
+  it("claims and completes only durable GitHub mutation outbox actions", async () => {
+    const intent = { ...base, actorRole: "reviewer", type: "submit_review", pullRequestNumber: 9, expectedHeadSha: sha, event: "COMMENT", body: "Sanitized finding." } as const;
+    let completed = 0; let retried = 0; let claimedTypes: readonly string[] | undefined;
+    const repository: Pick<SprintRunRepository, "claimOutbox" | "completeOutbox" | "retryOutbox"> = {
+      claimOutbox: async (_owner, _limit, _expires, _now, types) => { await Promise.resolve(); claimedTypes = types; return [{ id: "outbox-1", type: "github.mutation.execute", payload: intent, idempotencyKey: intent.idempotencyKey, attemptCount: 1, claimExpiresAt: "2026-08-25T12:01:00.000Z" }]; },
+      completeOutbox: async () => { await Promise.resolve(); completed += 1; return true; },
+      retryOutbox: async () => { await Promise.resolve(); retried += 1; return true; },
+    };
+    const executor = new GitHubMutationExecutor({ assertCurrent: () => Promise.resolve() }, new FixtureTransport(), new Set(["submit_review"]), () => new Date("2026-08-25T12:00:00.000Z"));
+    const consumer = new GitHubMutationOutboxConsumer(repository as SprintRunRepository, executor, "worker-1", 60_000, () => new Date("2026-08-25T12:00:00.000Z"));
+    await expect(consumer.consume()).resolves.toEqual([{ id: "outbox-1", outcome: "completed" }]);
+    expect(claimedTypes).toEqual(["github.mutation.execute"]);
+    expect(completed).toBe(1); expect(retried).toBe(0);
+  });
+
+  it("reconciles an ambiguous result before allowing an outbox retry", async () => {
+    const intent = { ...base, actorRole: "builder", type: "set_labels", issueNumber: 69, labels: ["implementation-proposed"] } as const;
+    const executor = new GitHubMutationExecutor({ assertCurrent: () => Promise.resolve() }, new FixtureTransport(503), new Set(["set_labels"]), () => new Date("2026-08-25T12:00:00.000Z"), { reconcile: () => Promise.resolve("confirmed") });
+    await expect(executor.execute(intent)).resolves.toEqual({ duplicate: true });
   });
 });

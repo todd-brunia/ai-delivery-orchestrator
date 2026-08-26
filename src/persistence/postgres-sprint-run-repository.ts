@@ -349,14 +349,14 @@ export class PostgresSprintRunRepository implements SprintRunRepository {
     finally { client.release(); }
   }
 
-  async claimOutbox(ownerId: string, limit: number, expiresAt: Date, now = new Date()): Promise<readonly ClaimedOutboxAction[]> {
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || expiresAt <= now) throw new Error("invalid outbox claim");
+  async claimOutbox(ownerId: string, limit: number, expiresAt: Date, now = new Date(), actionTypes?: readonly string[]): Promise<readonly ClaimedOutboxAction[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || expiresAt <= now || (actionTypes && (actionTypes.length === 0 || actionTypes.some((type) => !/^[a-z][a-z0-9._-]{1,100}$/.test(type))))) throw new Error("invalid outbox claim");
     const result = await this.pool.query<{ id: string; action_type: string; payload: Record<string, unknown>; idempotency_key: string; attempt_count: number; claim_expires_at: Date }>(`WITH candidates AS (
-      SELECT id FROM orchestrator.outbox WHERE status = 'pending' OR (status = 'claimed' AND claim_expires_at <= $3)
+      SELECT id FROM orchestrator.outbox WHERE (status = 'pending' OR (status = 'claimed' AND claim_expires_at <= $3)) AND ($5::text[] IS NULL OR action_type = ANY($5))
       ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT $1)
       UPDATE orchestrator.outbox o SET status = 'claimed', claimed_by = $2, claim_expires_at = $4,
         attempt_count = attempt_count + 1 FROM candidates WHERE o.id = candidates.id
-      RETURNING o.id, o.action_type, o.payload, o.idempotency_key, o.attempt_count, o.claim_expires_at`, [limit, ownerId, now, expiresAt]);
+      RETURNING o.id, o.action_type, o.payload, o.idempotency_key, o.attempt_count, o.claim_expires_at`, [limit, ownerId, now, expiresAt, actionTypes ? [...actionTypes] : null]);
     return result.rows.map((row) => ({ id: row.id, type: row.action_type, payload: row.payload, idempotencyKey: row.idempotency_key, attemptCount: row.attempt_count, claimExpiresAt: row.claim_expires_at.toISOString() }));
   }
 
