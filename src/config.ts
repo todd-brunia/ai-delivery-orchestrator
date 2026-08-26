@@ -5,7 +5,7 @@ export interface WorkerConfig {
   readonly nodeEnvironment: "development" | "test" | "production";
   readonly logLevel: "debug" | "info" | "warn" | "error";
   readonly heartbeatMilliseconds: number;
-  readonly providerMode: "stub";
+  readonly providerMode: "stub" | "openai-analysis";
 }
 
 export function loadWorkerConfig(
@@ -29,8 +29,8 @@ export function loadWorkerConfig(
   ) {
     throw new Error("WORKER_HEARTBEAT_MS must be an integer from 1000 to 300000");
   }
-  if (providerMode !== "stub") {
-    throw new Error("PROVIDER_MODE must be stub; real providers are not enabled");
+  if (providerMode !== "stub" && providerMode !== "openai-analysis") {
+    throw new Error("PROVIDER_MODE must be stub or openai-analysis");
   }
 
   return {
