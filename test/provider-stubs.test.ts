@@ -7,9 +7,16 @@ const sha = "a".repeat(40);
 const hash = "b".repeat(64);
 
 describe("local provider foundation", () => {
-  it("permits only stub composition", () => {
+  it("keeps stubs as the default and requires explicit dependencies for analysis", () => {
     expect(createProviderSet("stub")).toBeDefined();
     expect(() => createProviderSet("github")).toThrow();
+    expect(() => createProviderSet("openai-analysis")).toThrow("requires explicit dependencies");
+    expect(createProviderSet("openai-analysis", {
+      githubRead: new StubGitHubReadAdapter(),
+      apiKeys: { load: () => Promise.resolve("sk-abcdefghijklmnopqrstuvwxyz") },
+      transport: { request: () => Promise.resolve({ status: 500, body: "{}" }) },
+      config: { version: "openai-analysis/v1", projectId: "proj_abcdefgh", credentialReference: "ai-delivery-orchestrator/pilot/portal-openai-reviewer-api-key", timeoutMilliseconds: 1_000, maxRetries: 0, maxOutputTokens: 1_000 },
+    }).githubMutation).toBeInstanceOf(StubGitHubMutationAdapter);
   });
 
   it("returns isolated deterministic GitHub fixtures and fails closed", async () => {

@@ -28,12 +28,16 @@ describe("loadWorkerConfig", () => {
     });
   });
 
+  it("permits the explicitly named analysis-only mode", () => {
+    expect(loadWorkerConfig({ PROVIDER_MODE: "openai-analysis" }).providerMode).toBe("openai-analysis");
+  });
+
   it.each([
     [{ NODE_ENV: "staging" }, "NODE_ENV is invalid"],
     [{ LOG_LEVEL: "trace" }, "LOG_LEVEL is invalid"],
     [{ WORKER_HEARTBEAT_MS: "999" }, "WORKER_HEARTBEAT_MS"],
     [{ WORKER_HEARTBEAT_MS: "not-a-number" }, "WORKER_HEARTBEAT_MS"],
-    [{ PROVIDER_MODE: "github" }, "real providers are not enabled"],
+    [{ PROVIDER_MODE: "github" }, "PROVIDER_MODE must be stub or openai-analysis"],
   ])("rejects invalid configuration", (environment, message) => {
     expect(() => loadWorkerConfig(environment)).toThrow(message);
   });

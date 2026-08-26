@@ -1,4 +1,5 @@
 export * from "./composition.js";
+export * from "./canonical-artifacts.js";
 export * from "./contracts.js";
 export * from "./github-read.js";
 export * from "./github-mutation.js";
