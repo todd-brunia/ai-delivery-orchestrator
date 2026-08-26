@@ -14,6 +14,11 @@ export class StubGitHubReadAdapter implements GitHubReadPort {
   async getPullRequest(repository: string, number: number): Promise<CanonicalPullRequest> { await Promise.resolve(); const value = this.pullRequests.get(key(repository, number)); if (!value) throw new Error("missing stub pull request fixture"); return clone(value); }
   async getMarkedPlan(_repository: string, number: number): Promise<CanonicalPlan> { await Promise.resolve(); const value = this.plans.get(String(number)); if (!value) throw new Error("missing stub plan fixture"); return clone(value); }
   async getChecks(repository: string, headSha: string): Promise<readonly CanonicalCheck[]> { await Promise.resolve(); const value = this.checks.get(`${repository}@${headSha}`); if (!value) throw new Error("missing stub check fixture"); return clone(value); }
+  async getExactDiff(): Promise<never> { await Promise.resolve(); throw new Error("missing stub exact diff fixture"); }
+  async getReviews(): Promise<never> { await Promise.resolve(); throw new Error("missing stub review fixture"); }
+  async getWorkflowRuns(): Promise<never> { await Promise.resolve(); throw new Error("missing stub workflow run fixture"); }
+  async getRepositoryConfiguration(): Promise<never> { await Promise.resolve(); throw new Error("missing stub repository configuration fixture"); }
+  async getInstallation(): Promise<never> { await Promise.resolve(); throw new Error("missing stub installation fixture"); }
 }
 
 export class StubGitHubMutationAdapter implements GitHubMutationPort {
