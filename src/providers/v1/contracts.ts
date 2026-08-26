@@ -21,6 +21,13 @@ export const GitHubReadConfigV1Schema = z.object({
   maxResponseBytes: z.number().int().min(1_024).max(5_000_000),
   timeoutMilliseconds: z.number().int().min(100).max(30_000),
   tokenTtlSeconds: z.number().int().min(60).max(3_600),
+  requiredPermissions: z.object({
+    actions: z.literal("read"),
+    contents: z.literal("read"),
+    issues: z.literal("read"),
+    metadata: z.literal("read"),
+    pull_requests: z.literal("read"),
+  }).strict(),
 }).strict();
 export type GitHubReadConfigV1 = z.infer<typeof GitHubReadConfigV1Schema>;
 
@@ -49,6 +56,71 @@ export const CanonicalCheckSchema = z.object({
   evidence: GitHubReadEvidenceSchema,
 }).strict();
 export type CanonicalCheck = z.infer<typeof CanonicalCheckSchema>;
+
+const evidenceSchema = GitHubReadEvidenceSchema;
+export const CanonicalDiffFileSchema = z.object({
+  path: z.string().min(1).max(1_000),
+  status: z.enum(["added", "modified", "removed", "renamed", "copied", "changed", "unchanged"]),
+  previousPath: z.string().min(1).max(1_000).optional(),
+  patch: z.string().max(200_000).optional(),
+}).strict();
+export const CanonicalDiffSchema = z.object({
+  repository: RepositoryNameSchema,
+  baseSha: shaSchema,
+  headSha: shaSchema,
+  sha256: sha256Schema,
+  files: z.array(CanonicalDiffFileSchema).max(500),
+  evidence: evidenceSchema,
+}).strict();
+export type CanonicalDiff = z.infer<typeof CanonicalDiffSchema>;
+
+export const CanonicalReviewSchema = z.object({
+  id: repositoryIdSchema,
+  pullRequestNumber: z.number().int().positive(),
+  headSha: shaSchema,
+  state: z.enum(["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED", "PENDING"]),
+  submittedAt: z.iso.datetime({ offset: true }).optional(),
+  authorLogin: z.string().min(1).max(100),
+  evidence: evidenceSchema,
+}).strict();
+export type CanonicalReview = z.infer<typeof CanonicalReviewSchema>;
+
+export const CanonicalWorkflowRunSchema = z.object({
+  id: repositoryIdSchema,
+  workflowId: repositoryIdSchema,
+  workflowPath: z.string().min(1).max(1_000),
+  event: z.string().min(1).max(100),
+  status: z.enum(["queued", "in_progress", "completed"]),
+  conclusion: z.string().min(1).max(100).nullable(),
+  headSha: shaSchema,
+  createdAt: z.iso.datetime({ offset: true }),
+  updatedAt: z.iso.datetime({ offset: true }),
+  evidence: evidenceSchema,
+}).strict();
+export type CanonicalWorkflowRun = z.infer<typeof CanonicalWorkflowRunSchema>;
+
+export const CanonicalRepositoryConfigurationSchema = z.object({
+  repository: RepositoryNameSchema,
+  repositoryId: repositoryIdSchema,
+  defaultBranch: z.string().min(1).max(255),
+  visibility: z.enum(["public", "private", "internal"]),
+  allowSquashMerge: z.boolean(),
+  archive: z.boolean(),
+  configurationSha256: sha256Schema,
+  evidence: evidenceSchema,
+}).strict();
+export type CanonicalRepositoryConfiguration = z.infer<typeof CanonicalRepositoryConfigurationSchema>;
+
+export const CanonicalInstallationSchema = z.object({
+  appId: repositoryIdSchema,
+  installationId: repositoryIdSchema,
+  accountLogin: z.string().min(1).max(100),
+  repositoryId: repositoryIdSchema,
+  repository: RepositoryNameSchema,
+  permissions: z.record(z.string().min(1).max(100), z.string().min(1).max(100)),
+  evidence: evidenceSchema,
+}).strict();
+export type CanonicalInstallation = z.infer<typeof CanonicalInstallationSchema>;
 
 export const OpenAiAnalysisConfigV1Schema = z.object({
   version: z.literal("openai-analysis/v1"),

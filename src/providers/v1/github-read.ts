@@ -2,14 +2,24 @@ import { createHash, createSign } from "node:crypto";
 
 import {
   CanonicalCheckSchema,
+  CanonicalDiffSchema,
+  CanonicalInstallationSchema,
   CanonicalIssueSchema,
   CanonicalPlanSchema,
   CanonicalPullRequestSchema,
+  CanonicalRepositoryConfigurationSchema,
+  CanonicalReviewSchema,
+  CanonicalWorkflowRunSchema,
   GitHubReadConfigV1Schema,
   type CanonicalCheck,
+  type CanonicalDiff,
+  type CanonicalInstallation,
   type CanonicalIssue,
   type CanonicalPlan,
   type CanonicalPullRequest,
+  type CanonicalRepositoryConfiguration,
+  type CanonicalReview,
+  type CanonicalWorkflowRun,
   type GitHubReadConfigV1,
 } from "./contracts.js";
 import type { GitHubReadPort } from "./ports.js";
@@ -49,16 +59,21 @@ export class GitHubAppReadAdapter implements GitHubReadPort {
 
   private readonly config: GitHubReadConfigV1;
 
+  private appJwt(): Promise<string> {
+    return this.keys.load(this.secretReference).then((key) => {
+      if (!key.includes("BEGIN") || key.length > 20_000) throw new GitHubReadError("authentication", "GitHub App key is unavailable");
+      const issuedAt = Math.floor(this.now().getTime() / 1000) - 30;
+      const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+      const payload = base64url(JSON.stringify({ iat: issuedAt, exp: issuedAt + 540, iss: this.config.appId }));
+      const signer = createSign("RSA-SHA256"); signer.update(`${header}.${payload}`); signer.end();
+      return `${header}.${payload}.${signer.sign(key).toString("base64url")}`;
+    });
+  }
+
   private async installationToken(): Promise<string> {
     if (this.token && this.token.expiresAt - this.now().getTime() > 30_000) return this.token.value;
-    const key = await this.keys.load(this.secretReference);
-    if (!key.includes("BEGIN") || key.length > 20_000) throw new GitHubReadError("authentication", "GitHub App key is unavailable");
-    const issuedAt = Math.floor(this.now().getTime() / 1000) - 30;
-    const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-    const payload = base64url(JSON.stringify({ iat: issuedAt, exp: issuedAt + 540, iss: this.config.appId }));
-    const signer = createSign("RSA-SHA256"); signer.update(`${header}.${payload}`); signer.end();
-    const jwt = `${header}.${payload}.${signer.sign(key).toString("base64url")}`;
-    const response = await this.transport.request({ method: "POST", url: githubPath(this.config, `/app/installations/${this.config.installationId}/access_tokens`), headers: this.headers(jwt), body: JSON.stringify({ repositories: [this.config.repository.split("/")[1]], permissions: { metadata: "read" } }), timeoutMilliseconds: this.config.timeoutMilliseconds });
+    const jwt = await this.appJwt();
+    const response = await this.transport.request({ method: "POST", url: githubPath(this.config, `/app/installations/${this.config.installationId}/access_tokens`), headers: this.headers(jwt), body: JSON.stringify({ repositories: [this.config.repository.split("/")[1]], permissions: this.config.requiredPermissions }), timeoutMilliseconds: this.config.timeoutMilliseconds });
     const parsed = this.parse(response) as { token?: unknown; expires_at?: unknown };
     if (typeof parsed.token !== "string" || typeof parsed.expires_at !== "string") throw new GitHubReadError("invalid_response", "GitHub token response is incomplete");
     const expiresAt = Date.parse(parsed.expires_at);
@@ -80,6 +95,28 @@ export class GitHubAppReadAdapter implements GitHubReadPort {
 
   private async get(path: string): Promise<unknown> { const token = await this.installationToken(); return this.parse(await this.transport.request({ method: "GET", url: githubPath(this.config, path), headers: this.headers(token), timeoutMilliseconds: this.config.timeoutMilliseconds })); }
   private assertRepository(repository: string): void { if (repository !== this.config.repository) throw new GitHubReadError("authorization", "repository is outside configured audience"); }
+  private evidence(uri: string, value?: string) { return { uri, observedAt: this.now().toISOString(), ...(value ? { sha256: digest(value) } : {}) }; }
+
+  private async list(path: string): Promise<readonly unknown[]> {
+    const items: unknown[] = [];
+    let next: string | undefined = githubPath(this.config, path);
+    for (let page = 0; next && page < this.config.maxPages; page += 1) {
+      const token = await this.installationToken();
+      const response = await this.transport.request({ method: "GET", url: next, headers: this.headers(token), timeoutMilliseconds: this.config.timeoutMilliseconds });
+      const parsed = this.parse(response);
+      if (!Array.isArray(parsed)) throw new GitHubReadError("invalid_response", "GitHub list response was not an array");
+      items.push(...(parsed as unknown[]));
+      if (items.length > this.config.maxItems) throw new GitHubReadError("response_bounds", "GitHub list exceeds configured item bound");
+      const match = response.headers.link?.match(/<([^>]+)>;\s*rel="next"/);
+      next = match?.[1];
+      if (next) {
+        const url = new URL(next);
+        if (url.origin !== this.config.apiBaseUrl || !url.pathname.startsWith(`/repos/${this.config.repository}/`)) throw new GitHubReadError("authorization", "GitHub pagination escaped configured repository");
+      }
+    }
+    if (next) throw new GitHubReadError("response_bounds", "GitHub pagination exceeds configured page bound");
+    return items;
+  }
 
   async getIssue(repository: string, number: number): Promise<CanonicalIssue> {
     this.assertRepository(repository); const item = await this.get(`/repos/${repository}/issues/${number}`) as Record<string, unknown>;
@@ -105,5 +142,60 @@ export class GitHubAppReadAdapter implements GitHubReadPort {
     this.assertRepository(repository); const response = await this.get(`/repos/${repository}/commits/${headSha}/check-runs?per_page=${this.config.maxItems}`) as { check_runs?: unknown };
     if (!Array.isArray(response.check_runs) || response.check_runs.length >= this.config.maxItems) throw new GitHubReadError("response_bounds", "GitHub check list is incomplete");
     return response.check_runs.map((check) => { const item = check as Record<string, unknown>; return CanonicalCheckSchema.parse({ name: item.name, status: item.status, conclusion: item.conclusion ?? undefined, headSha, evidence: { uri: `github://checks/${repository}/${headSha}/${String(item.id)}`, observedAt: this.now().toISOString() } }); });
+  }
+
+  async getExactDiff(repository: string, baseSha: string, headSha: string): Promise<CanonicalDiff> {
+    this.assertRepository(repository);
+    const response = await this.get(`/repos/${repository}/compare/${baseSha}...${headSha}`) as Record<string, unknown>;
+    if (!Array.isArray(response.files) || response.files.length > 500) throw new GitHubReadError("response_bounds", "GitHub diff files are incomplete");
+    const files = response.files.map((raw) => {
+      const item = raw as Record<string, unknown>;
+      return { path: item.filename, status: item.status, ...(typeof item.previous_filename === "string" ? { previousPath: item.previous_filename } : {}), ...(typeof item.patch === "string" ? { patch: item.patch } : {}) };
+    });
+    const bytes = JSON.stringify({ baseSha, headSha, files });
+    return CanonicalDiffSchema.parse({ repository, baseSha, headSha, sha256: digest(bytes), files, evidence: this.evidence(`github://compare/${repository}/${baseSha}...${headSha}`, bytes) });
+  }
+
+  async getReviews(repository: string, pullRequestNumber: number): Promise<readonly CanonicalReview[]> {
+    this.assertRepository(repository);
+    const reviews = await this.list(`/repos/${repository}/pulls/${pullRequestNumber}/reviews?per_page=${this.config.maxItems}`);
+    return reviews.map((raw) => {
+      const item = raw as Record<string, unknown>; const user = item.user as Record<string, unknown> | undefined;
+      return CanonicalReviewSchema.parse({ id: String(item.id), pullRequestNumber, headSha: item.commit_id, state: item.state, submittedAt: item.submitted_at ?? undefined, authorLogin: user?.login, evidence: this.evidence(`github://reviews/${repository}/${String(item.id)}`) });
+    });
+  }
+
+  async getWorkflowRuns(repository: string, headSha: string): Promise<readonly CanonicalWorkflowRun[]> {
+    this.assertRepository(repository);
+    const response = await this.get(`/repos/${repository}/actions/runs?head_sha=${headSha}&per_page=${this.config.maxItems}`) as Record<string, unknown>;
+    if (!Array.isArray(response.workflow_runs) || response.workflow_runs.length >= this.config.maxItems) throw new GitHubReadError("response_bounds", "GitHub workflow runs are incomplete");
+    return response.workflow_runs.map((raw) => {
+      const item = raw as Record<string, unknown>;
+      return CanonicalWorkflowRunSchema.parse({ id: String(item.id), workflowId: String(item.workflow_id), workflowPath: item.path, event: item.event, status: item.status, conclusion: item.conclusion ?? null, headSha: item.head_sha, createdAt: iso(item.created_at), updatedAt: iso(item.updated_at), evidence: this.evidence(`github://workflow-runs/${repository}/${String(item.id)}`) });
+    });
+  }
+
+  async getRepositoryConfiguration(repository: string): Promise<CanonicalRepositoryConfiguration> {
+    this.assertRepository(repository);
+    const item = await this.get(`/repos/${repository}`) as Record<string, unknown>;
+    const snapshot = JSON.stringify({ id: item.id, default_branch: item.default_branch, visibility: item.visibility, allow_squash_merge: item.allow_squash_merge, archived: item.archived });
+    return CanonicalRepositoryConfigurationSchema.parse({ repository, repositoryId: String(item.id), defaultBranch: item.default_branch, visibility: item.visibility, allowSquashMerge: item.allow_squash_merge, archive: item.archived, configurationSha256: digest(snapshot), evidence: this.evidence(`github://repositories/${repository}/configuration`, snapshot) });
+  }
+
+  async getInstallation(repository: string): Promise<CanonicalInstallation> {
+    this.assertRepository(repository);
+    const jwt = await this.appJwt();
+    const response = await this.transport.request({ method: "GET", url: githubPath(this.config, `/app/installations/${this.config.installationId}`), headers: this.headers(jwt), timeoutMilliseconds: this.config.timeoutMilliseconds });
+    const item = this.parse(response) as Record<string, unknown>; const account = item.account as Record<string, unknown> | undefined;
+    const permissions = item.permissions as Record<string, unknown> | undefined;
+    const selected = await this.get(`/installation/repositories?per_page=${this.config.maxItems}`) as Record<string, unknown>;
+    const repositories = selected.repositories;
+    if (!Array.isArray(repositories) || !repositories.some((raw) => {
+      const value = raw as Record<string, unknown>;
+      return String(value.id) === this.config.repositoryId && value.full_name === repository;
+    })) throw new GitHubReadError("authorization", "GitHub installation does not select configured repository");
+    const observedPermissions = Object.fromEntries(Object.entries(permissions ?? {}).filter(([, value]) => typeof value === "string"));
+    if (String(item.app_id) !== this.config.appId || account?.login !== this.config.installationAccount || Object.entries(this.config.requiredPermissions).some(([name, level]) => observedPermissions[name] !== level)) throw new GitHubReadError("authorization", "GitHub installation identity or permissions drifted");
+    return CanonicalInstallationSchema.parse({ appId: this.config.appId, installationId: String(item.id), accountLogin: account?.login, repositoryId: this.config.repositoryId, repository, permissions: observedPermissions, evidence: this.evidence(`github://installations/${this.config.installationId}`) });
   }
 }
