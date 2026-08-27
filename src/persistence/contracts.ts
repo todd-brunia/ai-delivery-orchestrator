@@ -115,6 +115,7 @@ export interface SprintRunRepository {
   claimOutbox(ownerId: string, limit: number, expiresAt: Date, now?: Date, actionTypes?: readonly string[]): Promise<readonly ClaimedOutboxAction[]>;
   completeOutbox(id: string, ownerId: string, now?: Date): Promise<boolean>;
   retryOutbox(id: string, ownerId: string, error: string, now?: Date): Promise<boolean>;
+  blockOutbox(id: string, ownerId: string, error: string, now?: Date): Promise<boolean>;
   recordGitHubMutationReceipt?(receipt: GitHubMutationReceipt): Promise<void>;
   tryAcquireLease(request: LeaseRequest, now?: Date): Promise<boolean>;
 }

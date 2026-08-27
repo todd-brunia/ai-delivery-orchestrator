@@ -4,6 +4,7 @@ export * from "./contracts.js";
 export * from "./github-read.js";
 export * from "./github-mutation.js";
 export * from "./mutation-preflight.js";
+export * from "./mutation-reconciliation.js";
 export * from "./openai-analysis.js";
 export * from "./ports.js";
 export * from "./stubs.js";
