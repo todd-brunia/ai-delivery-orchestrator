@@ -171,6 +171,13 @@ export const GitHubMutationPolicyV1Schema = z.object({
 }).strict();
 export type GitHubMutationPolicyV1 = z.infer<typeof GitHubMutationPolicyV1Schema>;
 
+export const GitHubMutationTransportConfigV1Schema = z.object({
+  version: z.literal("github-mutation-transport/v1"), repository: RepositoryNameSchema, appId: repositoryIdSchema, installationId: repositoryIdSchema,
+  actorRole: z.enum(["builder", "reviewer"]), apiBaseUrl: z.literal("https://api.github.com"), apiVersion: z.literal("2022-11-28"), timeoutMilliseconds: z.number().int().min(100).max(30_000),
+  permissions: z.object({ actions: z.literal("write").optional(), issues: z.literal("write").optional(), pull_requests: z.literal("write").optional() }).strict(),
+}).strict();
+export type GitHubMutationTransportConfigV1 = z.infer<typeof GitHubMutationTransportConfigV1Schema>;
+
 export const CanonicalIssueSchema = z.object({ version: z.literal(PROVIDER_CONTRACT_VERSION), repository: RepositoryNameSchema, number: z.number().int().positive(), nodeId: z.string().min(1), title: z.string().max(1000), body: z.string().max(100_000), state: z.enum(["open", "closed"]), labels: z.array(z.string().min(1)).max(100), updatedAt: z.iso.datetime({ offset: true }) }).strict();
 export type CanonicalIssue = z.infer<typeof CanonicalIssueSchema>;
 
