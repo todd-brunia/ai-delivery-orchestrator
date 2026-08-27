@@ -159,6 +159,18 @@ export const GitHubExecutionIntentSchema = z.discriminatedUnion("type", [
 ]);
 export type GitHubExecutionIntent = z.infer<typeof GitHubExecutionIntentSchema>;
 
+export const GitHubMutationPolicyV1Schema = z.object({
+  version: z.literal("github-mutation-policy/v1"),
+  repository: RepositoryNameSchema,
+  repositoryId: repositoryIdSchema,
+  appId: repositoryIdSchema,
+  installationId: repositoryIdSchema,
+  enabledOperations: z.array(z.enum(["set_labels", "dispatch_workflow", "submit_review", "mark_ready_for_review"])) .max(4),
+  workflowLabels: z.array(z.string().min(1).max(50)).max(20),
+  workflows: z.array(z.string().regex(/^[A-Za-z0-9_.-]+\.ya?ml$/)).max(20),
+}).strict();
+export type GitHubMutationPolicyV1 = z.infer<typeof GitHubMutationPolicyV1Schema>;
+
 export const CanonicalIssueSchema = z.object({ version: z.literal(PROVIDER_CONTRACT_VERSION), repository: RepositoryNameSchema, number: z.number().int().positive(), nodeId: z.string().min(1), title: z.string().max(1000), body: z.string().max(100_000), state: z.enum(["open", "closed"]), labels: z.array(z.string().min(1)).max(100), updatedAt: z.iso.datetime({ offset: true }) }).strict();
 export type CanonicalIssue = z.infer<typeof CanonicalIssueSchema>;
 
