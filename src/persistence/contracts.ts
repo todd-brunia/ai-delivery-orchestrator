@@ -84,6 +84,18 @@ export interface ClaimedOutboxAction extends OutboxAction {
   readonly claimExpiresAt: string;
 }
 
+export interface GitHubMutationReceipt {
+  readonly outboxId: string;
+  readonly attempt: number;
+  readonly operation: "set_labels" | "dispatch_workflow" | "submit_review" | "mark_ready_for_review";
+  readonly actorRole: "builder" | "reviewer";
+  readonly intentSha256: string;
+  readonly outcome: "completed" | "retry" | "ambiguous";
+  readonly requestId?: string;
+  readonly errorClass?: string;
+  readonly recordedAt: string;
+}
+
 export interface LeaseRequest {
   readonly aggregateType: "sprint_run" | "work_item";
   readonly aggregateId: string;
@@ -103,6 +115,7 @@ export interface SprintRunRepository {
   claimOutbox(ownerId: string, limit: number, expiresAt: Date, now?: Date, actionTypes?: readonly string[]): Promise<readonly ClaimedOutboxAction[]>;
   completeOutbox(id: string, ownerId: string, now?: Date): Promise<boolean>;
   retryOutbox(id: string, ownerId: string, error: string, now?: Date): Promise<boolean>;
+  recordGitHubMutationReceipt?(receipt: GitHubMutationReceipt): Promise<void>;
   tryAcquireLease(request: LeaseRequest, now?: Date): Promise<boolean>;
 }
 

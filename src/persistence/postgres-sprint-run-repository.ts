@@ -33,6 +33,7 @@ import {
   type SprintRunRepository,
   type PersistedSchedulingState,
   type PersistSchedulingRequest,
+  type GitHubMutationReceipt,
 } from "./contracts.js";
 
 interface RunRow {
@@ -368,6 +369,13 @@ export class PostgresSprintRunRepository implements SprintRunRepository {
   async retryOutbox(id: string, ownerId: string, error: string, now = new Date()): Promise<boolean> {
     const result = await this.pool.query("UPDATE orchestrator.outbox SET status = 'pending', last_error = $3, claimed_by = NULL, claim_expires_at = NULL WHERE id = $1 AND status = 'claimed' AND claimed_by = $2 AND claim_expires_at > $4", [id, ownerId, error.slice(0, 4000), now]);
     return result.rowCount === 1;
+  }
+
+  async recordGitHubMutationReceipt(receipt: GitHubMutationReceipt): Promise<void> {
+    await this.pool.query(`INSERT INTO orchestrator.github_mutation_receipts
+      (outbox_id, attempt, operation, actor_role, intent_sha256, outcome, request_id, error_class, recorded_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      ON CONFLICT (outbox_id, attempt) DO NOTHING`, [receipt.outboxId, receipt.attempt, receipt.operation, receipt.actorRole, receipt.intentSha256, receipt.outcome, receipt.requestId ?? null, receipt.errorClass ?? null, receipt.recordedAt]);
   }
 
   private mapWorkItem(row: WorkItemRow): PersistedWorkItem {

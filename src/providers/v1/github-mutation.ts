@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { GitHubExecutionIntentSchema, type GitHubExecutionIntent } from "./contracts.js";
 import type { ClaimedOutboxAction, SprintRunRepository } from "../../persistence/contracts.js";
 
@@ -59,14 +61,22 @@ export class GitHubMutationOutboxConsumer {
   }
 
   private async consumeAction(action: ClaimedOutboxAction, now: Date): Promise<{ id: string; outcome: "completed" | "retry" }> {
+    let intent: GitHubExecutionIntent | undefined;
     try {
-      await this.executor.execute(action.payload);
+      intent = GitHubExecutionIntentSchema.parse(action.payload);
+      const result = await this.executor.execute(intent);
+      await this.recordReceipt(action, intent, "completed", now, result.requestId);
       if (!await this.repository.completeOutbox(action.id, this.ownerId, now)) throw new Error("mutation outbox lease was lost");
       return { id: action.id, outcome: "completed" };
     } catch (error) {
       const category = error instanceof GitHubMutationExecutionError ? error.code : "invalid_intent";
+      if (intent) await this.recordReceipt(action, intent, category === "ambiguous" ? "ambiguous" : "retry", now, undefined, category);
       await this.repository.retryOutbox(action.id, this.ownerId, `github_mutation:${category}`, now);
       return { id: action.id, outcome: "retry" };
     }
+  }
+
+  private async recordReceipt(action: ClaimedOutboxAction, intent: GitHubExecutionIntent, outcome: "completed" | "retry" | "ambiguous", now: Date, requestId?: string, errorClass?: string): Promise<void> {
+    await this.repository.recordGitHubMutationReceipt?.({ outboxId: action.id, attempt: action.attemptCount, operation: intent.type, actorRole: intent.actorRole, intentSha256: createHash("sha256").update(JSON.stringify(intent), "utf8").digest("hex"), outcome, ...(requestId ? { requestId } : {}), ...(errorClass ? { errorClass } : {}), recordedAt: now.toISOString() });
   }
 }
