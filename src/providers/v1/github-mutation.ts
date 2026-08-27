@@ -54,13 +54,13 @@ export class GitHubMutationExecutor {
 export class GitHubMutationOutboxConsumer {
   constructor(private readonly repository: SprintRunRepository, private readonly executor: GitHubMutationExecutor, private readonly ownerId: string, private readonly leaseMilliseconds = 60_000, private readonly now: () => Date = () => new Date()) {}
 
-  async consume(limit = 10): Promise<readonly { id: string; outcome: "completed" | "retry" }[]> {
+  async consume(limit = 10): Promise<readonly { id: string; outcome: "completed" | "retry" | "blocked" }[]> {
     const now = this.now();
     const actions = await this.repository.claimOutbox(this.ownerId, limit, new Date(now.getTime() + this.leaseMilliseconds), now, ["github.mutation.execute"]);
     return Promise.all(actions.map((action) => this.consumeAction(action, now)));
   }
 
-  private async consumeAction(action: ClaimedOutboxAction, now: Date): Promise<{ id: string; outcome: "completed" | "retry" }> {
+  private async consumeAction(action: ClaimedOutboxAction, now: Date): Promise<{ id: string; outcome: "completed" | "retry" | "blocked" }> {
     let intent: GitHubExecutionIntent | undefined;
     try {
       intent = GitHubExecutionIntentSchema.parse(action.payload);
@@ -71,6 +71,10 @@ export class GitHubMutationOutboxConsumer {
     } catch (error) {
       const category = error instanceof GitHubMutationExecutionError ? error.code : "invalid_intent";
       if (intent) await this.recordReceipt(action, intent, category === "ambiguous" ? "ambiguous" : "retry", now, undefined, category);
+      if (category === "ambiguous") {
+        await this.repository.blockOutbox(action.id, this.ownerId, "github_mutation:ambiguous", now);
+        return { id: action.id, outcome: "blocked" };
+      }
       await this.repository.retryOutbox(action.id, this.ownerId, `github_mutation:${category}`, now);
       return { id: action.id, outcome: "retry" };
     }

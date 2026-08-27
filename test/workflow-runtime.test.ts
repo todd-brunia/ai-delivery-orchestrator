@@ -46,6 +46,7 @@ class MemoryRepository implements SprintRunRepository {
   claimOutbox() { return Promise.resolve([]); }
   completeOutbox() { return Promise.resolve(false); }
   retryOutbox() { return Promise.resolve(false); }
+  blockOutbox() { return Promise.resolve(false); }
   tryAcquireLease() { return Promise.resolve(false); }
 }
 

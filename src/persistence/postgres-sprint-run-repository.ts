@@ -371,6 +371,11 @@ export class PostgresSprintRunRepository implements SprintRunRepository {
     return result.rowCount === 1;
   }
 
+  async blockOutbox(id: string, ownerId: string, error: string, now = new Date()): Promise<boolean> {
+    const result = await this.pool.query("UPDATE orchestrator.outbox SET status = 'failed', last_error = $3, claimed_by = NULL, claim_expires_at = NULL WHERE id = $1 AND status = 'claimed' AND claimed_by = $2 AND claim_expires_at > $4", [id, ownerId, error.slice(0, 4000), now]);
+    return result.rowCount === 1;
+  }
+
   async recordGitHubMutationReceipt(receipt: GitHubMutationReceipt): Promise<void> {
     await this.pool.query(`INSERT INTO orchestrator.github_mutation_receipts
       (outbox_id, attempt, operation, actor_role, intent_sha256, outcome, request_id, error_class, recorded_at)
