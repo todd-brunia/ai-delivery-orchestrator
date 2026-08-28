@@ -67,7 +67,11 @@ headers="$work/headers"; response="$work/response.json"
 status="$(curl "${auth[@]}" -X "$method" -H "Content-Type: application/json" -H "X-AI-Orchestrator-Idempotency-Key: m3e1-builder-136:$operation" -D "$headers" -o "$response" -w '%{http_code}' "https://api.github.com$path" -d "$body")"
 [[ "$status" =~ ^2 ]] || { echo "fixture operation was rejected with HTTP $status" >&2; exit 1; }
 if [[ "$operation" == "mark-ready" ]]; then
-  jq -e '(.errors | not) and (.data.markPullRequestReadyForReview.pullRequest.isDraft == false)' "$response" >/dev/null || { echo "fixture ready-for-review mutation was not confirmed" >&2; exit 1; }
+  jq -e '(.errors | not) and (.data.markPullRequestReadyForReview.pullRequest.isDraft == false)' "$response" >/dev/null || {
+    jq -c '{errors: [.errors[]? | {type, message, path}]}' "$response" >&2
+    echo "fixture ready-for-review mutation was not confirmed" >&2
+    exit 1
+  }
 fi
 request_id="$(awk 'BEGIN{IGNORECASE=1} /^x-github-request-id:/{print $2}' "$headers" | tr -d '\r' | tail -n 1)"
 jq -n --arg operation "$operation" --arg status "$status" --arg request_id "$request_id" --arg expected_head "$expected_head" --arg observed_main_sha "$observed_main_sha" '{operation:$operation,fixture:"m3e1-builder-136",status:($status|tonumber),request_id:($request_id | if length > 0 then . else null end),expected_head:($expected_head | if length > 0 then . else null end),observed_main_sha:($observed_main_sha | if length > 0 then . else null end)}'
