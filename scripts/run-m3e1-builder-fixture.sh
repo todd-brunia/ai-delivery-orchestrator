@@ -53,7 +53,9 @@ case "$operation" in
     [[ "$(jq -c '[.labels[].name] | sort' "$issue")" == '[]' ]] || { echo "fixture issue labels drifted; refusing replacement" >&2; exit 1; }
     method="PATCH"; path="/repos/$repository/issues/$issue_number"; body="{\"labels\":[\"$label\"]}";;
   dispatch-workflow)
-    ref="$(jq -er .commit.sha "$repo")"
+    ref_file="$work/main-ref.json"
+    curl "${auth[@]}" "https://api.github.com/repos/$repository/git/ref/heads/main" >"$ref_file"
+    ref="$(jq -er .object.sha "$ref_file")"
     method="POST"; path="/repos/$repository/actions/workflows/$workflow/dispatches"; body="{\"ref\":\"$ref\",\"inputs\":{\"issue_number\":\"136\",\"fixture_id\":\"m3e1-builder-136\"}}";;
   mark-ready)
     pull="$work/pull.json"; curl "${auth[@]}" "https://api.github.com/repos/$repository/pulls/$pull_request_number" >"$pull"
