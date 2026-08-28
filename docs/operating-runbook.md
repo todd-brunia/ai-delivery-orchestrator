@@ -82,6 +82,14 @@ to the exact configured repository and verifies the App, installation,
 permissions, and selected-repository audience. It never accepts an issue or
 pull request and invokes no mutation endpoint.
 
+The M3/E1 builder fixture runner is a one-time, human-supervised acceptance
+tool, not a runtime worker. Its targets and allowed operations are hard-coded;
+it requires the documented confirmation phrase and, for draft readiness, the
+exact canonical PR head SHA. It must be run only after the corresponding
+reviewed contract is merged and the owner has explicitly authorized the named
+fixture operation. Reconcile canonical GitHub state after every call; do not
+retry an ambiguous or rejected operation until its error has been investigated.
+
 ```bash
 AUTOMATION_IDENTITY_SECRET_ARN="$(aws secretsmanager describe-secret --profile ai-orchestrator-pilot --region us-east-1 --secret-id ai-delivery-orchestrator/pilot/github-app-builder-private-key --query ARN --output text)" AWS_PROFILE=ai-orchestrator-pilot scripts/verify-automation-identity.sh builder
 AUTOMATION_IDENTITY_SECRET_ARN="$(aws secretsmanager describe-secret --profile ai-orchestrator-pilot --region us-east-1 --secret-id ai-delivery-orchestrator/pilot/github-app-reviewer-private-key --query ARN --output text)" AWS_PROFILE=ai-orchestrator-pilot scripts/verify-automation-identity.sh reviewer
