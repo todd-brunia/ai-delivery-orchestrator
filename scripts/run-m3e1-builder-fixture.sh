@@ -24,7 +24,7 @@ config="config/automation-identities/v1/builder.json"
 app_id="$(jq -er .appId "$config")"
 installation_id="$(jq -er .installationId "$config")"
 [[ "$(jq -r .appSlug "$config")" == "todd-brunia-ai-delivery-builder" ]] || { echo "builder contract drifted" >&2; exit 1; }
-[[ "$(jq -c .permissionCeiling "$config")" == '["metadata:read","issues:write","actions:write","pull_requests:write"]' ]] || { echo "builder permission ceiling drifted" >&2; exit 1; }
+[[ "$(jq -c .permissionCeiling "$config")" == '["metadata:read","contents:write","issues:write","actions:write","pull_requests:write"]' ]] || { echo "builder permission ceiling drifted" >&2; exit 1; }
 
 work="$(mktemp -d)"; chmod 700 "$work"; trap 'rm -f "$work"/*; rmdir "$work"' EXIT; umask 077
 secret="ai-delivery-orchestrator/pilot/github-app-builder-private-key"
@@ -40,8 +40,8 @@ unsigned="$header.$payload"
 jwt="$unsigned.$(printf '%s' "$unsigned" | openssl dgst -binary -sha256 -sign "$key" | base64url)"
 common=(-sS --connect-timeout 10 --max-time 30 -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
 token_json="$work/token.json"
-curl "${common[@]}" -X POST -H "Authorization: Bearer $jwt" "https://api.github.com/app/installations/$installation_id/access_tokens" -d '{"repositories":["ai-consulting-client-portal"],"permissions":{"actions":"write","issues":"write","pull_requests":"write"}}' >"$token_json"
-token="$(jq -er .token "$token_json")"; rm -f "$token_json"
+curl "${common[@]}" -X POST -H "Authorization: Bearer $jwt" "https://api.github.com/app/installations/$installation_id/access_tokens" -d '{"repositories":["ai-consulting-client-portal"],"permissions":{"actions":"write","contents":"write","issues":"write","pull_requests":"write"}}' >"$token_json"
+token="$(jq -er .token "$token_json")" || { jq -c '{message, errors}' "$token_json" >&2; exit 1; }; rm -f "$token_json"
 auth=("${common[@]}" -H "Authorization: Bearer $token")
 issue="$work/issue.json"; repo="$work/repo.json"
 curl "${auth[@]}" "https://api.github.com/repos/$repository/issues/$issue_number" >"$issue"
