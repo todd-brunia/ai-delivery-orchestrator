@@ -7,16 +7,16 @@ secret_version_stage="${SECRET_VERSION_STAGE:-AWSCURRENT}"
 pull_request="${2:-}"
 expected_head="${3:-}"
 
-if [[ "$role" != "reviewer" && "$role" != "merger" ]]; then
-  echo "usage: AWS_PROFILE=PROFILE $0 reviewer [PR_NUMBER EXPECTED_HEAD_SHA] | merger" >&2
+if [[ "$role" != "builder" && "$role" != "reviewer" && "$role" != "merger" ]]; then
+  echo "usage: AWS_PROFILE=PROFILE $0 builder | reviewer [PR_NUMBER EXPECTED_HEAD_SHA] | merger" >&2
   exit 2
 fi
 if [[ "$secret_version_stage" != "AWSCURRENT" && "$secret_version_stage" != "AWSPREVIOUS" ]]; then
   echo "SECRET_VERSION_STAGE must be AWSCURRENT or AWSPREVIOUS" >&2
   exit 2
 fi
-if [[ "$role" == "merger" && ( -n "$pull_request" || -n "$expected_head" ) ]]; then
-  echo "merger verification never accepts a pull request or invokes merge" >&2
+if [[ "$role" != "reviewer" && ( -n "$pull_request" || -n "$expected_head" ) ]]; then
+  echo "$role verification never accepts a pull request or invokes a mutation" >&2
   exit 2
 fi
 if [[ "$role" == "reviewer" && ( -n "$pull_request" || -n "$expected_head" ) ]]; then
@@ -85,7 +85,9 @@ repositories_file="$work_directory/repositories.json"
 curl "${api_headers[@]}" -H "Authorization: Bearer $jwt" https://api.github.com/app >"$app_file"
 curl "${api_headers[@]}" -H "Authorization: Bearer $jwt" "https://api.github.com/app/installations/$installation_id" >"$installation_file"
 
-if [[ "$role" == "reviewer" ]]; then
+if [[ "$role" == "builder" ]]; then
+  token_request='{"repositories":["ai-consulting-client-portal"],"permissions":{"actions":"write","issues":"write","pull_requests":"write"}}'
+elif [[ "$role" == "reviewer" ]]; then
   token_request='{"repositories":["ai-consulting-client-portal"],"permissions":{"checks":"read","contents":"read","pull_requests":"write"}}'
 else
   token_request='{"repositories":["ai-consulting-client-portal"],"permissions":{"contents":"write"}}'
@@ -99,6 +101,27 @@ rm -f "$token_response"
 installation_token="$(<"$token_file")"
 curl "${api_headers[@]}" -H "Authorization: Bearer $installation_token" \
   https://api.github.com/installation/repositories >"$repositories_file"
+
+expected_permissions="$(jq -c '[.permissionCeiling[] | split(\":\") | {(.[0]): .[1]}] | add' "$config")"
+jq -e \
+  --arg expected_slug "$app_slug" \
+  --arg expected_app_id "$app_id" \
+  --arg expected_installation_id "$installation_id" \
+  --arg repository "$repository" \
+  --argjson expected_permissions "$expected_permissions" \
+  --slurpfile app "$app_file" \
+  --slurpfile installation "$installation_file" \
+  --slurpfile repositories "$repositories_file" \
+  '($app[0].slug == $expected_slug) and
+   (($app[0].id | tostring) == $expected_app_id) and
+   (($installation[0].id | tostring) == $expected_installation_id) and
+   ($installation[0].account.login == "todd-brunia") and
+   ($installation[0].repository_selection == "selected") and
+   ($installation[0].permissions == $expected_permissions) and
+   ([$repositories[0].repositories[] | {id:(.id | tostring), full_name}] == [{id:"1308170964", full_name:$repository}])' >/dev/null || {
+    echo "canonical GitHub identity, permission, or repository scope does not match the contract" >&2
+    exit 1
+  }
 
 jq -n \
   --arg role "$role" \

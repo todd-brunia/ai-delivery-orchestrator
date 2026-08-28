@@ -6,8 +6,9 @@ export const AutomationRoleSchema = z.enum(["builder", "reviewer", "merger"]);
 export type AutomationRole = z.infer<typeof AutomationRoleSchema>;
 
 export const AutomationOperationSchema = z.enum([
-  "publish_issue_branch",
-  "open_issue_pull_request",
+  "set_workflow_labels",
+  "dispatch_allowlisted_workflow",
+  "mark_exact_head_ready_for_review",
   "read_pull_request_evidence",
   "submit_exact_head_review",
   "request_exact_head_squash_merge",
@@ -19,6 +20,8 @@ export const GitHubPermissionSchema = z.enum([
   "contents:read",
   "contents:write",
   "checks:read",
+  "issues:write",
+  "actions:write",
   "pull_requests:read",
   "pull_requests:write",
 ]);
@@ -55,8 +58,8 @@ export const AutomationIdentityContractSchema = z
   .superRefine((identity, context) => {
     const rolePolicy = {
       builder: {
-        permissions: ["metadata:read", "contents:write", "pull_requests:write"],
-        operations: ["publish_issue_branch", "open_issue_pull_request"],
+        permissions: ["metadata:read", "issues:write", "actions:write", "pull_requests:write"],
+        operations: ["set_workflow_labels", "dispatch_allowlisted_workflow", "mark_exact_head_ready_for_review"],
       },
       reviewer: {
         permissions: ["metadata:read", "contents:read", "checks:read", "pull_requests:write"],

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "automation-identities/v1",
+  "configurationRevision": "b8622509e1683da3f54f4c6fc046c2f8e696150c3882e3c27b8b8b97c31486ed",
+  "role": "builder",
+  "appSlug": "todd-brunia-ai-delivery-builder",
+  "appId": "4744942",
+  "installationId": "157133323",
+  "tokenAudience": {
+    "installationAccount": "todd-brunia",
+    "repositoryIds": ["1308170964"],
+    "repositories": ["todd-brunia/ai-consulting-client-portal"]
+  },
+  "permissionCeiling": [
+    "metadata:read",
+    "issues:write",
+    "actions:write",
+    "pull_requests:write"
+  ],
+  "allowedOperations": [
+    "set_workflow_labels",
+    "dispatch_allowlisted_workflow",
+    "mark_exact_head_ready_for_review"
+  ],
+  "forbiddenOperations": [
+    "source_write",
+    "ref_write",
+    "merge",
+    "review",
+    "approval",
+    "settings_write",
+    "workflow_settings_write",
+    "secret_access",
+    "environment_access",
+    "deployment",
+    "release",
+    "organization_access",
+    "installation_management"
+  ],
+  "secretContainerName": "ai-delivery-orchestrator/pilot/github-app-builder-private-key"
+}
