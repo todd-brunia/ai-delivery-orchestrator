@@ -60,7 +60,7 @@ case "$operation" in
   mark-ready)
     pull="$work/pull.json"; curl "${auth[@]}" "https://api.github.com/repos/$repository/pulls/$pull_request_number" >"$pull"
     [[ "$(jq -r .state "$pull")" == "open" && "$(jq -r .draft "$pull")" == "true" && "$(jq -r .head.sha "$pull")" == "$expected_head" ]] || { echo "fixture PR state or head drifted" >&2; exit 1; }
-    method="PATCH"; path="/repos/$repository/pulls/$pull_request_number"; body='{"draft":false}';;
+    method="POST"; path="/repos/$repository/pulls/$pull_request_number/ready_for_review"; body='{}';;
 esac
 headers="$work/headers"
 status="$(curl "${auth[@]}" -X "$method" -H "Content-Type: application/json" -H "X-AI-Orchestrator-Idempotency-Key: m3e1-builder-136:$operation" -D "$headers" -o /dev/null -w '%{http_code}' "https://api.github.com$path" -d "$body")"
