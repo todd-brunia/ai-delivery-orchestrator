@@ -47,7 +47,7 @@ issue="$work/issue.json"; repo="$work/repo.json"
 curl "${auth[@]}" "https://api.github.com/repos/$repository/issues/$issue_number" >"$issue"
 curl "${auth[@]}" "https://api.github.com/repos/$repository" >"$repo"
 [[ "$(jq -r .state "$issue")" == "open" ]] || { echo "fixture issue is not open" >&2; exit 1; }
-method=""; path=""; body=""
+method=""; path=""; body=""; observed_main_sha=""
 case "$operation" in
   set-label)
     [[ "$(jq -c '[.labels[].name] | sort' "$issue")" == '[]' ]] || { echo "fixture issue labels drifted; refusing replacement" >&2; exit 1; }
@@ -55,8 +55,8 @@ case "$operation" in
   dispatch-workflow)
     ref_file="$work/main-ref.json"
     curl "${auth[@]}" "https://api.github.com/repos/$repository/git/ref/heads/main" >"$ref_file"
-    ref="$(jq -er .object.sha "$ref_file")"
-    method="POST"; path="/repos/$repository/actions/workflows/$workflow/dispatches"; body="{\"ref\":\"$ref\",\"inputs\":{\"issue_number\":\"136\",\"fixture_id\":\"m3e1-builder-136\"}}";;
+    observed_main_sha="$(jq -er .object.sha "$ref_file")"
+    method="POST"; path="/repos/$repository/actions/workflows/$workflow/dispatches"; body="{\"ref\":\"main\",\"inputs\":{\"issue_number\":\"136\",\"fixture_id\":\"m3e1-builder-136\"}}";;
   mark-ready)
     pull="$work/pull.json"; curl "${auth[@]}" "https://api.github.com/repos/$repository/pulls/$pull_request_number" >"$pull"
     [[ "$(jq -r .state "$pull")" == "open" && "$(jq -r .draft "$pull")" == "true" && "$(jq -r .head.sha "$pull")" == "$expected_head" ]] || { echo "fixture PR state or head drifted" >&2; exit 1; }
@@ -66,4 +66,4 @@ headers="$work/headers"
 status="$(curl "${auth[@]}" -X "$method" -H "Content-Type: application/json" -H "X-AI-Orchestrator-Idempotency-Key: m3e1-builder-136:$operation" -D "$headers" -o /dev/null -w '%{http_code}' "https://api.github.com$path" -d "$body")"
 [[ "$status" =~ ^2 ]] || { echo "fixture operation was rejected with HTTP $status" >&2; exit 1; }
 request_id="$(awk 'BEGIN{IGNORECASE=1} /^x-github-request-id:/{print $2}' "$headers" | tr -d '\r' | tail -n 1)"
-jq -n --arg operation "$operation" --arg status "$status" --arg request_id "$request_id" --arg expected_head "$expected_head" '{operation:$operation,fixture:"m3e1-builder-136",status:($status|tonumber),request_id:($request_id | if length > 0 then . else null end),expected_head:($expected_head | if length > 0 then . else null end)}'
+jq -n --arg operation "$operation" --arg status "$status" --arg request_id "$request_id" --arg expected_head "$expected_head" --arg observed_main_sha "$observed_main_sha" '{operation:$operation,fixture:"m3e1-builder-136",status:($status|tonumber),request_id:($request_id | if length > 0 then . else null end),expected_head:($expected_head | if length > 0 then . else null end),observed_main_sha:($observed_main_sha | if length > 0 then . else null end)}'
