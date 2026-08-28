@@ -36,17 +36,20 @@ const request = {
 };
 
 describe("automation-identities/v1", () => {
-  it("pins the provisioned reviewer and merger configuration", () => {
-    const load = (role: "reviewer" | "merger") => JSON.parse(
+  it("pins the provisioned builder, reviewer, and merger configuration", () => {
+    const load = (role: "builder" | "reviewer" | "merger") => JSON.parse(
       readFileSync(`config/automation-identities/v1/${role}.json`, "utf8"),
     ) as unknown;
+    const builder = AutomationIdentityContractSchema.parse(load("builder"));
     const reviewer = AutomationIdentityContractSchema.parse(load("reviewer"));
     const merger = AutomationIdentityContractSchema.parse(load("merger"));
+    expect(builder).toMatchObject({ appId: "4744942", installationId: "157133323" });
     expect(reviewer).toMatchObject({ appId: "4545788", installationId: "152627422" });
     expect(merger).toMatchObject({ appId: "4545894", installationId: "152629499" });
+    expect(builder.tokenAudience.repositoryIds).toEqual(["1308170964"]);
     expect(reviewer.tokenAudience.repositoryIds).toEqual(["1308170964"]);
     expect(merger.tokenAudience.repositoryIds).toEqual(["1308170964"]);
-    expect(reviewer.secretContainerName).not.toBe(merger.secretContainerName);
+    expect(new Set([builder.secretContainerName, reviewer.secretContainerName, merger.secretContainerName]).size).toBe(3);
   });
 
   it("accepts a strict role-bound identity", () => {
@@ -58,14 +61,14 @@ describe("automation-identities/v1", () => {
   });
 
   it("requires unique roles, app IDs, installations, and secret containers", () => {
-    const builder = { ...contract, role: "builder", appSlug: "todd-brunia-ai-delivery-builder", appId: "1002", installationId: "2002", permissionCeiling: ["metadata:read", "contents:write", "pull_requests:write"], allowedOperations: ["publish_issue_branch", "open_issue_pull_request"], secretContainerName: contract.secretContainerName.replace("reviewer", "builder") };
+    const builder = { ...contract, role: "builder", appSlug: "todd-brunia-ai-delivery-builder", appId: "1002", installationId: "2002", permissionCeiling: ["metadata:read", "issues:write", "actions:write", "pull_requests:write"], allowedOperations: ["set_workflow_labels", "dispatch_allowlisted_workflow", "mark_exact_head_ready_for_review"], secretContainerName: contract.secretContainerName.replace("reviewer", "builder") };
     const merger = { ...contract, role: "merger", appSlug: "todd-brunia-ai-delivery-merger", appId: "1003", installationId: "2003", permissionCeiling: ["metadata:read", "contents:write"], allowedOperations: ["read_pull_request_evidence", "request_exact_head_squash_merge"], secretContainerName: contract.secretContainerName.replace("reviewer", "merger") };
     expect(AutomationIdentitySetSchema.parse([builder, contract, merger])).toHaveLength(3);
     expect(() => AutomationIdentitySetSchema.parse([builder, contract, { ...merger, appId: "1002" }])).toThrow("appId must be unique");
   });
 
   it("denies every cross-role operation with a stable reason", () => {
-    for (const operation of ["publish_issue_branch", "open_issue_pull_request", "request_exact_head_squash_merge"]) {
+    for (const operation of ["set_workflow_labels", "dispatch_allowlisted_workflow", "mark_exact_head_ready_for_review", "request_exact_head_squash_merge"]) {
       expect(authorizeIdentityOperation(contract, { ...request, operation })).toEqual({ authorized: false, reason: "operation_forbidden" });
     }
     expect(authorizeIdentityOperation(contract, request)).toEqual({ authorized: true });

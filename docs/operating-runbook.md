@@ -77,7 +77,13 @@ directory, removes them on exit, and prints only sanitized identity,
 installation, repository, permission, expiry, and optional review metadata.
 Do not run it in CI, a builder/model environment, or with shell tracing.
 
+The builder diagnostic is read-only: it mints a short-lived token constrained
+to the exact configured repository and verifies the App, installation,
+permissions, and selected-repository audience. It never accepts an issue or
+pull request and invokes no mutation endpoint.
+
 ```bash
+AUTOMATION_IDENTITY_SECRET_ARN="$(aws secretsmanager describe-secret --profile ai-orchestrator-pilot --region us-east-1 --secret-id ai-delivery-orchestrator/pilot/github-app-builder-private-key --query ARN --output text)" AWS_PROFILE=ai-orchestrator-pilot scripts/verify-automation-identity.sh builder
 AUTOMATION_IDENTITY_SECRET_ARN="$(aws secretsmanager describe-secret --profile ai-orchestrator-pilot --region us-east-1 --secret-id ai-delivery-orchestrator/pilot/github-app-reviewer-private-key --query ARN --output text)" AWS_PROFILE=ai-orchestrator-pilot scripts/verify-automation-identity.sh reviewer
 AUTOMATION_IDENTITY_SECRET_ARN="$(aws secretsmanager describe-secret --profile ai-orchestrator-pilot --region us-east-1 --secret-id ai-delivery-orchestrator/pilot/github-app-merger-private-key --query ARN --output text)" AWS_PROFILE=ai-orchestrator-pilot scripts/verify-automation-identity.sh merger
 ```
