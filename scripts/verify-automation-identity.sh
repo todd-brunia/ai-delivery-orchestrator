@@ -103,7 +103,7 @@ curl "${api_headers[@]}" -H "Authorization: Bearer $installation_token" \
   https://api.github.com/installation/repositories >"$repositories_file"
 
 expected_permissions="$(jq -c '[.permissionCeiling[] | split(":") | {(.[0]): .[1]}] | add' "$config")"
-jq -e \
+jq -ne \
   --arg expected_slug "$app_slug" \
   --arg expected_app_id "$app_id" \
   --arg expected_installation_id "$installation_id" \
