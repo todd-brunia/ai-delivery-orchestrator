@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { RepositoryAdapterConfigV1 } from "../src/domain/sprint-delivery/v1/index.js";
-import { advanceAcceptedImplementationDispatch, adapterFingerprint, prepareImplementationDispatch, verifyAcceptedImplementationDispatch } from "../src/workflows/index.js";
+import { advanceAcceptedImplementationDispatch, adapterFingerprint, collectLiveWorkItemBinding, prepareImplementationDispatch, verifyAcceptedImplementationDispatch } from "../src/workflows/index.js";
 
 const sha = "a".repeat(40);
 const plan = "b".repeat(64);
@@ -34,6 +34,12 @@ describe("live implementation dispatch preparation", () => {
   it("fails closed on plan and installation-permission drift", () => {
     expect(prepareImplementationDispatch({ ...input, expectedPlanSha256: "d".repeat(64) })).toEqual({ ready: false, reason: "plan_drift" });
     expect(prepareImplementationDispatch({ ...input, binding: { ...binding, installation: { ...binding.installation, permissions: { actions: "read", issues: "write" } } } })).toEqual({ ready: false, reason: "installation_permission_missing" });
+  });
+
+  it("collects repository and installation identity into a canonical live binding", async () => {
+    const github = { getIssue: () => Promise.resolve(binding.issue), getMarkedPlan: () => Promise.resolve(binding.plan), getRepositoryConfiguration: () => Promise.resolve(binding.repositoryConfiguration), getInstallation: () => Promise.resolve(binding.installation) };
+    await expect(collectLiveWorkItemBinding({ github: github as never, adapter, runId: binding.runId, workItemId: binding.workItemId, issueNumber: 72, defaultBranchSha: sha, observedAt: binding.observedAt })).resolves.toMatchObject({ issue: binding.issue, plan: binding.plan, installation: binding.installation, adapterFingerprint: binding.adapterFingerprint });
+    await expect(collectLiveWorkItemBinding({ github: { ...github, getRepositoryConfiguration: () => Promise.resolve({ ...binding.repositoryConfiguration, defaultBranch: "trunk" }) } as never, adapter, runId: binding.runId, workItemId: binding.workItemId, issueNumber: 72, defaultBranchSha: sha, observedAt: binding.observedAt })).rejects.toThrow("default branch drifted");
   });
 
   it("requires canonical workflow-run acceptance evidence before marking a build dispatched", () => {

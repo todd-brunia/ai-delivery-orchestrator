@@ -15,6 +15,7 @@ import {
   CanonicalWorkflowRunSchema,
   GitHubExecutionIntentSchema,
   type GitHubExecutionIntent,
+  type GitHubReadPort,
 } from "../providers/v1/index.js";
 
 const shaSchema = z.string().regex(/^[a-f0-9]{40}$/);
@@ -38,6 +39,28 @@ export const LiveWorkItemBindingSchema = z.object({
   if (value.repositoryConfiguration.repositoryId !== value.installation.repositoryId) context.addIssue({ code: "custom", message: "canonical repository ID mismatch" });
 });
 export type LiveWorkItemBinding = z.infer<typeof LiveWorkItemBindingSchema>;
+
+/** Collects the complete canonical evidence set before any live planning step. */
+export async function collectLiveWorkItemBinding(input: {
+  readonly github: GitHubReadPort;
+  readonly adapter: RepositoryAdapterConfigV1;
+  readonly runId: string;
+  readonly workItemId: string;
+  readonly issueNumber: number;
+  readonly defaultBranchSha: string;
+  readonly observedAt: string;
+}): Promise<LiveWorkItemBinding> {
+  const adapter = RepositoryAdapterConfigV1Schema.parse(input.adapter);
+  if (!adapter.enabled) throw new Error("repository automation is disabled");
+  const [issue, plan, repositoryConfiguration, installation] = await Promise.all([
+    input.github.getIssue(adapter.repository, input.issueNumber),
+    input.github.getMarkedPlan(adapter.repository, input.issueNumber),
+    input.github.getRepositoryConfiguration(adapter.repository),
+    input.github.getInstallation(adapter.repository),
+  ]);
+  if (repositoryConfiguration.defaultBranch !== adapter.defaultBranch) throw new Error("repository default branch drifted from adapter");
+  return LiveWorkItemBindingSchema.parse({ version: "live-work-item-binding/v1", runId: input.runId, workItemId: input.workItemId, issue, plan, defaultBranchSha: input.defaultBranchSha, repositoryConfiguration, installation, adapterFingerprint: adapterFingerprint(adapter), observedAt: input.observedAt });
+}
 
 export const DispatchPreparationSchema = z.object({
   version: z.literal("live-dispatch-preparation/v1"),
