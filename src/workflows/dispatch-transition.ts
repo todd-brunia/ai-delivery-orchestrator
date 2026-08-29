@@ -19,7 +19,7 @@ export async function advanceAcceptedImplementationDispatch(input: {
   const evidence = verifyAcceptedImplementationDispatch({ intent: input.intent, acceptedAt: input.acceptedAt, workflowRuns: input.workflowRuns });
   if (!evidence.accepted) return { advanced: false, reason: evidence.reason };
   if (input.workItem.state === "build_dispatched") return { advanced: false };
-  if (input.workItem.state !== "ready_to_build") throw new Error("only ready work items may record a build dispatch");
+  if (input.workItem.state !== "dispatch_queued") throw new Error("only queued dispatches may record a build dispatch");
   if (!input.repository.recordDispatchAttempt) throw new Error("dispatch-attempt persistence is required");
   const fingerprint = createHash("sha256").update(JSON.stringify(input.intent)).digest("hex");
   await input.repository.recordDispatchAttempt({ workItemId: input.workItem.id, intentFingerprint: fingerprint, status: "accepted", workflowRunId: evidence.workflowRunId, evidenceUri: evidence.evidenceUri, recordedAt: input.acceptedAt });
