@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { Annotation, END, START, StateGraph, type BaseCheckpointSaver } from "@langchain/langgraph";
 
-import { planApprovalRequirement, ReconciliationReportSchema, scheduleDryRun, WORKFLOW_VERSION, type ReconciliationReport, type SchedulingDecision } from "../domain/sprint-delivery/v1/index.js";
+import { authorizeBuild, planApprovalRequirement, ReconciliationReportSchema, scheduleDryRun, validateFeasibilityForRun, WORKFLOW_VERSION, type ReconciliationReport, type SchedulingDecision } from "../domain/sprint-delivery/v1/index.js";
 import type { PersistedSprintRun, SprintRunRepository } from "../persistence/index.js";
 import {
   CanonicalIssueSchema,
@@ -104,19 +104,12 @@ export function createSprintDeliveryV1Runtime(
         planFingerprints: state.plans,
         defaultBranchSha: state.request.defaultBranchSha,
       });
-      const parsed = FeasibilityResultSchema.parse(analysis);
-      const analyzedIssues = new Set(parsed.conflicts.map((entry) => entry.issueNumber));
-      if (parsed.conflicts.length !== state.run.input.issueNumbers.length ||
-          state.run.input.issueNumbers.some((number) => !analyzedIssues.has(number))) {
-        throw new Error("conflict analysis must cover every workflow issue exactly once");
-      }
+      const parsed = validateFeasibilityForRun(FeasibilityResultSchema.parse(analysis), state.run.input.issueNumbers);
       return { analysis: parsed };
     })
     .addNode("persist_analysis", async (state) => {
       const { request, analysis } = state;
-      if (!analysis.feasible || analysis.unresolvedDecisions.length > 0) {
-        throw new Error("feasibility analysis did not authorize workflow progress");
-      }
+      validateFeasibilityForRun(analysis, state.run.input.issueNumbers);
       await repository.saveAnalysis(request.runId, {
         dependencies: analysis.dependencies,
         conflicts: analysis.conflicts,
@@ -160,7 +153,8 @@ export function createSprintDeliveryV1Runtime(
         const events: Array<"plan_available" | "human_plan_approval_required" | "build_authorized"> = [];
         if (item.state === "discovered") events.push("plan_available");
         if (item.state === "discovered" || item.state === "feasibility_review") {
-          events.push(approval === "human_required" ? "human_plan_approval_required" : "build_authorized");
+          const decision = authorizeBuild(analysis, item.issueNumber, state.plans[String(item.issueNumber)] ?? "", []);
+          events.push(decision.authorized ? "build_authorized" : "human_plan_approval_required");
         }
         for (const event of events) {
           const identity = transitionIdentity(run.id, item.id, event);
