@@ -61,7 +61,7 @@ describe("automation-identities/v1", () => {
   });
 
   it("requires unique roles, app IDs, installations, and secret containers", () => {
-    const builder = { ...contract, role: "builder", appSlug: "todd-brunia-ai-delivery-builder", appId: "1002", installationId: "2002", permissionCeiling: ["metadata:read", "issues:write", "actions:write", "pull_requests:write"], allowedOperations: ["set_workflow_labels", "dispatch_allowlisted_workflow", "mark_exact_head_ready_for_review"], secretContainerName: contract.secretContainerName.replace("reviewer", "builder") };
+    const builder = { ...contract, role: "builder", appSlug: "todd-brunia-ai-delivery-builder", appId: "1002", installationId: "2002", permissionCeiling: ["metadata:read", "contents:write", "issues:write", "actions:write", "pull_requests:write"], allowedOperations: ["set_workflow_labels", "dispatch_allowlisted_workflow", "mark_exact_head_ready_for_review"], secretContainerName: contract.secretContainerName.replace("reviewer", "builder") };
     const merger = { ...contract, role: "merger", appSlug: "todd-brunia-ai-delivery-merger", appId: "1003", installationId: "2003", permissionCeiling: ["metadata:read", "contents:write"], allowedOperations: ["read_pull_request_evidence", "request_exact_head_squash_merge"], secretContainerName: contract.secretContainerName.replace("reviewer", "merger") };
     expect(AutomationIdentitySetSchema.parse([builder, contract, merger])).toHaveLength(3);
     expect(() => AutomationIdentitySetSchema.parse([builder, contract, { ...merger, appId: "1002" }])).toThrow("appId must be unique");

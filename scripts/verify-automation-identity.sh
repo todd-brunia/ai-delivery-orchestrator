@@ -86,7 +86,7 @@ curl "${api_headers[@]}" -H "Authorization: Bearer $jwt" https://api.github.com/
 curl "${api_headers[@]}" -H "Authorization: Bearer $jwt" "https://api.github.com/app/installations/$installation_id" >"$installation_file"
 
 if [[ "$role" == "builder" ]]; then
-  token_request='{"repositories":["ai-consulting-client-portal"],"permissions":{"actions":"write","issues":"write","pull_requests":"write"}}'
+  token_request='{"repositories":["ai-consulting-client-portal"],"permissions":{"actions":"write","contents":"write","issues":"write","pull_requests":"write"}}'
 elif [[ "$role" == "reviewer" ]]; then
   token_request='{"repositories":["ai-consulting-client-portal"],"permissions":{"checks":"read","contents":"read","pull_requests":"write"}}'
 else
@@ -94,7 +94,10 @@ else
 fi
 curl "${api_headers[@]}" -X POST -H "Authorization: Bearer $jwt" \
   "https://api.github.com/app/installations/$installation_id/access_tokens" \
-  -d "$token_request" >"$token_response"
+  -d "$token_request" >"$token_response" || {
+    jq -c '{message, errors}' "$token_response" >&2
+    exit 1
+  }
 jq -er .token "$token_response" >"$token_file"
 token_expiry="$(jq -er .expires_at "$token_response")"
 rm -f "$token_response"

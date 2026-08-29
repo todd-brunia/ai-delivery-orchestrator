@@ -66,6 +66,39 @@ Static policy permits only one future exact-head squash-merge request after all
 gates and denies build, review, settings, bypass, release, deployment, and
 other ref/content writes. No automatic merge path is enabled by issue #59.
 
+## Builder supervised fixture
+
+On 2026-08-28, the human owner approved and GitHub accepted the builder's
+repository-scoped Contents write platform permission, required for GitHub's
+`markPullRequestReadyForReview` GraphQL mutation. The checked-in builder
+contract remains restricted to portal repository ID `1308170964`, with only
+Metadata read, Contents write, Issues write, Actions write, and Pull requests
+write. Application policy continues to forbid source writes, ref writes,
+review, approval, merge, settings, workflow-settings, secret, environment,
+deployment, release, organization, and installation-management operations.
+
+The owner-supervised, non-merge fixture used portal
+[issue #136](https://github.com/todd-brunia/ai-consulting-client-portal/issues/136)
+and [PR #137](https://github.com/todd-brunia/ai-consulting-client-portal/pull/137),
+bound to exact head `52db6e3e5cf96dfec0976bff749e1f46b1a2dc40`:
+
+- Label replacement succeeded with GitHub request ID
+  `D116:319892:418640:DC9F4D:6A91DAEB`; canonical issue labels contained only
+  `m3e1-builder-fixture`.
+- Allowlisted workflow dispatch succeeded with request ID
+  `55D5:4FB5C:540A87:119F0E5:6A91DCF9`; portal workflow run
+  [33202619662](https://github.com/todd-brunia/ai-consulting-client-portal/actions/runs/33202619662)
+  completed successfully on its observed `main` SHA.
+- Exact-head draft readiness succeeded with request ID
+  `3556:D3773:AA57C:235857:6A91E4A9`; canonical reconciliation confirmed PR
+  #137 remained open at the same head and changed from draft to ready for
+  review. No merge was requested or performed.
+
+The fixture runner is human-supervised, hard-coded to those disposable portal
+targets, requires an exact confirmation phrase, refuses shell tracing, mints a
+short-lived selected-repository token, and verifies canonical preconditions
+before every mutation. It is not a runtime worker or enabled consumer.
+
 ## Rotation and revocation drill
 
 On 2026-08-10, the human owner rotated each App independently:
