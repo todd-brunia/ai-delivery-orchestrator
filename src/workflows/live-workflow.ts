@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { RepositoryAdapterConfigV1Schema, validateFeasibilityForRun } from "../domain/sprint-delivery/v1/index.js";
+import { RepositoryAdapterConfigV1Schema, scheduleDryRun, validateFeasibilityForRun } from "../domain/sprint-delivery/v1/index.js";
 import type { SprintRunRepository } from "../persistence/index.js";
 import type { ProviderSet } from "../providers/v1/index.js";
 import { authorizeLiveBuild, collectLiveWorkItemBinding } from "./live-dispatch.js";
@@ -39,7 +39,8 @@ export function createLiveBindingWorkflowRuntime(repository: SprintRunRepository
         const decision = await authorizeLiveBuild({ github: providers.githubRead, repository: run.input.repository, issueNumber: item.issueNumber, plan: binding.plan, analysis });
         (decision.authorized ? authorizedIssueNumbers : waitingIssueNumbers).push(item.issueNumber);
       }
-      return LiveWorkflowResultSchema.parse({ workflowVersion: run.input.workflowVersion, providerContractVersion: "providers/v1", runId: run.id, threadId: request.threadId, status: "bindings_collected", bindingFingerprints, authorizedIssueNumbers, waitingIssueNumbers });
+      const schedule = scheduleDryRun({ runId: run.id, candidates: run.workItems.filter((item) => authorizedIssueNumbers.includes(item.issueNumber)).map((item) => ({ issueNumber: item.issueNumber, state: item.state, conflictDomains: analysis.conflicts.find((entry) => entry.issueNumber === item.issueNumber)?.domains ?? [] })), dependencies: analysis.dependencies, mergedIssueNumbers: run.workItems.filter((item) => item.state === "merged").map((item) => item.issueNumber), activeImplementationCount: run.workItems.filter((item) => ["build_dispatched", "building", "pr_open", "checks_pending", "reviewing", "fixing", "ready_for_human_review"].includes(item.state)).length, maximumConcurrentImplementations: adapter.maxParallelImplementations as 1 | 2, evidence: run.workItems.map((item) => ({ kind: "issue" as const, uri: `github://issues/${run.input.repository}/${item.issueNumber}` })) });
+      return LiveWorkflowResultSchema.parse({ workflowVersion: run.input.workflowVersion, providerContractVersion: "providers/v1", runId: run.id, threadId: request.threadId, status: "bindings_collected", bindingFingerprints, authorizedIssueNumbers, waitingIssueNumbers, scheduledIssueNumbers: schedule.selectedIssueNumbers });
     },
   };
 }
