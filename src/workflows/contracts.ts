@@ -36,3 +36,28 @@ export interface DryRunWorkflowRuntime {
   execute(request: DryRunWorkflowRequest): Promise<DryRunWorkflowResult>;
   resume(threadId: string): Promise<DryRunWorkflowResult>;
 }
+
+export const LiveWorkflowRequestSchema = z.object({
+  workflowVersion: z.literal(WORKFLOW_VERSION),
+  providerMode: z.literal("live"),
+  runId: z.uuid(),
+  threadId: z.string().min(1).max(200),
+  defaultBranchSha: shaSchema,
+  adapter: z.unknown(),
+  occurredAt: z.iso.datetime({ offset: true }),
+}).strict();
+export type LiveWorkflowRequest = z.infer<typeof LiveWorkflowRequestSchema>;
+
+export const LiveWorkflowResultSchema = z.object({
+  workflowVersion: z.literal(WORKFLOW_VERSION),
+  providerContractVersion: z.literal(PROVIDER_CONTRACT_VERSION),
+  runId: z.uuid(),
+  threadId: z.string().min(1),
+  status: z.literal("bindings_collected"),
+  bindingFingerprints: z.record(z.string().uuid(), fingerprintSchema),
+}).strict();
+export type LiveWorkflowResult = z.infer<typeof LiveWorkflowResultSchema>;
+
+export interface LiveWorkflowRuntime {
+  execute(request: LiveWorkflowRequest): Promise<LiveWorkflowResult>;
+}
