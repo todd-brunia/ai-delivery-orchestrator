@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   RepositoryAdapterConfigV1Schema,
   RepositoryNameSchema,
+  authorizeBuild,
   type RepositoryAdapterConfigV1,
 } from "../domain/sprint-delivery/v1/index.js";
 import {
@@ -16,6 +17,7 @@ import {
   GitHubExecutionIntentSchema,
   type GitHubExecutionIntent,
   type GitHubReadPort,
+  type FeasibilityResult,
 } from "../providers/v1/index.js";
 
 const shaSchema = z.string().regex(/^[a-f0-9]{40}$/);
@@ -60,6 +62,21 @@ export async function collectLiveWorkItemBinding(input: {
   ]);
   if (repositoryConfiguration.defaultBranch !== adapter.defaultBranch) throw new Error("repository default branch drifted from adapter");
   return LiveWorkItemBindingSchema.parse({ version: "live-work-item-binding/v1", runId: input.runId, workItemId: input.workItemId, issue, plan, defaultBranchSha: input.defaultBranchSha, repositoryConfiguration, installation, adapterFingerprint: adapterFingerprint(adapter), observedAt: input.observedAt });
+}
+
+/** Reads approval only from GitHub's canonical event stream and binds it to the current plan. */
+export async function authorizeLiveBuild(input: {
+  readonly github: GitHubReadPort;
+  readonly repository: string;
+  readonly issueNumber: number;
+  readonly plan: z.infer<typeof CanonicalPlanSchema>;
+  readonly analysis: FeasibilityResult;
+}): Promise<ReturnType<typeof authorizeBuild>> {
+  const approvals = await input.github.getHumanBuildApprovals(input.repository, input.issueNumber);
+  const currentPlanTime = Date.parse(input.plan.updatedAt);
+  return authorizeBuild(input.analysis, input.issueNumber, input.plan.bodySha256,
+    approvals.filter((approval) => Date.parse(approval.occurredAt) >= currentPlanTime)
+      .map((approval) => ({ issueNumber: approval.issueNumber, planSha256: input.plan.bodySha256, actor: { kind: "human" as const, id: approval.actorLogin }, approvedAt: approval.occurredAt, evidenceUri: approval.evidence.uri })));
 }
 
 export const DispatchPreparationSchema = z.object({

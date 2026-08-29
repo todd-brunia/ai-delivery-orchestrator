@@ -1,18 +1,20 @@
-import { CanonicalCheckSchema, CanonicalIssueSchema, CanonicalPlanSchema, CanonicalPullRequestSchema, FeasibilityRequestSchema, FeasibilityResultSchema, GitHubMutationIntentSchema, PullRequestReviewRequestSchema, PullRequestReviewResultSchema, type CanonicalCheck, type CanonicalIssue, type CanonicalPlan, type CanonicalPullRequest, type FeasibilityResult, type GitHubMutationIntent, type PullRequestReviewResult } from "./contracts.js";
+import { CanonicalCheckSchema, CanonicalHumanBuildApprovalSchema, CanonicalIssueSchema, CanonicalPlanSchema, CanonicalPullRequestSchema, FeasibilityRequestSchema, FeasibilityResultSchema, GitHubMutationIntentSchema, PullRequestReviewRequestSchema, PullRequestReviewResultSchema, type CanonicalCheck, type CanonicalHumanBuildApproval, type CanonicalIssue, type CanonicalPlan, type CanonicalPullRequest, type FeasibilityResult, type GitHubMutationIntent, type PullRequestReviewResult } from "./contracts.js";
 import type { GitHubMutationPort, GitHubReadPort, ModelAnalysisPort } from "./ports.js";
 
 const clone = <T>(value: T): T => structuredClone(value);
 const key = (repository: string, number: number) => `${repository}#${number}`;
 
 export class StubGitHubReadAdapter implements GitHubReadPort {
-  private readonly issues = new Map<string, CanonicalIssue>(); private readonly pullRequests = new Map<string, CanonicalPullRequest>(); private readonly plans = new Map<string, CanonicalPlan>(); private readonly checks = new Map<string, readonly CanonicalCheck[]>();
+  private readonly issues = new Map<string, CanonicalIssue>(); private readonly pullRequests = new Map<string, CanonicalPullRequest>(); private readonly plans = new Map<string, CanonicalPlan>(); private readonly approvals = new Map<string, readonly CanonicalHumanBuildApproval[]>(); private readonly checks = new Map<string, readonly CanonicalCheck[]>();
   registerIssue(value: unknown): void { const issue = CanonicalIssueSchema.parse(value); this.issues.set(key(issue.repository, issue.number), clone(issue)); }
   registerPullRequest(value: unknown): void { const pullRequest = CanonicalPullRequestSchema.parse(value); this.pullRequests.set(key(pullRequest.repository, pullRequest.number), clone(pullRequest)); }
   registerMarkedPlan(value: unknown): void { const plan = CanonicalPlanSchema.parse(value); this.plans.set(String(plan.issueNumber), clone(plan)); }
+  registerHumanBuildApprovals(repository: string, number: number, value: unknown): void { this.approvals.set(key(repository, number), clone(CanonicalHumanBuildApprovalSchema.array().parse(value))); }
   registerChecks(repository: string, headSha: string, value: unknown): void { const checks = CanonicalCheckSchema.array().max(500).parse(value); this.checks.set(`${repository}@${headSha}`, clone(checks)); }
   async getIssue(repository: string, number: number): Promise<CanonicalIssue> { await Promise.resolve(); const value = this.issues.get(key(repository, number)); if (!value) throw new Error("missing stub issue fixture"); return clone(value); }
   async getPullRequest(repository: string, number: number): Promise<CanonicalPullRequest> { await Promise.resolve(); const value = this.pullRequests.get(key(repository, number)); if (!value) throw new Error("missing stub pull request fixture"); return clone(value); }
   async getMarkedPlan(_repository: string, number: number): Promise<CanonicalPlan> { await Promise.resolve(); const value = this.plans.get(String(number)); if (!value) throw new Error("missing stub plan fixture"); return clone(value); }
+  async getHumanBuildApprovals(repository: string, number: number): Promise<readonly CanonicalHumanBuildApproval[]> { await Promise.resolve(); return clone(this.approvals.get(key(repository, number)) ?? []); }
   async getChecks(repository: string, headSha: string): Promise<readonly CanonicalCheck[]> { await Promise.resolve(); const value = this.checks.get(`${repository}@${headSha}`); if (!value) throw new Error("missing stub check fixture"); return clone(value); }
   async getExactDiff(): Promise<never> { await Promise.resolve(); throw new Error("missing stub exact diff fixture"); }
   async getReviews(): Promise<never> { await Promise.resolve(); throw new Error("missing stub review fixture"); }

@@ -1,9 +1,10 @@
-import type { CanonicalCheck, CanonicalDiff, CanonicalInstallation, CanonicalIssue, CanonicalPlan, CanonicalPullRequest, CanonicalRepositoryConfiguration, CanonicalReview, CanonicalWorkflowRun, FeasibilityRequest, FeasibilityResult, GitHubMutationIntent, PullRequestReviewRequest, PullRequestReviewResult } from "./contracts.js";
+import type { CanonicalCheck, CanonicalDiff, CanonicalHumanBuildApproval, CanonicalInstallation, CanonicalIssue, CanonicalPlan, CanonicalPullRequest, CanonicalRepositoryConfiguration, CanonicalReview, CanonicalWorkflowRun, FeasibilityRequest, FeasibilityResult, GitHubMutationIntent, PullRequestReviewRequest, PullRequestReviewResult } from "./contracts.js";
 
 export interface GitHubReadPort {
   getIssue(repository: string, number: number): Promise<CanonicalIssue>;
   getPullRequest(repository: string, number: number): Promise<CanonicalPullRequest>;
   getMarkedPlan(repository: string, number: number): Promise<CanonicalPlan>;
+  getHumanBuildApprovals(repository: string, number: number): Promise<readonly CanonicalHumanBuildApproval[]>;
   getChecks(repository: string, headSha: string): Promise<readonly CanonicalCheck[]>;
   getExactDiff(repository: string, baseSha: string, headSha: string): Promise<CanonicalDiff>;
   getReviews(repository: string, pullRequestNumber: number): Promise<readonly CanonicalReview[]>;

@@ -5,6 +5,7 @@ import {
   CanonicalDiffSchema,
   CanonicalInstallationSchema,
   CanonicalIssueSchema,
+  CanonicalHumanBuildApprovalSchema,
   CanonicalPlanSchema,
   CanonicalPullRequestSchema,
   CanonicalRepositoryConfigurationSchema,
@@ -15,6 +16,7 @@ import {
   type CanonicalDiff,
   type CanonicalInstallation,
   type CanonicalIssue,
+  type CanonicalHumanBuildApproval,
   type CanonicalPlan,
   type CanonicalPullRequest,
   type CanonicalRepositoryConfiguration,
@@ -136,6 +138,16 @@ export class GitHubAppReadAdapter implements GitHubReadPort {
     if (plans.length !== 1) throw new GitHubReadError("invalid_response", "expected exactly one marked implementation plan");
     const plan = plans[0]!; const body = plan.body as string;
     return CanonicalPlanSchema.parse({ issueNumber: number, commentId: String(plan.id), bodySha256: digest(body), createdAt: iso(plan.created_at), updatedAt: iso(plan.updated_at), evidence: { uri: `github://issues/${repository}/${number}/comments/${String(plan.id)}`, observedAt: this.now().toISOString(), sha256: digest(body) } });
+  }
+
+  async getHumanBuildApprovals(repository: string, number: number): Promise<readonly CanonicalHumanBuildApproval[]> {
+    this.assertRepository(repository);
+    const events = await this.list(`/repos/${repository}/issues/${number}/events?per_page=${this.config.maxItems}`);
+    return events.flatMap((raw) => {
+      const item = raw as Record<string, unknown>; const label = item.label as Record<string, unknown> | undefined; const actor = item.actor as Record<string, unknown> | undefined;
+      if (item.event !== "labeled" || label?.name !== "approved-for-build" || actor?.type !== "User") return [];
+      return [CanonicalHumanBuildApprovalSchema.parse({ issueNumber: number, label: "approved-for-build", actorLogin: actor.login, actorType: "User", occurredAt: iso(item.created_at), evidence: this.evidence(`github://issues/${repository}/${number}/events/${String(item.id)}`) })];
+    });
   }
 
   async getChecks(repository: string, headSha: string): Promise<readonly CanonicalCheck[]> {

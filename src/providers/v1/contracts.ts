@@ -99,6 +99,17 @@ export const CanonicalWorkflowRunSchema = z.object({
 }).strict();
 export type CanonicalWorkflowRun = z.infer<typeof CanonicalWorkflowRunSchema>;
 
+/** A human-applied approval label, observed from the canonical issue event stream. */
+export const CanonicalHumanBuildApprovalSchema = z.object({
+  issueNumber: z.number().int().positive(),
+  label: z.literal("approved-for-build"),
+  actorLogin: z.string().min(1).max(100),
+  actorType: z.literal("User"),
+  occurredAt: z.iso.datetime({ offset: true }),
+  evidence: GitHubReadEvidenceSchema,
+}).strict();
+export type CanonicalHumanBuildApproval = z.infer<typeof CanonicalHumanBuildApprovalSchema>;
+
 export const CanonicalRepositoryConfigurationSchema = z.object({
   repository: RepositoryNameSchema,
   repositoryId: repositoryIdSchema,
