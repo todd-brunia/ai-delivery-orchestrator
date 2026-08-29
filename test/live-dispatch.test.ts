@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { RepositoryAdapterConfigV1 } from "../src/domain/sprint-delivery/v1/index.js";
-import { adapterFingerprint, prepareImplementationDispatch } from "../src/workflows/index.js";
+import { adapterFingerprint, prepareImplementationDispatch, verifyAcceptedImplementationDispatch } from "../src/workflows/index.js";
 
 const sha = "a".repeat(40);
 const plan = "b".repeat(64);
@@ -34,5 +34,13 @@ describe("live implementation dispatch preparation", () => {
   it("fails closed on plan and installation-permission drift", () => {
     expect(prepareImplementationDispatch({ ...input, expectedPlanSha256: "d".repeat(64) })).toEqual({ ready: false, reason: "plan_drift" });
     expect(prepareImplementationDispatch({ ...input, binding: { ...binding, installation: { ...binding.installation, permissions: { actions: "read", issues: "write" } } } })).toEqual({ ready: false, reason: "installation_permission_missing" });
+  });
+
+  it("requires canonical workflow-run acceptance evidence before marking a build dispatched", () => {
+    const preparation = prepareImplementationDispatch(input);
+    if (!preparation.ready || preparation.intent.type !== "dispatch_workflow") throw new Error("fixture intent is missing");
+    const evidence = { intent: preparation.intent, acceptedAt: "2026-08-29T12:00:00Z", workflowRuns: [{ id: "99", workflowId: "11", workflowPath: ".github/workflows/implementation.yml", event: "workflow_dispatch", status: "queued", conclusion: null, headSha: sha, createdAt: "2026-08-29T12:00:01Z", updatedAt: "2026-08-29T12:00:01Z", evidence: { uri: "github://workflow-runs/99", observedAt: "2026-08-29T12:00:02Z" } }] };
+    expect(verifyAcceptedImplementationDispatch(evidence)).toEqual({ accepted: true, workflowRunId: "99", evidenceUri: "github://workflow-runs/99" });
+    expect(verifyAcceptedImplementationDispatch({ ...evidence, workflowRuns: [{ ...evidence.workflowRuns[0]!, headSha: "b".repeat(40) }] })).toEqual({ accepted: false, reason: "workflow_run_not_found" });
   });
 });

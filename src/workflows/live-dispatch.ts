@@ -12,6 +12,7 @@ import {
   CanonicalIssueSchema,
   CanonicalPlanSchema,
   CanonicalRepositoryConfigurationSchema,
+  CanonicalWorkflowRunSchema,
   GitHubExecutionIntentSchema,
   type GitHubExecutionIntent,
 } from "../providers/v1/index.js";
@@ -105,4 +106,33 @@ export function prepareImplementationDispatch(raw: unknown): DispatchPreparation
 
 export function adapterFingerprint(adapter: RepositoryAdapterConfigV1): string {
   return createHash("sha256").update(JSON.stringify(RepositoryAdapterConfigV1Schema.parse(adapter)), "utf8").digest("hex");
+}
+
+export const DispatchAcceptanceEvidenceSchema = z.object({
+  intent: GitHubExecutionIntentSchema,
+  acceptedAt: z.iso.datetime({ offset: true }),
+  workflowRuns: z.array(CanonicalWorkflowRunSchema).max(500),
+}).strict();
+
+/**
+ * A queued intent is never dispatch proof. The caller may transition a work item to
+ * build_dispatched only after this check finds GitHub's canonical workflow-run record.
+ */
+export function verifyAcceptedImplementationDispatch(raw: unknown):
+  | { readonly accepted: true; readonly workflowRunId: string; readonly evidenceUri: string }
+  | { readonly accepted: false; readonly reason: "wrong_intent" | "workflow_run_not_found" } {
+  const input = DispatchAcceptanceEvidenceSchema.parse(raw);
+  const { intent } = input;
+  if (intent.type !== "dispatch_workflow" || intent.actorRole !== "builder") return { accepted: false, reason: "wrong_intent" };
+  const acceptedAt = Date.parse(input.acceptedAt);
+  const expectedPath = `.github/workflows/${intent.workflow}`;
+  const match = input.workflowRuns.find((run) =>
+    run.headSha === intent.ref &&
+    run.workflowPath === expectedPath &&
+    run.event === "workflow_dispatch" &&
+    Date.parse(run.createdAt) >= acceptedAt,
+  );
+  return match
+    ? { accepted: true, workflowRunId: match.id, evidenceUri: match.evidence.uri }
+    : { accepted: false, reason: "workflow_run_not_found" };
 }
