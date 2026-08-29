@@ -6,6 +6,7 @@ import { planApprovalRequirement, ReconciliationReportSchema, scheduleDryRun, WO
 import type { PersistedSprintRun, SprintRunRepository } from "../persistence/index.js";
 import {
   CanonicalIssueSchema,
+  CanonicalPlanSchema,
   FeasibilityResultSchema,
   PROVIDER_CONTRACT_VERSION,
   type FeasibilityResult,
@@ -24,6 +25,7 @@ const GraphState = Annotation.Root({
   request: Annotation<DryRunWorkflowRequest>,
   run: Annotation<PersistedSprintRun>,
   issues: Annotation<readonly CanonicalIssue[]>,
+  plans: Annotation<Readonly<Record<string, string>>>,
   analysis: Annotation<FeasibilityResult>,
   schedule: Annotation<SchedulingDecision>,
   reconciliation: Annotation<ReconciliationReport>,
@@ -72,23 +74,34 @@ export function createSprintDeliveryV1Runtime(
       if (run.input.workflowVersion !== WORKFLOW_VERSION) throw new Error("unsupported workflow version");
       const expectedKeys = run.input.issueNumbers.map(String).sort();
       const actualKeys = Object.keys(request.planFingerprints).sort();
-      if (JSON.stringify(expectedKeys) !== JSON.stringify(actualKeys)) {
-        throw new Error("plan fingerprints must exactly match the immutable issue list");
-      }
+      if (JSON.stringify(expectedKeys) !== JSON.stringify(actualKeys)) throw new Error("plan fingerprints must exactly match the immutable issue list");
       return { run };
     })
     .addNode("collect_issues", async (state) => {
       const issues = await Promise.all(state.run.input.issueNumbers.map((number) =>
         providers.githubRead.getIssue(state.run.input.repository, number)));
       if (issues.some((issue) => issue.state !== "open")) throw new Error("all workflow issues must be open");
-      return { issues: issues.map((issue) => CanonicalIssueSchema.parse(issue)) };
+      const parsedIssues = issues.map((issue) => CanonicalIssueSchema.parse(issue));
+      const plans = await Promise.all(state.run.input.issueNumbers.map((number) =>
+        providers.githubRead.getMarkedPlan(state.run.input.repository, number)));
+      const planFingerprints: Record<string, string> = {};
+      for (const rawPlan of plans) {
+        const plan = CanonicalPlanSchema.parse(rawPlan);
+        const expected = state.request.planFingerprints[String(plan.issueNumber)];
+        if (!expected || expected !== plan.bodySha256) {
+          throw new Error(`canonical marked plan drifted for issue ${plan.issueNumber}`);
+        }
+        planFingerprints[String(plan.issueNumber)] = plan.bodySha256;
+      }
+      if (Object.keys(planFingerprints).length !== state.run.input.issueNumbers.length) throw new Error("canonical marked plans must cover every workflow issue");
+      return { issues: parsedIssues, plans: planFingerprints };
     })
     .addNode("analyze", async (state) => {
       const analysis = await providers.modelAnalysis.analyzeFeasibility({
         version: PROVIDER_CONTRACT_VERSION,
         repository: state.run.input.repository,
         issueNumbers: state.run.input.issueNumbers,
-        planFingerprints: state.request.planFingerprints,
+        planFingerprints: state.plans,
         defaultBranchSha: state.request.defaultBranchSha,
       });
       const parsed = FeasibilityResultSchema.parse(analysis);
@@ -240,9 +253,9 @@ export function createSprintDeliveryV1Runtime(
         if (current.state !== original.state || current.state !== "open") drift.push({ issueNumber: original.number, field: "state", severity: "invalidating", expected: "open", observed: current.state });
         if (JSON.stringify([...current.labels].sort()) !== JSON.stringify([...original.labels].sort())) drift.push({ issueNumber: original.number, field: "labels", severity: "invalidating", expected: JSON.stringify([...original.labels].sort()), observed: JSON.stringify([...current.labels].sort()) });
         if (current.updatedAt !== original.updatedAt) drift.push({ issueNumber: original.number, field: "updated_at", severity: "invalidating", expected: original.updatedAt, observed: current.updatedAt });
-        const originalPlan = createHash("sha256").update(JSON.stringify({ title: original.title, body: original.body })).digest("hex");
-        const currentPlan = createHash("sha256").update(JSON.stringify({ title: current.title, body: current.body })).digest("hex");
-        if (currentPlan !== originalPlan) drift.push({ issueNumber: original.number, field: "plan_fingerprint", severity: "invalidating", expected: originalPlan, observed: currentPlan });
+        const currentPlan = CanonicalPlanSchema.parse(await providers.githubRead.getMarkedPlan(state.run.input.repository, original.number));
+        const originalPlan = state.plans[String(original.number)];
+        if (currentPlan.bodySha256 !== originalPlan) drift.push({ issueNumber: original.number, field: "plan_fingerprint", severity: "invalidating", expected: originalPlan ?? "missing", observed: currentPlan.bodySha256 });
       }
       const reconciliation = ReconciliationReportSchema.parse({
         version: "reconciliation-report/v1", workflowVersion: WORKFLOW_VERSION,
