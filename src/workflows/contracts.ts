@@ -55,6 +55,8 @@ export const LiveWorkflowResultSchema = z.object({
   threadId: z.string().min(1),
   status: z.literal("bindings_collected"),
   bindingFingerprints: z.record(z.string().uuid(), fingerprintSchema),
+  authorizedIssueNumbers: z.array(z.number().int().positive()),
+  waitingIssueNumbers: z.array(z.number().int().positive()),
 }).strict();
 export type LiveWorkflowResult = z.infer<typeof LiveWorkflowResultSchema>;
 
