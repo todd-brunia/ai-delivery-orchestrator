@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { RepositoryAdapterConfigV1 } from "../src/domain/sprint-delivery/v1/index.js";
 import type { WorkItemTransitionRequest } from "../src/persistence/index.js";
 import type { FeasibilityResult } from "../src/providers/v1/index.js";
-import { advanceAcceptedImplementationDispatch, adapterFingerprint, authorizeLiveBuild, collectLiveWorkItemBinding, prepareImplementationDispatch, queueImplementationDispatch, verifyAcceptedImplementationDispatch } from "../src/workflows/index.js";
+import { advanceAcceptedImplementationDispatch, adapterFingerprint, authorizeLiveBuild, collectLiveWorkItemBinding, createDispatchAcceptanceHandler, prepareImplementationDispatch, queueImplementationDispatch, verifyAcceptedImplementationDispatch } from "../src/workflows/index.js";
 
 const sha = "a".repeat(40);
 const plan = "b".repeat(64);
@@ -91,6 +91,21 @@ describe("live implementation dispatch preparation", () => {
     const repository = { recordDispatchAttempt: async () => { await Promise.resolve(); calls.push("attempt"); return { duplicate: false }; }, transitionWorkItem: async () => { await Promise.resolve(); calls.push("transition"); return { workItem: { id: binding.workItemId, issueNumber: 72, state: "build_dispatched" as const, revision: 1 }, duplicate: false }; } };
     const result = await advanceAcceptedImplementationDispatch({ repository: repository as never, workItem: { id: binding.workItemId, issueNumber: 72, state: "dispatch_queued", revision: 0 }, intent: preparation.intent, acceptedAt: "2026-08-29T12:00:00Z", workflowRuns: [{ id: "99", workflowId: "11", workflowPath: ".github/workflows/implementation.yml", event: "workflow_dispatch", status: "queued", conclusion: null, headSha: sha, createdAt: "2026-08-29T12:00:01Z", updatedAt: "2026-08-29T12:00:01Z", evidence: { uri: "github://workflow-runs/99", observedAt: "2026-08-29T12:00:02Z" } }] });
     expect(result).toEqual({ advanced: true });
+    expect(calls).toEqual(["attempt", "transition"]);
+  });
+
+  it("advances a queued dispatch only after a fresh canonical workflow observation", async () => {
+    const preparation = prepareImplementationDispatch(input);
+    if (!preparation.ready) throw new Error("fixture intent is missing");
+    const calls: string[] = [];
+    const handler = createDispatchAcceptanceHandler({
+      getRun: async () => { await Promise.resolve(); return { id: binding.runId, input: { workflowVersion: "sprint-delivery/v1", repository, issueNumbers: [72], mergePolicy: "human" }, state: "active", revision: 0, createdAt: input.now, updatedAt: input.now, workItems: [{ id: binding.workItemId, issueNumber: 72, state: "dispatch_queued", revision: 1 }] }; },
+      recordDispatchAttempt: async () => { await Promise.resolve(); calls.push("attempt"); return { duplicate: false }; },
+      transitionWorkItem: async () => { await Promise.resolve(); calls.push("transition"); return { workItem: { id: binding.workItemId, issueNumber: 72, state: "build_dispatched", revision: 2 }, duplicate: false }; },
+    } as never, {
+      getWorkflowRuns: async () => { await Promise.resolve(); return [{ id: "99", workflowId: "11", workflowPath: ".github/workflows/implementation.yml", event: "workflow_dispatch", status: "queued", conclusion: null, headSha: sha, createdAt: "2026-08-29T12:00:01Z", updatedAt: "2026-08-29T12:00:01Z", evidence: { uri: "github://workflow-runs/99", observedAt: "2026-08-29T12:00:02Z" } }]; },
+    } as never);
+    await handler.reconcile(preparation.intent, input.now);
     expect(calls).toEqual(["attempt", "transition"]);
   });
 });

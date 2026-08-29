@@ -12,6 +12,7 @@ export interface GitHubMutationTransport { request(input: { method: "PATCH" | "P
 export interface GitHubMutationPrivateKeySource { load(reference: string): Promise<string>; }
 export interface GitHubMutationHttpTransport { request(input: { method: "PATCH" | "POST"; url: string; headers: Readonly<Record<string, string>>; body: string; timeoutMilliseconds: number }): Promise<{ status: number; headers: Readonly<Record<string, string | undefined>>; body: string }>; }
 export interface MutationReconciler { reconcile(intent: GitHubExecutionIntent): Promise<"confirmed" | "absent" | "ambiguous">; }
+export interface CompletedDispatchReconciler { reconcile(intent: GitHubExecutionIntent, completedAt: string): Promise<void>; }
 
 const operationPath = (intent: GitHubExecutionIntent): { method: "PATCH" | "POST"; path: string; body: unknown } => {
   const prefix = `/repos/${intent.repository}`;
@@ -74,7 +75,7 @@ export class GitHubMutationExecutor {
 
 /** Consumes only GitHub mutation actions through the durable M2 outbox. */
 export class GitHubMutationOutboxConsumer {
-  constructor(private readonly repository: SprintRunRepository, private readonly executor: GitHubMutationExecutor, private readonly ownerId: string, private readonly leaseMilliseconds = 60_000, private readonly now: () => Date = () => new Date()) {}
+  constructor(private readonly repository: SprintRunRepository, private readonly executor: GitHubMutationExecutor, private readonly ownerId: string, private readonly leaseMilliseconds = 60_000, private readonly now: () => Date = () => new Date(), private readonly dispatchReconciler?: CompletedDispatchReconciler) {}
 
   async consume(limit = 10): Promise<readonly { id: string; outcome: "completed" | "retry" | "blocked" }[]> {
     const now = this.now();
@@ -88,6 +89,7 @@ export class GitHubMutationOutboxConsumer {
       intent = GitHubExecutionIntentSchema.parse(action.payload);
       const result = await this.executor.execute(intent);
       await this.recordReceipt(action, intent, "completed", now, result.requestId);
+      if (intent.type === "dispatch_workflow") await this.dispatchReconciler?.reconcile(intent, now.toISOString());
       if (!await this.repository.completeOutbox(action.id, this.ownerId, now)) throw new Error("mutation outbox lease was lost");
       return { id: action.id, outcome: "completed" };
     } catch (error) {
