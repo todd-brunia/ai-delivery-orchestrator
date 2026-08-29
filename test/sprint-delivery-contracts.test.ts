@@ -189,6 +189,12 @@ describe("sprint-delivery/v1 contracts", () => {
   it("rejects unknown work-item events", () => {
     expect(() => WorkItemEventSchema.parse("approve_and_merge")).toThrow();
   });
+
+  it("keeps a queued dispatch distinct from an accepted build", () => {
+    expect(transitionWorkItem("ready_to_build", "dispatch_queued")).toBe("dispatch_queued");
+    expect(transitionWorkItem("dispatch_queued", "build_dispatched")).toBe("build_dispatched");
+    expect(() => transitionWorkItem("ready_to_build", "build_dispatched")).toThrow(InvalidTransitionError);
+  });
 });
 
 describe("state transitions", () => {
@@ -231,6 +237,7 @@ describe("state transitions", () => {
     let state = transitionWorkItem("discovered", "plan_available");
     state = transitionWorkItem(state, "human_plan_approval_required");
     state = transitionWorkItem(state, "build_authorized");
+    state = transitionWorkItem(state, "dispatch_queued");
     state = transitionWorkItem(state, "build_dispatched");
     state = transitionWorkItem(state, "build_started");
     state = transitionWorkItem(state, "pull_request_opened");

@@ -62,7 +62,7 @@ describe("orchestration persistence primitives", () => {
     await advance(first!.id, readyEvents);
     await advance(second!.id, readyEvents);
     await expect(repository.listRunnableWorkItems(run.id)).resolves.toEqual([expect.objectContaining({ issueNumber: 81 })]);
-    await advance(first!.id, ["build_dispatched", "build_started", "pull_request_opened", "checks_awaited", "review_started", "human_review_ready", "merged"], 2);
+    await advance(first!.id, ["dispatch_queued", "build_dispatched", "build_started", "pull_request_opened", "checks_awaited", "review_started", "human_review_ready", "merged"], 2);
     await expect(repository.listRunnableWorkItems(run.id)).resolves.toEqual([expect.objectContaining({ issueNumber: 82 })]);
   });
 
