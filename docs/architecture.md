@@ -151,29 +151,31 @@ explicit fixtures, return isolated copies, capture mutation intent without
 executing it, and make no network calls. Real Octokit and OpenAI adapters are
 deferred and cannot be selected through configuration.
 
-## Stub-only LangGraph runtime
+## Checkpointed planning and dispatch safety
 
-The internal workflow runtime executes the first bounded
-`sprint-delivery/v1` dry-run path: load an existing immutable run, read every
-issue through fixture-backed GitHub ports, request fixture-backed feasibility
-analysis, validate domain policy and dependency rules, and persist analysis
-plus attributable state transitions. It then loads authoritative work-item
-state, chooses at most two runnable issues by stable issue-number order,
-serializes dependency, overlapping-domain, and low-confidence candidates, and
-re-reads selected fixtures. Identity, state, label, timestamp, or plan-content
-drift invalidates the schedule. Schedule decisions, reconciliation reports,
-and label/dispatch proposals have versioned strict contracts and durable,
-idempotent records; the graph never invokes the GitHub mutation port or marks
-a work item dispatched.
+The internal workflow runtime executes a bounded `sprint-delivery/v1` path:
+load an immutable run, collect canonical issue and marked-plan evidence,
+acquire a per-work-item lease, and persist an immutable planning binding before
+feasibility analysis. It validates policy and dependency rules, then chooses
+dependency- and conflict-safe work within the adapter-configured ceiling of
+two. Identity, state, label, timestamp, or plan-content drift invalidates the
+schedule.
+
+Dispatch is split across typed intent, durable attempt, and canonical evidence
+boundaries. Attempt records distinguish proposed, claimed, accepted, ambiguous,
+rejected, and blocked outcomes. `build_dispatched` is permitted only after a
+canonical workflow run matches the implementation workflow, bound SHA, and
+post-acceptance timeline; an outbox claim, response, model result, or
+checkpoint is never proof that a build started.
 
 The official open-source PostgreSQL checkpointer stores graph execution state
 in `langgraph_checkpoints`. Stable thread IDs resume interrupted graphs, while
 deterministic application idempotency keys prevent replay from duplicating
 transitions or outbox actions. Application tables remain authoritative for run
 and work-item state; checkpoint payloads cannot add states or bypass policy.
-Missing fixtures, incomplete conflict coverage, unsupported versions,
-non-stub provider selection, infeasible results, unresolved decisions, and
-stale database revisions fail closed.
+Missing evidence, lease contention, incomplete conflict coverage, unsupported
+versions, infeasible results, unresolved decisions, binding drift, and stale
+database revisions fail closed.
 
 ## Immutable automatic-run authorization
 

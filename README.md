@@ -94,12 +94,15 @@ intent, and fail closed when a fixture is missing. Real GitHub and OpenAI
 providers require separately reviewed implementation and authority.
 
 The internal `sprint-delivery/v1` runtime can load an existing run, collect
-canonical issue fixtures, perform deterministic feasibility analysis, persist
+canonical issue and marked-plan evidence, persist lease-protected immutable
+planning bindings, perform deterministic feasibility analysis, persist
 validated dependency/conflict decisions, select at most two dependency- and
 conflict-safe work items in issue-number order, re-read their canonical
 fixtures for drift, and checkpoint each graph step. Label and implementation
-dispatch actions are durable, idempotent proposals only; they are never sent
-to the GitHub mutation port and work items remain `ready_to_build`.
+dispatch actions are durable, idempotent proposals only. A separate accepted
+dispatch boundary can move a work item to `build_dispatched` only after
+canonical workflow-run evidence matches the bound workflow and SHA; local
+stubs never send a live GitHub mutation.
 
 With local PostgreSQL running, execute a sanitized fixture report with:
 
