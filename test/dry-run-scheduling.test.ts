@@ -31,4 +31,11 @@ describe("dry-run scheduling", () => {
     expect(() => SchedulingDecisionSchema.parse({ ...result, version: "schedule-decision/v2" })).toThrow();
     expect(() => scheduleDryRun({ runId, candidates: [], dependencies: [], mergedIssueNumbers: [], activeImplementationCount: 3, evidence })).toThrow("between zero and two");
   });
+
+  it("honors an adapter's lower parallel limit even when the global ceiling permits two", () => {
+    const result = scheduleDryRun({ runId, candidates: [candidate(10, "a"), candidate(11, "b")], dependencies: [], mergedIssueNumbers: [], activeImplementationCount: 0, maximumConcurrentImplementations: 1, evidence });
+    expect(result).toMatchObject({ maximumConcurrentImplementations: 1, selectedIssueNumbers: [10] });
+    expect(result.blockers).toEqual([{ issueNumber: 11, reasons: ["parallel_limit_reached"], relatedIssueNumbers: [10] }]);
+    expect(() => scheduleDryRun({ runId, candidates: [], dependencies: [], mergedIssueNumbers: [], activeImplementationCount: 2, maximumConcurrentImplementations: 1, evidence })).toThrow("between zero and two");
+  });
 });

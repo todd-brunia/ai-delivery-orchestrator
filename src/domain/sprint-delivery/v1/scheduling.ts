@@ -37,7 +37,7 @@ export const SchedulingDecisionSchema = z.object({
   policyVersion: z.literal(SCHEDULING_POLICY_VERSION),
   runId: z.uuid(),
   activeImplementationCount: z.number().int().min(0).max(2),
-  maximumConcurrentImplementations: z.literal(2),
+  maximumConcurrentImplementations: z.number().int().min(1).max(2),
   selectedIssueNumbers: z.array(IssueNumberSchema).max(2),
   blockers: z.array(ScheduleBlockerSchema),
   proposedActions: z.array(ProposedActionSchema),
@@ -78,15 +78,18 @@ export function scheduleDryRun(input: {
   dependencies: readonly DependencyEdge[];
   mergedIssueNumbers: readonly number[];
   activeImplementationCount: number;
+  /** Adapter-constrained capacity; repository policy may never exceed two. */
+  maximumConcurrentImplementations?: 1 | 2;
   evidence: SchedulingDecision["evidence"];
 }): SchedulingDecision {
-  if (!Number.isInteger(input.activeImplementationCount) || input.activeImplementationCount < 0 || input.activeImplementationCount > 2) {
+  const maximumConcurrentImplementations = input.maximumConcurrentImplementations ?? 2;
+  if (!Number.isInteger(input.activeImplementationCount) || input.activeImplementationCount < 0 || input.activeImplementationCount > maximumConcurrentImplementations) {
     throw new Error("activeImplementationCount must be an integer between zero and two");
   }
   const merged = new Set(input.mergedIssueNumbers);
   const selected: SchedulingCandidate[] = [];
   const blockers: z.infer<typeof ScheduleBlockerSchema>[] = [];
-  const capacity = 2 - input.activeImplementationCount;
+  const capacity = maximumConcurrentImplementations - input.activeImplementationCount;
   for (const candidate of [...input.candidates].sort((a, b) => a.issueNumber - b.issueNumber)) {
     const prerequisites = input.dependencies
       .filter((edge) => edge.dependentIssueNumber === candidate.issueNumber && !merged.has(edge.prerequisiteIssueNumber))
@@ -124,7 +127,7 @@ export function scheduleDryRun(input: {
     version: "schedule-decision/v1", workflowVersion: WORKFLOW_VERSION,
     providerContractVersion: PROVIDER_CONTRACT_VERSION, policyVersion: SCHEDULING_POLICY_VERSION,
     runId: input.runId, activeImplementationCount: input.activeImplementationCount,
-    maximumConcurrentImplementations: 2, selectedIssueNumbers: selected.map((item) => item.issueNumber),
+    maximumConcurrentImplementations, selectedIssueNumbers: selected.map((item) => item.issueNumber),
     blockers, proposedActions, evidence: input.evidence,
   });
 }
