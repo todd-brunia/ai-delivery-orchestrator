@@ -103,6 +103,33 @@ export interface LeaseRequest {
   readonly expiresAt: Date;
 }
 
+/** Immutable canonical evidence collected before feasibility or authorization may run. */
+export interface PlanningBinding {
+  readonly workItemId: string;
+  readonly fingerprint: string;
+  readonly evidence: Readonly<Record<string, unknown>>;
+  readonly observedAt: string;
+}
+
+export interface SavePlanningBindingRequest extends PlanningBinding {
+  readonly expectedWorkItemRevision: number;
+  readonly leaseOwnerId: string;
+}
+
+export interface PersistedPlanningBinding extends PlanningBinding {
+  readonly workItemRevision: number;
+  readonly createdAt: string;
+}
+
+export interface WorkflowNodeResult {
+  readonly workItemId: string;
+  readonly node: string;
+  readonly idempotencyKey: string;
+  readonly inputFingerprint: string;
+  readonly output: Readonly<Record<string, unknown>>;
+  readonly recordedAt: string;
+}
+
 export interface SprintRunRepository {
   createRun(id: string, input: SprintRunInput, now?: Date): Promise<PersistedSprintRun>;
   getRun(id: string): Promise<PersistedSprintRun | undefined>;
@@ -117,6 +144,10 @@ export interface SprintRunRepository {
   retryOutbox(id: string, ownerId: string, error: string, now?: Date): Promise<boolean>;
   blockOutbox(id: string, ownerId: string, error: string, now?: Date): Promise<boolean>;
   recordGitHubMutationReceipt?(receipt: GitHubMutationReceipt): Promise<void>;
+  savePlanningBinding?(request: SavePlanningBindingRequest, now?: Date): Promise<{ readonly binding: PersistedPlanningBinding; readonly duplicate: boolean }>;
+  getPlanningBinding?(workItemId: string): Promise<PersistedPlanningBinding | undefined>;
+  recordWorkflowNodeResult?(result: WorkflowNodeResult): Promise<{ readonly duplicate: boolean }>;
+  getWorkflowNodeResult?(workItemId: string, node: string, idempotencyKey: string): Promise<WorkflowNodeResult | undefined>;
   tryAcquireLease(request: LeaseRequest, now?: Date): Promise<boolean>;
 }
 
