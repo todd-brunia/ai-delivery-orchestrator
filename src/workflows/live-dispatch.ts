@@ -19,6 +19,7 @@ import {
   type GitHubReadPort,
   type FeasibilityResult,
 } from "../providers/v1/index.js";
+import type { PersistedWorkItem, SprintRunRepository } from "../persistence/index.js";
 
 const shaSchema = z.string().regex(/^[a-f0-9]{40}$/);
 const fingerprintSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -94,6 +95,7 @@ export type DispatchPreparation = z.infer<typeof DispatchPreparationSchema>;
 export type DispatchPreparationResult =
   | { readonly ready: true; readonly intent: GitHubExecutionIntent; readonly bindingFingerprint: string }
   | { readonly ready: false; readonly reason: "automation_disabled" | "adapter_drift" | "plan_drift" | "default_branch_drift" | "issue_closed" | "identity_drift" | "installation_permission_missing" | "invalid_expiry" };
+export type DispatchPreparationFailure = Extract<DispatchPreparationResult, { readonly ready: false }>;
 
 export function fingerprintLiveBinding(binding: LiveWorkItemBinding): string {
   return createHash("sha256").update(JSON.stringify(LiveWorkItemBindingSchema.parse(binding)), "utf8").digest("hex");
@@ -142,6 +144,61 @@ export function prepareImplementationDispatch(raw: unknown): DispatchPreparation
       expiresAt: input.expiresAt,
     }),
   };
+}
+
+function deterministicUuid(scope: string): string {
+  const value = createHash("sha256").update(scope).digest("hex");
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-4${value.slice(13, 16)}-a${value.slice(17, 20)}-${value.slice(20, 32)}`;
+}
+
+export type QueueImplementationDispatchResult =
+  | { readonly queued: true; readonly intent: GitHubExecutionIntent; readonly duplicate: boolean }
+  | { readonly queued: false; readonly reason: DispatchPreparationFailure["reason"] }
+  | { readonly queued: false; readonly reason: "already_queued" | "already_dispatched" };
+
+/**
+ * Atomically marks a ready work item as queued and commits its exact, bounded GitHub
+ * dispatch intent to the outbox. A queue entry is deliberately not acceptance proof.
+ */
+export async function queueImplementationDispatch(input: {
+  readonly repository: SprintRunRepository;
+  readonly workItem: PersistedWorkItem;
+  readonly preparation: DispatchPreparation;
+}): Promise<QueueImplementationDispatchResult> {
+  const preparation = prepareImplementationDispatch(input.preparation);
+  if (!preparation.ready) return { queued: false, reason: preparation.reason };
+  if (input.workItem.state === "dispatch_queued") return { queued: false, reason: "already_queued" };
+  if (input.workItem.state === "build_dispatched") return { queued: false, reason: "already_dispatched" };
+  if (input.workItem.state !== "ready_to_build") {
+    throw new Error("only build-authorized work items may queue an implementation dispatch");
+  }
+
+  const scope = `sprint-delivery/v1:${input.workItem.id}:${preparation.bindingFingerprint}:dispatch_queued`;
+  const transitioned = await input.repository.transitionWorkItem({
+    workItemId: input.workItem.id,
+    event: "dispatch_queued",
+    metadata: {
+      transitionId: deterministicUuid(`${scope}:transition`),
+      aggregateId: input.workItem.id,
+      expectedRevision: input.workItem.revision,
+      idempotencyKey: `workflow:${scope}`,
+      occurredAt: input.preparation.now,
+      actor: { kind: "system", id: "sprint-delivery/v1" },
+      evidence: [
+        { kind: "issue", uri: `github://issues/${preparation.intent.repository}/${preparation.intent.issueNumber}` },
+        { kind: "plan", uri: input.preparation.binding.plan.evidence.uri },
+        { kind: "policy", uri: input.preparation.binding.repositoryConfiguration.evidence.uri },
+        { kind: "policy", uri: input.preparation.binding.installation.evidence.uri },
+      ],
+    },
+    outbox: {
+      id: deterministicUuid(`${scope}:outbox`),
+      type: "github.mutation.execute",
+      payload: preparation.intent,
+      idempotencyKey: `outbox:${scope}`,
+    },
+  });
+  return { queued: true, intent: preparation.intent, duplicate: transitioned.duplicate };
 }
 
 export function adapterFingerprint(adapter: RepositoryAdapterConfigV1): string {
