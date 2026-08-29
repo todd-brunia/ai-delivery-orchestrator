@@ -392,6 +392,18 @@ model reasoning in an incident record.
 - **Never:** Edit PostgreSQL/checkpoints or trust a webhook/model claim instead
   of the canonical read.
 
+### Implementation dispatch acceptance
+
+- **Actions:** Keep a work item `ready_to_build` after a dispatch receipt;
+  record its attempt outcome; fetch canonical workflow runs for the bound SHA;
+  require the allowlisted implementation workflow and `workflow_dispatch`
+  event after the accepted attempt; then record the canonical run ID and
+  evidence URI before the single `build_dispatched` transition.
+- **Re-entry:** Reconcile an uncertain attempt. Never send a replacement merely
+  because the first response was lost or delayed.
+- **Never:** Treat an outbox claim, HTTP success, model output, webhook claim,
+  or checkpoint as proof that the target workflow started.
+
 ### Credential compromise, revocation, and rotation
 
 - **Trigger/initiator:** Human owner on suspected builder, reviewer, merger,
