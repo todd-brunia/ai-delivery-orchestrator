@@ -94,9 +94,32 @@ export function createSprintDeliveryV1Runtime(
         planFingerprints[String(plan.issueNumber)] = plan.bodySha256;
       }
       if (Object.keys(planFingerprints).length !== state.run.input.issueNumbers.length) throw new Error("canonical marked plans must cover every workflow issue");
+      if (repository.savePlanningBinding && repository.getPlanningBinding) {
+        const leaseOwnerId = `planning:${state.request.threadId}`;
+        const now = new Date(state.request.occurredAt);
+        for (const item of state.run.workItems) {
+          const acquired = await repository.tryAcquireLease({ aggregateType: "work_item", aggregateId: item.id, ownerId: leaseOwnerId, expiresAt: new Date(now.getTime() + 60_000) }, now);
+          if (!acquired) throw new Error(`planning binding lease contention for work item ${item.id}`);
+          const issue = parsedIssues.find(({ number }) => number === item.issueNumber);
+          const plan = CanonicalPlanSchema.parse(plans.find((value) => CanonicalPlanSchema.parse(value).issueNumber === item.issueNumber));
+          if (!issue) throw new Error(`canonical issue is missing for work item ${item.id}`);
+          const evidence = { issue, plan, defaultBranchSha: state.request.defaultBranchSha, repository: state.run.input.repository };
+          const fingerprint = createHash("sha256").update(JSON.stringify(evidence), "utf8").digest("hex");
+          const saved = await repository.savePlanningBinding({ workItemId: item.id, fingerprint, evidence, observedAt: state.request.occurredAt, expectedWorkItemRevision: item.revision, leaseOwnerId }, now);
+          if (saved.binding.fingerprint !== fingerprint) throw new Error(`persisted planning binding drifted for work item ${item.id}`);
+        }
+      }
       return { issues: parsedIssues, plans: planFingerprints };
     })
     .addNode("analyze", async (state) => {
+      if (repository.getPlanningBinding) {
+        for (const item of state.run.workItems) {
+          const binding = await repository.getPlanningBinding(item.id);
+          if (!binding) throw new Error(`planning binding is missing for work item ${item.id}`);
+          const expectedPlan = state.plans[String(item.issueNumber)];
+          if (typeof binding.evidence.plan !== "object" || binding.evidence.plan === null || (binding.evidence.plan as { bodySha256?: unknown }).bodySha256 !== expectedPlan) throw new Error(`planning binding drifted for work item ${item.id}`);
+        }
+      }
       const analysis = await providers.modelAnalysis.analyzeFeasibility({
         version: PROVIDER_CONTRACT_VERSION,
         repository: state.run.input.repository,

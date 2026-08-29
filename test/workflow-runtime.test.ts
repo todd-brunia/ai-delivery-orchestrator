@@ -4,7 +4,7 @@ import { MemorySaver } from "@langchain/langgraph";
 import { describe, expect, it } from "vitest";
 
 import { transitionSprintRun, transitionWorkItem, WORKFLOW_VERSION } from "../src/domain/sprint-delivery/v1/index.js";
-import type { PersistedSprintRun, SprintAnalysis, SprintRunRepository } from "../src/persistence/index.js";
+import type { PersistedPlanningBinding, PersistedSprintRun, SavePlanningBindingRequest, SprintAnalysis, SprintRunRepository } from "../src/persistence/index.js";
 import {
   PROVIDER_CONTRACT_VERSION,
   StubGitHubMutationAdapter,
@@ -19,6 +19,7 @@ const sha = "a".repeat(40);
 
 class MemoryRepository implements SprintRunRepository {
   analysis?: SprintAnalysis;
+  bindings = new Map<string, PersistedPlanningBinding>();
   run: PersistedSprintRun = {
     id: randomUUID(),
     input: { workflowVersion: WORKFLOW_VERSION, repository: repositoryName, issueNumbers: [81], mergePolicy: "human" },
@@ -47,7 +48,15 @@ class MemoryRepository implements SprintRunRepository {
   completeOutbox() { return Promise.resolve(false); }
   retryOutbox() { return Promise.resolve(false); }
   blockOutbox() { return Promise.resolve(false); }
-  tryAcquireLease() { return Promise.resolve(false); }
+  tryAcquireLease() { return Promise.resolve(true); }
+  savePlanningBinding(request: SavePlanningBindingRequest, now = new Date()) {
+    const prior = this.bindings.get(request.workItemId);
+    if (prior && prior.fingerprint !== request.fingerprint) return Promise.reject(new Error("immutable planning binding already exists with another fingerprint"));
+    const binding = prior ?? { workItemId: request.workItemId, fingerprint: request.fingerprint, evidence: request.evidence, observedAt: request.observedAt, workItemRevision: request.expectedWorkItemRevision, createdAt: now.toISOString() };
+    this.bindings.set(request.workItemId, binding);
+    return Promise.resolve({ binding, duplicate: !!prior });
+  }
+  getPlanningBinding(workItemId: string) { return Promise.resolve(this.bindings.get(workItemId)); }
 }
 
 function providers(risk: "ordinary" | "security" = "ordinary") {
@@ -72,6 +81,7 @@ describe("sprint-delivery/v1 dry-run runtime", () => {
     expect(repository.analysis).toEqual({ dependencies: [], conflicts: [{ issueNumber: 81, domains: [] }] });
     expect(providerSet.githubMutation.invocations()).toEqual([]);
     expect(repository.run.workItems[0]?.state).toBe("ready_to_build");
+    expect(repository.bindings.get(repository.run.workItems[0]!.id)).toMatchObject({ evidence: { defaultBranchSha: sha, plan: { bodySha256: hash } } });
   });
 
   it("routes sensitive analysis to human approval", async () => {
