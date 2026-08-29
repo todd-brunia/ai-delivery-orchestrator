@@ -1,0 +1,38 @@
+import { describe, expect, it } from "vitest";
+
+import type { RepositoryAdapterConfigV1 } from "../src/domain/sprint-delivery/v1/index.js";
+import { adapterFingerprint, prepareImplementationDispatch } from "../src/workflows/index.js";
+
+const sha = "a".repeat(40);
+const plan = "b".repeat(64);
+const repository = "todd-brunia/ai-consulting-client-portal";
+const adapter = {
+  version: 1, repository, defaultBranch: "main", enabled: true, orchestratorAppSlug: "ai-delivery-orchestrator",
+  workflows: { implementation: "implementation.yml", repair: "repair.yml", sync: "sync.yml" },
+  labels: { needsPlanning: "needs-planning", planReady: "plan-ready", approvedForBuild: "approved-for-build", approvedForAiBuild: "approved-for-ai-build", inProgress: "in-progress", previewReady: "preview-ready", needsDecision: "needs-decision", blocked: "blocked" },
+  requiredChecks: ["CI Gate"], maxParallelImplementations: 2,
+  risk: { humanApprovalCategories: ["security"], humanApprovalLabels: ["approved-for-build"], humanApprovalPathPatterns: [".github/**"] },
+} satisfies RepositoryAdapterConfigV1;
+const binding = {
+  version: "live-work-item-binding/v1" as const, runId: "00000000-0000-4000-8000-000000000001", workItemId: "00000000-0000-4000-8000-000000000002",
+  issue: { version: "providers/v1" as const, repository, number: 72, nodeId: "I_72", title: "Test", body: "untrusted", state: "open" as const, labels: ["approved-for-ai-build"], updatedAt: "2026-08-29T12:00:00Z" },
+  plan: { issueNumber: 72, commentId: "72", bodySha256: plan, createdAt: "2026-08-29T11:00:00Z", updatedAt: "2026-08-29T11:00:00Z", evidence: { uri: "github://issue/72/comment/72", observedAt: "2026-08-29T12:00:00Z" } },
+  defaultBranchSha: sha,
+  repositoryConfiguration: { repository, repositoryId: "123", defaultBranch: "main", visibility: "private" as const, allowSquashMerge: true, archive: false, configurationSha256: "c".repeat(64), evidence: { uri: "github://repo/123", observedAt: "2026-08-29T12:00:00Z" } },
+  installation: { appId: "456", installationId: "789", accountLogin: "todd-brunia", repositoryId: "123", repository, permissions: { actions: "write", issues: "write" }, evidence: { uri: "github://installation/789", observedAt: "2026-08-29T12:00:00Z" } },
+  adapterFingerprint: adapterFingerprint(adapter), observedAt: "2026-08-29T12:00:00Z",
+};
+const input = { version: "live-dispatch-preparation/v1" as const, binding, adapter, expectedAdapterFingerprint: binding.adapterFingerprint, expectedPlanSha256: plan, expectedDefaultBranchSha: sha, now: "2026-08-29T12:00:00Z", expiresAt: "2026-08-29T12:05:00Z" };
+
+describe("live implementation dispatch preparation", () => {
+  it("creates one bounded implementation-workflow intent from immutable evidence", () => {
+    const result = prepareImplementationDispatch(input);
+    expect(result).toMatchObject({ ready: true, intent: { type: "dispatch_workflow", workflow: "implementation.yml", ref: sha, issueNumber: 72 } });
+    if (result.ready && result.intent.type === "dispatch_workflow") expect(result.intent.inputs).toMatchObject({ issue_number: "72", plan_sha256: plan });
+  });
+
+  it("fails closed on plan and installation-permission drift", () => {
+    expect(prepareImplementationDispatch({ ...input, expectedPlanSha256: "d".repeat(64) })).toEqual({ ready: false, reason: "plan_drift" });
+    expect(prepareImplementationDispatch({ ...input, binding: { ...binding, installation: { ...binding.installation, permissions: { actions: "read", issues: "write" } } } })).toEqual({ ready: false, reason: "installation_permission_missing" });
+  });
+});

@@ -18,7 +18,10 @@ const sha = "a".repeat(40);
 
 function providers(issueNumbers: readonly number[]) {
   const githubRead = new StubGitHubReadAdapter();
-  for (const number of issueNumbers) githubRead.registerIssue({ version: PROVIDER_CONTRACT_VERSION, repository: repositoryName, number, nodeId: `I_${number}`, title: `Issue ${number}`, body: "Plan", state: "open", labels: ["plan-ready"], updatedAt: "2026-08-05T12:00:00Z" });
+  for (const number of issueNumbers) {
+    githubRead.registerIssue({ version: PROVIDER_CONTRACT_VERSION, repository: repositoryName, number, nodeId: `I_${number}`, title: `Issue ${number}`, body: "Plan", state: "open", labels: ["plan-ready"], updatedAt: "2026-08-05T12:00:00Z" });
+    githubRead.registerMarkedPlan({ issueNumber: number, commentId: String(number), bodySha256: hash, createdAt: "2026-08-05T12:00:00Z", updatedAt: "2026-08-05T12:00:00Z", evidence: { uri: `github://issue/${number}/comment/${number}`, observedAt: "2026-08-05T12:00:00Z" } });
+  }
   const modelAnalysis = new StubModelAnalysisAdapter();
   const fingerprints = Object.fromEntries(issueNumbers.map((number) => [String(number), hash]));
   const key = Object.values(fingerprints).sort().join(":");

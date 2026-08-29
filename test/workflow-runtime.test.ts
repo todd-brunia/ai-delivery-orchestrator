@@ -53,6 +53,7 @@ class MemoryRepository implements SprintRunRepository {
 function providers(risk: "ordinary" | "security" = "ordinary") {
   const githubRead = new StubGitHubReadAdapter();
   githubRead.registerIssue({ version: PROVIDER_CONTRACT_VERSION, repository: repositoryName, number: 81, nodeId: "I_81", title: "Issue", body: "Plan", state: "open", labels: ["plan-ready"], updatedAt: "2026-08-05T12:00:00Z" });
+  githubRead.registerMarkedPlan({ issueNumber: 81, commentId: "81", bodySha256: hash, createdAt: "2026-08-05T12:00:00Z", updatedAt: "2026-08-05T12:00:00Z", evidence: { uri: "github://issue/81/comment/81", observedAt: "2026-08-05T12:00:00Z" } });
   const modelAnalysis = new StubModelAnalysisAdapter();
   modelAnalysis.registerFeasibility(hash, { feasible: true, dependencies: [], conflicts: [{ issueNumber: 81, domains: [] }], risk: { categories: [risk], confidence: "high", rationale: "fixture" }, unresolvedDecisions: [], evidenceUris: ["issue://81"], provenance: { model: "stub", modelVersion: "fixture-v1", policyVersion: WORKFLOW_VERSION, artifactSha256: hash, usage: { inputTokens: 0, outputTokens: 0 } } });
   return { githubRead, githubMutation: new StubGitHubMutationAdapter(), modelAnalysis };
@@ -84,5 +85,10 @@ describe("sprint-delivery/v1 dry-run runtime", () => {
     const repository = new MemoryRepository();
     expect(() => DryRunWorkflowRequestSchema.parse({ ...request(repository.run.id), providerMode: "github" })).toThrow();
     await expect(createSprintDeliveryV1Runtime(repository, providers(), new MemorySaver()).execute({ ...request(repository.run.id), planFingerprints: { "82": hash } })).rejects.toThrow("exactly match");
+  });
+
+  it("fails closed when the canonical marked plan no longer matches the immutable request", async () => {
+    const repository = new MemoryRepository();
+    await expect(createSprintDeliveryV1Runtime(repository, providers(), new MemorySaver()).execute({ ...request(repository.run.id), planFingerprints: { "81": "c".repeat(64) } })).rejects.toThrow("canonical marked plan drifted");
   });
 });
