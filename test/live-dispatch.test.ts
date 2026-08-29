@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { RepositoryAdapterConfigV1 } from "../src/domain/sprint-delivery/v1/index.js";
-import { advanceAcceptedImplementationDispatch, adapterFingerprint, collectLiveWorkItemBinding, prepareImplementationDispatch, verifyAcceptedImplementationDispatch } from "../src/workflows/index.js";
+import type { FeasibilityResult } from "../src/providers/v1/index.js";
+import { advanceAcceptedImplementationDispatch, adapterFingerprint, authorizeLiveBuild, collectLiveWorkItemBinding, prepareImplementationDispatch, verifyAcceptedImplementationDispatch } from "../src/workflows/index.js";
 
 const sha = "a".repeat(40);
 const plan = "b".repeat(64);
@@ -40,6 +41,12 @@ describe("live implementation dispatch preparation", () => {
     const github = { getIssue: () => Promise.resolve(binding.issue), getMarkedPlan: () => Promise.resolve(binding.plan), getRepositoryConfiguration: () => Promise.resolve(binding.repositoryConfiguration), getInstallation: () => Promise.resolve(binding.installation) };
     await expect(collectLiveWorkItemBinding({ github: github as never, adapter, runId: binding.runId, workItemId: binding.workItemId, issueNumber: 72, defaultBranchSha: sha, observedAt: binding.observedAt })).resolves.toMatchObject({ issue: binding.issue, plan: binding.plan, installation: binding.installation, adapterFingerprint: binding.adapterFingerprint });
     await expect(collectLiveWorkItemBinding({ github: { ...github, getRepositoryConfiguration: () => Promise.resolve({ ...binding.repositoryConfiguration, defaultBranch: "trunk" }) } as never, adapter, runId: binding.runId, workItemId: binding.workItemId, issueNumber: 72, defaultBranchSha: sha, observedAt: binding.observedAt })).rejects.toThrow("default branch drifted");
+  });
+
+  it("accepts a sensitive approval only when a human applied it after the current plan", async () => {
+    const github = { getHumanBuildApprovals: () => Promise.resolve([{ issueNumber: 72, label: "approved-for-build" as const, actorLogin: "owner", actorType: "User" as const, occurredAt: "2026-08-29T12:01:00Z", evidence: { uri: "github://issue/72/event/1", observedAt: "2026-08-29T12:01:01Z" } }]) };
+    const analysis: FeasibilityResult = { feasible: true, dependencies: [], conflicts: [{ issueNumber: 72, domains: [] }], risk: { categories: ["security"], confidence: "high", rationale: "fixture" }, unresolvedDecisions: [], evidenceUris: [], provenance: { model: "stub", modelVersion: "v1", policyVersion: "v1", artifactSha256: "f".repeat(64), usage: { inputTokens: 0, outputTokens: 0 } } };
+    await expect(authorizeLiveBuild({ github: github as never, repository, issueNumber: 72, plan: binding.plan, analysis })).resolves.toEqual({ authorized: true });
   });
 
   it("requires canonical workflow-run acceptance evidence before marking a build dispatched", () => {
