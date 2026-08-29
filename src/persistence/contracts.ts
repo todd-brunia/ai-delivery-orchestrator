@@ -130,6 +130,16 @@ export interface WorkflowNodeResult {
   readonly recordedAt: string;
 }
 
+export type DispatchAttemptStatus = "proposed" | "claimed" | "accepted" | "ambiguous" | "rejected" | "blocked";
+export interface DispatchAttempt {
+  readonly workItemId: string;
+  readonly intentFingerprint: string;
+  readonly status: DispatchAttemptStatus;
+  readonly workflowRunId?: string;
+  readonly evidenceUri?: string;
+  readonly recordedAt: string;
+}
+
 export interface SprintRunRepository {
   createRun(id: string, input: SprintRunInput, now?: Date): Promise<PersistedSprintRun>;
   getRun(id: string): Promise<PersistedSprintRun | undefined>;
@@ -148,6 +158,8 @@ export interface SprintRunRepository {
   getPlanningBinding?(workItemId: string): Promise<PersistedPlanningBinding | undefined>;
   recordWorkflowNodeResult?(result: WorkflowNodeResult): Promise<{ readonly duplicate: boolean }>;
   getWorkflowNodeResult?(workItemId: string, node: string, idempotencyKey: string): Promise<WorkflowNodeResult | undefined>;
+  recordDispatchAttempt?(attempt: DispatchAttempt): Promise<{ readonly duplicate: boolean }>;
+  getDispatchAttempt?(workItemId: string, intentFingerprint: string): Promise<DispatchAttempt | undefined>;
   tryAcquireLease(request: LeaseRequest, now?: Date): Promise<boolean>;
 }
 

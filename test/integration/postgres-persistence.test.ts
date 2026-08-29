@@ -70,6 +70,7 @@ beforeEach(async () => {
     TRUNCATE orchestrator.outbox, orchestrator.transitions, orchestrator.leases,
       orchestrator.conflict_domains, orchestrator.dependency_edges,
       orchestrator.workflow_node_results, orchestrator.work_item_planning_bindings,
+      orchestrator.dispatch_attempts,
       orchestrator.work_items, orchestrator.sprint_runs CASCADE
   `);
 });
@@ -256,6 +257,17 @@ describe("PostgresSprintRunRepository", () => {
     await expect(repository.recordWorkflowNodeResult?.(result)).resolves.toEqual({ duplicate: false });
     await expect(repository.recordWorkflowNodeResult?.(result)).resolves.toEqual({ duplicate: true });
     await expect(repository.getWorkflowNodeResult?.(workItem.id, result.node, result.idempotencyKey)).resolves.toMatchObject(result);
+  });
+
+  it("persists accepted dispatches only with canonical workflow evidence", async () => {
+    const runId = await createRun();
+    const workItem = (await repository.getRun(runId))?.workItems[0];
+    if (!workItem) throw new Error("fixture work item is missing");
+    const attempt = { workItemId: workItem.id, intentFingerprint: "d".repeat(64), status: "accepted" as const, workflowRunId: "123", evidenceUri: "github://workflow-runs/123", recordedAt: "2026-08-29T20:00:00.000Z" };
+    await expect(repository.recordDispatchAttempt?.(attempt)).resolves.toEqual({ duplicate: false });
+    await expect(repository.recordDispatchAttempt?.(attempt)).resolves.toEqual({ duplicate: true });
+    await expect(repository.getDispatchAttempt?.(workItem.id, attempt.intentFingerprint)).resolves.toMatchObject(attempt);
+    await expect(repository.recordDispatchAttempt?.({ workItemId: attempt.workItemId, intentFingerprint: "e".repeat(64), status: "accepted", recordedAt: attempt.recordedAt })).rejects.toThrow("requires canonical workflow evidence");
   });
 
   it("survives repository and connection-pool restart", async () => {

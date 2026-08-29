@@ -37,6 +37,7 @@ import {
   type SavePlanningBindingRequest,
   type PersistedPlanningBinding,
   type WorkflowNodeResult,
+  type DispatchAttempt,
 } from "./contracts.js";
 
 interface RunRow {
@@ -429,6 +430,22 @@ export class PostgresSprintRunRepository implements SprintRunRepository {
     const result = await this.pool.query<{ input_fingerprint: string; output: Record<string, unknown>; recorded_at: Date }>("SELECT input_fingerprint, output, recorded_at FROM orchestrator.workflow_node_results WHERE work_item_id = $1 AND node = $2 AND idempotency_key = $3", [workItemId, node, idempotencyKey]);
     const row = result.rows[0];
     return row ? { workItemId, node, idempotencyKey, inputFingerprint: row.input_fingerprint, output: row.output, recordedAt: row.recorded_at.toISOString() } : undefined;
+  }
+
+  async recordDispatchAttempt(raw: DispatchAttempt): Promise<{ readonly duplicate: boolean }> {
+    if (!/^[a-f0-9]{64}$/.test(raw.intentFingerprint)) throw new Error("dispatch intent fingerprint is invalid");
+    if (raw.status === "accepted" && (!raw.workflowRunId || !raw.evidenceUri)) throw new Error("accepted dispatch requires canonical workflow evidence");
+    if (raw.status !== "accepted" && (raw.workflowRunId || raw.evidenceUri)) throw new Error("only accepted dispatches may retain workflow evidence");
+    const result = await this.pool.query(`INSERT INTO orchestrator.dispatch_attempts
+      (work_item_id, intent_fingerprint, status, workflow_run_id, evidence_uri, recorded_at)
+      VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (work_item_id, intent_fingerprint) DO NOTHING`, [raw.workItemId, raw.intentFingerprint, raw.status, raw.workflowRunId ?? null, raw.evidenceUri ?? null, raw.recordedAt]);
+    return { duplicate: result.rowCount === 0 };
+  }
+
+  async getDispatchAttempt(workItemId: string, intentFingerprint: string): Promise<DispatchAttempt | undefined> {
+    const result = await this.pool.query<{ status: DispatchAttempt["status"]; workflow_run_id: string | null; evidence_uri: string | null; recorded_at: Date }>("SELECT status, workflow_run_id, evidence_uri, recorded_at FROM orchestrator.dispatch_attempts WHERE work_item_id = $1 AND intent_fingerprint = $2", [workItemId, intentFingerprint]);
+    const row = result.rows[0];
+    return row ? { workItemId, intentFingerprint, status: row.status, ...(row.workflow_run_id ? { workflowRunId: row.workflow_run_id } : {}), ...(row.evidence_uri ? { evidenceUri: row.evidence_uri } : {}), recordedAt: row.recorded_at.toISOString() } : undefined;
   }
 
   private mapWorkItem(row: WorkItemRow): PersistedWorkItem {
