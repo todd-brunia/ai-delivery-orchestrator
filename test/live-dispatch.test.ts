@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import type { RepositoryAdapterConfigV1 } from "../src/domain/sprint-delivery/v1/index.js";
+import type { WorkItemTransitionRequest } from "../src/persistence/index.js";
 import type { FeasibilityResult } from "../src/providers/v1/index.js";
-import { advanceAcceptedImplementationDispatch, adapterFingerprint, authorizeLiveBuild, collectLiveWorkItemBinding, prepareImplementationDispatch, verifyAcceptedImplementationDispatch } from "../src/workflows/index.js";
+import { advanceAcceptedImplementationDispatch, adapterFingerprint, authorizeLiveBuild, collectLiveWorkItemBinding, prepareImplementationDispatch, queueImplementationDispatch, verifyAcceptedImplementationDispatch } from "../src/workflows/index.js";
 
 const sha = "a".repeat(40);
 const plan = "b".repeat(64);
@@ -35,6 +36,32 @@ describe("live implementation dispatch preparation", () => {
   it("fails closed on plan and installation-permission drift", () => {
     expect(prepareImplementationDispatch({ ...input, expectedPlanSha256: "d".repeat(64) })).toEqual({ ready: false, reason: "plan_drift" });
     expect(prepareImplementationDispatch({ ...input, binding: { ...binding, installation: { ...binding.installation, permissions: { actions: "read", issues: "write" } } } })).toEqual({ ready: false, reason: "installation_permission_missing" });
+  });
+
+  it("atomically queues one bounded implementation dispatch through the mutation outbox", async () => {
+    let request: WorkItemTransitionRequest | undefined;
+    const transitionWorkItem = async (received: WorkItemTransitionRequest) => {
+      await Promise.resolve();
+      request = received;
+      return { workItem: { id: binding.workItemId, issueNumber: 72, state: "dispatch_queued" as const, revision: 1 }, duplicate: false };
+    };
+    const result = await queueImplementationDispatch({
+      repository: { transitionWorkItem } as never,
+      workItem: { id: binding.workItemId, issueNumber: 72, state: "ready_to_build", revision: 0 },
+      preparation: input,
+    });
+    expect(result).toMatchObject({ queued: true, duplicate: false, intent: { type: "dispatch_workflow", ref: sha } });
+    expect(request).toMatchObject({
+      workItemId: binding.workItemId,
+      event: "dispatch_queued",
+      metadata: { expectedRevision: 0, actor: { kind: "system", id: "sprint-delivery/v1" } },
+      outbox: { type: "github.mutation.execute", payload: { type: "dispatch_workflow", ref: sha } },
+    });
+    await expect(queueImplementationDispatch({
+      repository: { transitionWorkItem } as never,
+      workItem: { id: binding.workItemId, issueNumber: 72, state: "dispatch_queued", revision: 1 },
+      preparation: input,
+    })).resolves.toEqual({ queued: false, reason: "already_queued" });
   });
 
   it("collects repository and installation identity into a canonical live binding", async () => {
