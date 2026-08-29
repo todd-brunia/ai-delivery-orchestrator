@@ -69,6 +69,7 @@ beforeEach(async () => {
   await pool.query(`
     TRUNCATE orchestrator.outbox, orchestrator.transitions, orchestrator.leases,
       orchestrator.conflict_domains, orchestrator.dependency_edges,
+      orchestrator.workflow_node_results, orchestrator.work_item_planning_bindings,
       orchestrator.work_items, orchestrator.sprint_runs CASCADE
   `);
 });
@@ -232,6 +233,29 @@ describe("PostgresSprintRunRepository", () => {
         new Date("2026-07-31T20:02:00.000Z"),
       ),
     ).resolves.toBe(true);
+  });
+
+  it("persists an immutable planning binding only under the current work-item lease", async () => {
+    const runId = await createRun();
+    const workItem = (await repository.getRun(runId))?.workItems[0];
+    if (!workItem) throw new Error("fixture work item is missing");
+    const now = new Date("2026-08-29T20:00:00.000Z");
+    await repository.tryAcquireLease({ aggregateType: "work_item", aggregateId: workItem.id, ownerId: "planner-a", expiresAt: new Date("2026-08-29T20:01:00.000Z") }, now);
+    const request = { workItemId: workItem.id, fingerprint: "a".repeat(64), evidence: { plan: "github://issue/81/comment/1" }, observedAt: now.toISOString(), expectedWorkItemRevision: workItem.revision, leaseOwnerId: "planner-a" };
+    await expect(repository.savePlanningBinding?.(request, now)).resolves.toMatchObject({ duplicate: false, binding: { fingerprint: request.fingerprint, workItemRevision: 0 } });
+    await expect(repository.savePlanningBinding?.(request, now)).resolves.toMatchObject({ duplicate: true });
+    await expect(repository.savePlanningBinding?.({ ...request, fingerprint: "b".repeat(64) }, now)).rejects.toBeInstanceOf(ConcurrencyError);
+    await expect(repository.getPlanningBinding?.(workItem.id)).resolves.toMatchObject({ evidence: request.evidence });
+  });
+
+  it("stores deterministic workflow node output exactly once", async () => {
+    const runId = await createRun();
+    const workItem = (await repository.getRun(runId))?.workItems[0];
+    if (!workItem) throw new Error("fixture work item is missing");
+    const result = { workItemId: workItem.id, node: "collect_plans", idempotencyKey: "node-result:collect-plans:81", inputFingerprint: "c".repeat(64), output: { status: "bound" }, recordedAt: "2026-08-29T20:00:00.000Z" };
+    await expect(repository.recordWorkflowNodeResult?.(result)).resolves.toEqual({ duplicate: false });
+    await expect(repository.recordWorkflowNodeResult?.(result)).resolves.toEqual({ duplicate: true });
+    await expect(repository.getWorkflowNodeResult?.(workItem.id, result.node, result.idempotencyKey)).resolves.toMatchObject(result);
   });
 
   it("survives repository and connection-pool restart", async () => {

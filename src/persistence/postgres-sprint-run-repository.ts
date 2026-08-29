@@ -34,6 +34,9 @@ import {
   type PersistedSchedulingState,
   type PersistSchedulingRequest,
   type GitHubMutationReceipt,
+  type SavePlanningBindingRequest,
+  type PersistedPlanningBinding,
+  type WorkflowNodeResult,
 } from "./contracts.js";
 
 interface RunRow {
@@ -381,6 +384,51 @@ export class PostgresSprintRunRepository implements SprintRunRepository {
       (outbox_id, attempt, operation, actor_role, intent_sha256, outcome, request_id, error_class, recorded_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
       ON CONFLICT (outbox_id, attempt) DO NOTHING`, [receipt.outboxId, receipt.attempt, receipt.operation, receipt.actorRole, receipt.intentSha256, receipt.outcome, receipt.requestId ?? null, receipt.errorClass ?? null, receipt.recordedAt]);
+  }
+
+  async savePlanningBinding(raw: SavePlanningBindingRequest, now = new Date()): Promise<{ readonly binding: PersistedPlanningBinding; readonly duplicate: boolean }> {
+    if (!/^[a-f0-9]{64}$/.test(raw.fingerprint)) throw new Error("planning binding fingerprint is invalid");
+    const observedAt = new Date(raw.observedAt);
+    if (!Number.isFinite(observedAt.getTime())) throw new Error("planning binding observation time is invalid");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const item = await client.query<WorkItemRow>("SELECT id, issue_number, state, revision FROM orchestrator.work_items WHERE id = $1 FOR UPDATE", [raw.workItemId]);
+      const row = item.rows[0];
+      if (!row) throw new Error(`work item not found: ${raw.workItemId}`);
+      if (row.revision !== raw.expectedWorkItemRevision) throw new ConcurrencyError(`expected revision ${raw.expectedWorkItemRevision}, found ${row.revision}`);
+      const lease = await client.query("SELECT 1 FROM orchestrator.leases WHERE aggregate_type = 'work_item' AND aggregate_id = $1 AND owner_id = $2 AND expires_at > $3", [raw.workItemId, raw.leaseOwnerId, now]);
+      if (lease.rowCount !== 1) throw new ConcurrencyError("planning binding lease is absent or expired");
+      const existing = await client.query<{ fingerprint: string; evidence: Record<string, unknown>; observed_at: Date; work_item_revision: number; created_at: Date }>("SELECT fingerprint, evidence, observed_at, work_item_revision, created_at FROM orchestrator.work_item_planning_bindings WHERE work_item_id = $1", [raw.workItemId]);
+      if (existing.rowCount === 1) {
+        const value = existing.rows[0]!;
+        if (value.fingerprint !== raw.fingerprint) throw new ConcurrencyError("immutable planning binding already exists with another fingerprint");
+        await client.query("COMMIT");
+        return { duplicate: true, binding: { workItemId: raw.workItemId, fingerprint: value.fingerprint, evidence: value.evidence, observedAt: value.observed_at.toISOString(), workItemRevision: value.work_item_revision, createdAt: value.created_at.toISOString() } };
+      }
+      await client.query("INSERT INTO orchestrator.work_item_planning_bindings (work_item_id, fingerprint, evidence, observed_at, work_item_revision, created_at) VALUES ($1,$2,$3,$4,$5,$6)", [raw.workItemId, raw.fingerprint, JSON.stringify(raw.evidence), observedAt, row.revision, now]);
+      await client.query("COMMIT");
+      return { duplicate: false, binding: { workItemId: raw.workItemId, fingerprint: raw.fingerprint, evidence: raw.evidence, observedAt: observedAt.toISOString(), workItemRevision: row.revision, createdAt: now.toISOString() } };
+    } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
+  }
+
+  async getPlanningBinding(workItemId: string): Promise<PersistedPlanningBinding | undefined> {
+    const result = await this.pool.query<{ fingerprint: string; evidence: Record<string, unknown>; observed_at: Date; work_item_revision: number; created_at: Date }>("SELECT fingerprint, evidence, observed_at, work_item_revision, created_at FROM orchestrator.work_item_planning_bindings WHERE work_item_id = $1", [workItemId]);
+    const row = result.rows[0];
+    return row ? { workItemId, fingerprint: row.fingerprint, evidence: row.evidence, observedAt: row.observed_at.toISOString(), workItemRevision: row.work_item_revision, createdAt: row.created_at.toISOString() } : undefined;
+  }
+
+  async recordWorkflowNodeResult(raw: WorkflowNodeResult): Promise<{ readonly duplicate: boolean }> {
+    if (!/^[a-f0-9]{64}$/.test(raw.inputFingerprint) || !/^[a-z][a-z0-9_]{1,100}$/.test(raw.node)) throw new Error("workflow node result is invalid");
+    const result = await this.pool.query(`INSERT INTO orchestrator.workflow_node_results (work_item_id, node, idempotency_key, input_fingerprint, output, recorded_at)
+      VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (work_item_id, node, idempotency_key) DO NOTHING`, [raw.workItemId, raw.node, raw.idempotencyKey, raw.inputFingerprint, JSON.stringify(raw.output), raw.recordedAt]);
+    return { duplicate: result.rowCount === 0 };
+  }
+
+  async getWorkflowNodeResult(workItemId: string, node: string, idempotencyKey: string): Promise<WorkflowNodeResult | undefined> {
+    const result = await this.pool.query<{ input_fingerprint: string; output: Record<string, unknown>; recorded_at: Date }>("SELECT input_fingerprint, output, recorded_at FROM orchestrator.workflow_node_results WHERE work_item_id = $1 AND node = $2 AND idempotency_key = $3", [workItemId, node, idempotencyKey]);
+    const row = result.rows[0];
+    return row ? { workItemId, node, idempotencyKey, inputFingerprint: row.input_fingerprint, output: row.output, recordedAt: row.recorded_at.toISOString() } : undefined;
   }
 
   private mapWorkItem(row: WorkItemRow): PersistedWorkItem {
