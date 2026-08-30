@@ -271,6 +271,19 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('resource "aws_iam_policy" "github_apply_runtime_services"');
     expect(runtimeAuthority).toContain('name   = "ai-delivery-orchestrator-pilot-runtime-services-apply"');
     expect(runtimeAuthority).toContain('resource "aws_iam_role_policy_attachment" "github_apply_runtime_services"');
+    expect(runtimeAuthority).toContain('resource "aws_iam_policy" "github_apply_runtime_network"');
+    expect(runtimeAuthority).toContain('name   = "ai-delivery-orchestrator-pilot-runtime-network-apply"');
+    expect(runtimeAuthority).toContain('resource "aws_iam_role_policy_attachment" "github_apply_runtime_network"');
+    const servicePolicy = runtimeAuthority.slice(
+      runtimeAuthority.indexOf('data "aws_iam_policy_document" "github_apply_runtime_services"'),
+      runtimeAuthority.indexOf('data "aws_iam_policy_document" "github_apply_runtime_network"'),
+    );
+    const networkPolicy = runtimeAuthority.slice(
+      runtimeAuthority.indexOf('data "aws_iam_policy_document" "github_apply_runtime_network"'),
+      runtimeAuthority.indexOf('resource "aws_iam_policy" "github_apply_runtime_services"'),
+    );
+    expect(Buffer.byteLength(servicePolicy)).toBeLessThan(6144);
+    expect(Buffer.byteLength(networkPolicy)).toBeLessThan(6144);
     expect(runtimeAuthority).toContain("role       = aws_iam_role.github_apply.name");
     expect(runtimeAuthority).not.toContain("role       = aws_iam_role.github_plan.name");
     for (const action of [

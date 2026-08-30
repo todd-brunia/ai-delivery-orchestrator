@@ -128,6 +128,9 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     actions   = ["cloudwatch:DeleteDashboards", "cloudwatch:GetDashboard", "cloudwatch:PutDashboard"]
     resources = ["arn:aws:cloudwatch::${var.aws_account_id}:dashboard/${local.pilot_name}"]
   }
+}
+
+data "aws_iam_policy_document" "github_apply_runtime_network" {
   statement {
     sid     = "CreateTaggedPilotEc2Resources"
     actions = ["ec2:CreateSecurityGroup", "ec2:CreateVpcEndpoint"]
@@ -231,6 +234,16 @@ resource "aws_iam_policy" "github_apply_runtime_services" {
 resource "aws_iam_role_policy_attachment" "github_apply_runtime_services" {
   role       = aws_iam_role.github_apply.name
   policy_arn = aws_iam_policy.github_apply_runtime_services.arn
+}
+
+resource "aws_iam_policy" "github_apply_runtime_network" {
+  name   = "ai-delivery-orchestrator-pilot-runtime-network-apply"
+  policy = data.aws_iam_policy_document.github_apply_runtime_network.json
+}
+
+resource "aws_iam_role_policy_attachment" "github_apply_runtime_network" {
+  role       = aws_iam_role.github_apply.name
+  policy_arn = aws_iam_policy.github_apply_runtime_network.arn
 }
 
 data "aws_iam_policy_document" "github_apply_autoscaling_tags" {
