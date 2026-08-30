@@ -3,3 +3,4 @@ export * from "./worker-lifecycle.js";
 export * from "./command-processing.js";
 export * from "./queue-consumer.js";
 export * from "./dynamo-projection-writer.js";
+export * from "./live-dispatch-worker.js";
