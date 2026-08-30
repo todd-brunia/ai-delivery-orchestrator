@@ -438,7 +438,12 @@ export class PostgresSprintRunRepository implements SprintRunRepository {
     if (raw.status !== "accepted" && (raw.workflowRunId || raw.evidenceUri)) throw new Error("only accepted dispatches may retain workflow evidence");
     const result = await this.pool.query(`INSERT INTO orchestrator.dispatch_attempts
       (work_item_id, intent_fingerprint, status, workflow_run_id, evidence_uri, recorded_at)
-      VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (work_item_id, intent_fingerprint) DO NOTHING`, [raw.workItemId, raw.intentFingerprint, raw.status, raw.workflowRunId ?? null, raw.evidenceUri ?? null, raw.recordedAt]);
+      VALUES ($1,$2,$3,$4,$5,$6)
+      ON CONFLICT (work_item_id, intent_fingerprint) DO UPDATE SET
+        status = EXCLUDED.status, workflow_run_id = EXCLUDED.workflow_run_id,
+        evidence_uri = EXCLUDED.evidence_uri, recorded_at = EXCLUDED.recorded_at
+      WHERE orchestrator.dispatch_attempts.status <> 'accepted'
+        AND NOT (orchestrator.dispatch_attempts.status IN ('ambiguous', 'blocked') AND EXCLUDED.status IN ('proposed', 'claimed'))`, [raw.workItemId, raw.intentFingerprint, raw.status, raw.workflowRunId ?? null, raw.evidenceUri ?? null, raw.recordedAt]);
     return { duplicate: result.rowCount === 0 };
   }
 

@@ -263,7 +263,9 @@ describe("PostgresSprintRunRepository", () => {
     const runId = await createRun();
     const workItem = (await repository.getRun(runId))?.workItems[0];
     if (!workItem) throw new Error("fixture work item is missing");
-    const attempt = { workItemId: workItem.id, intentFingerprint: "d".repeat(64), status: "accepted" as const, workflowRunId: "123", evidenceUri: "github://workflow-runs/123", recordedAt: "2026-08-29T20:00:00.000Z" };
+    const proposed = { workItemId: workItem.id, intentFingerprint: "d".repeat(64), status: "proposed" as const, recordedAt: "2026-08-29T20:00:00.000Z" };
+    const attempt = { ...proposed, status: "accepted" as const, workflowRunId: "123", evidenceUri: "github://workflow-runs/123", recordedAt: "2026-08-29T20:01:00.000Z" };
+    await expect(repository.recordDispatchAttempt?.(proposed)).resolves.toEqual({ duplicate: false });
     await expect(repository.recordDispatchAttempt?.(attempt)).resolves.toEqual({ duplicate: false });
     await expect(repository.recordDispatchAttempt?.(attempt)).resolves.toEqual({ duplicate: true });
     await expect(repository.getDispatchAttempt?.(workItem.id, attempt.intentFingerprint)).resolves.toMatchObject(attempt);
