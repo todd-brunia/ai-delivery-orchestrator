@@ -404,6 +404,17 @@ model reasoning in an incident record.
 - **Never:** Treat an outbox claim, HTTP success, model output, webhook claim,
   or checkpoint as proof that the target workflow started.
 
+### M3/E2 supervised live-dispatch checkpoint
+
+This is an explicit human-owner checkpoint. It is not enabled by merging code.
+
+1. Verify the current `main` commit, protected deployment evidence, repository adapter fingerprint, GitHub App installation/permissions, and repository/global emergency-stop controls.
+2. Confirm live planning is disabled by default, then authorize exactly one ordinary portal repository/run/work item with the bound implementation workflow and default-branch SHA.
+3. Observe and retain sanitized evidence for the run/item IDs, plan and adapter fingerprints, outbox intent/receipt, canonical workflow-run ID/URI, and checkpoint thread. Stop before repair, review, merge, release, or deployment.
+4. On any identity, binding, correlation, dispatch, checkpoint, projection, telemetry, or redaction mismatch: disable live claims, drain workers, preserve evidence, reconcile canonical state, and require fresh owner authorization before retrying.
+
+Do not edit transitions, outbox rows, leases, dispatch attempts, or checkpoints to manufacture a successful result.
+
 ### Credential compromise, revocation, and rotation
 
 - **Trigger/initiator:** Human owner on suspected builder, reviewer, merger,
