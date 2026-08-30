@@ -108,4 +108,17 @@ describe("live implementation dispatch preparation", () => {
     await handler.reconcile(preparation.intent, input.now);
     expect(calls).toEqual(["attempt", "transition"]);
   });
+
+  it("leaves a queued dispatch untouched when canonical acceptance is absent", async () => {
+    const preparation = prepareImplementationDispatch(input);
+    if (!preparation.ready) throw new Error("fixture intent is missing");
+    let transitioned = false;
+    const handler = createDispatchAcceptanceHandler({
+      getRun: async () => { await Promise.resolve(); return { id: binding.runId, input: { workflowVersion: "sprint-delivery/v1", repository, issueNumbers: [72], mergePolicy: "human" }, state: "active", revision: 0, createdAt: input.now, updatedAt: input.now, workItems: [{ id: binding.workItemId, issueNumber: 72, state: "dispatch_queued", revision: 1 }] }; },
+      recordDispatchAttempt: async () => { await Promise.resolve(); return { duplicate: false }; },
+      transitionWorkItem: async () => { await Promise.resolve(); transitioned = true; throw new Error("must not transition"); },
+    } as never, { getWorkflowRuns: async () => { await Promise.resolve(); return []; } } as never);
+    await handler.reconcile(preparation.intent, input.now);
+    expect(transitioned).toBe(false);
+  });
 });
