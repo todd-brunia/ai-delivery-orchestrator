@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 
 import { RepositoryAdapterConfigV1Schema, scheduleDryRun, validateFeasibilityForRun } from "../domain/sprint-delivery/v1/index.js";
-import type { SprintRunRepository } from "../persistence/index.js";
+import type { PersistedWorkItem, SprintRunRepository, WorkItemTransitionRequest } from "../persistence/index.js";
 import type { ProviderSet } from "../providers/v1/index.js";
-import { authorizeLiveBuild, collectLiveWorkItemBinding } from "./live-dispatch.js";
+import { authorizeLiveBuild, collectLiveWorkItemBinding, queueImplementationDispatch } from "./live-dispatch.js";
 import { LiveWorkflowRequestSchema, LiveWorkflowResultSchema, type LiveWorkflowRuntime } from "./contracts.js";
 
 /** Bounded live entry point: collect and durably bind canonical evidence before later nodes may authorize work. */
@@ -34,13 +34,31 @@ export function createLiveBindingWorkflowRuntime(repository: SprintRunRepository
       await repository.saveAnalysis(run.id, { dependencies: analysis.dependencies, conflicts: analysis.conflicts });
       const authorizedIssueNumbers: number[] = [];
       const waitingIssueNumbers: number[] = [];
+      const currentItems = new Map<number, PersistedWorkItem>();
       for (const item of run.workItems) {
         const binding = bindings.get(item.id)!;
         const decision = await authorizeLiveBuild({ github: providers.githubRead, repository: run.input.repository, issueNumber: item.issueNumber, plan: binding.plan, analysis });
         (decision.authorized ? authorizedIssueNumbers : waitingIssueNumbers).push(item.issueNumber);
+        let current = item;
+        if (current.state === "discovered") current = await transitionLiveWorkItem(repository, current, "plan_available", request.occurredAt);
+        if (current.state === "feasibility_review") current = await transitionLiveWorkItem(repository, current, decision.authorized ? "build_authorized" : "human_plan_approval_required", request.occurredAt);
+        if (current.state === "human_plan_approval_required" && decision.authorized) current = await transitionLiveWorkItem(repository, current, "build_authorized", request.occurredAt);
+        currentItems.set(current.issueNumber, current);
       }
-      const schedule = scheduleDryRun({ runId: run.id, candidates: run.workItems.filter((item) => authorizedIssueNumbers.includes(item.issueNumber)).map((item) => ({ issueNumber: item.issueNumber, state: item.state, conflictDomains: analysis.conflicts.find((entry) => entry.issueNumber === item.issueNumber)?.domains ?? [] })), dependencies: analysis.dependencies, mergedIssueNumbers: run.workItems.filter((item) => item.state === "merged").map((item) => item.issueNumber), activeImplementationCount: run.workItems.filter((item) => ["build_dispatched", "building", "pr_open", "checks_pending", "reviewing", "fixing", "ready_for_human_review"].includes(item.state)).length, maximumConcurrentImplementations: adapter.maxParallelImplementations as 1 | 2, evidence: run.workItems.map((item) => ({ kind: "issue" as const, uri: `github://issues/${run.input.repository}/${item.issueNumber}` })) });
+      const items = [...currentItems.values()];
+      const schedule = scheduleDryRun({ runId: run.id, candidates: items.filter((item) => authorizedIssueNumbers.includes(item.issueNumber)).map((item) => ({ issueNumber: item.issueNumber, state: item.state, conflictDomains: analysis.conflicts.find((entry) => entry.issueNumber === item.issueNumber)?.domains ?? [] })), dependencies: analysis.dependencies, mergedIssueNumbers: items.filter((item) => item.state === "merged").map((item) => item.issueNumber), activeImplementationCount: items.filter((item) => ["build_dispatched", "building", "pr_open", "checks_pending", "reviewing", "fixing", "ready_for_human_review"].includes(item.state)).length, maximumConcurrentImplementations: adapter.maxParallelImplementations as 1 | 2, evidence: items.map((item) => ({ kind: "issue" as const, uri: `github://issues/${run.input.repository}/${item.issueNumber}` })) });
+      for (const issueNumber of schedule.selectedIssueNumbers) {
+        const item = currentItems.get(issueNumber)!;
+        const binding = bindings.get(item.id)!;
+        await queueImplementationDispatch({ repository, workItem: item, preparation: { version: "live-dispatch-preparation/v1", binding, adapter, expectedAdapterFingerprint: binding.adapterFingerprint, expectedPlanSha256: binding.plan.bodySha256, expectedDefaultBranchSha: request.defaultBranchSha, now: request.occurredAt, expiresAt: new Date(now.getTime() + 5 * 60_000).toISOString() } });
+      }
       return LiveWorkflowResultSchema.parse({ workflowVersion: run.input.workflowVersion, providerContractVersion: "providers/v1", runId: run.id, threadId: request.threadId, status: "bindings_collected", bindingFingerprints, authorizedIssueNumbers, waitingIssueNumbers, scheduledIssueNumbers: schedule.selectedIssueNumbers });
     },
   };
+}
+
+async function transitionLiveWorkItem(repository: SprintRunRepository, item: PersistedWorkItem, event: WorkItemTransitionRequest["event"], occurredAt: string): Promise<PersistedWorkItem> {
+  const scope = `sprint-delivery/v1:${item.id}:${event}:${item.revision}`;
+  const uuid = (part: string) => { const hash = createHash("sha256").update(`${scope}:${part}`).digest("hex"); return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`; };
+  return (await repository.transitionWorkItem({ workItemId: item.id, event, metadata: { transitionId: uuid("transition"), aggregateId: item.id, expectedRevision: item.revision, idempotencyKey: `workflow:${scope}`, occurredAt, actor: { kind: "system", id: "sprint-delivery/v1" }, evidence: [{ kind: "issue", uri: `work-item://${item.id}` }] }, outbox: { id: uuid("outbox"), type: "projection.update", payload: { workItemId: item.id, event }, idempotencyKey: `outbox:${scope}` } })).workItem;
 }
