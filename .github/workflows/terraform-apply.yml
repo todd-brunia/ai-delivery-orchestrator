@@ -12,6 +12,11 @@ on:
         required: true
         default: false
         type: boolean
+      bootstrap_ecr_repository:
+        description: Create only the worker ECR repository before the first immutable image exists
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -81,6 +86,7 @@ jobs:
           aws-region: us-east-1
           role-to-assume: ${{ vars.AWS_TERRAFORM_APPLY_ROLE_ARN }}
       - name: Require published immutable image
+        if: ${{ !inputs.bootstrap_ecr_repository }}
         env:
           SELECTED_SHA: ${{ inputs.commit_sha }}
         run: |
@@ -148,8 +154,10 @@ jobs:
       - name: Initialize pilot remote state
         run: terraform -chdir=infra/environments/pilot init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
       - name: Plan selected commit
+        if: ${{ !inputs.bootstrap_ecr_repository }}
         run: terraform -chdir=infra/environments/pilot plan -input=false -lock-timeout=5m -out=pilot.tfplan -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
       - name: Reject destructive pilot plan
+        if: ${{ !inputs.bootstrap_ecr_repository }}
         run: |
           set -euo pipefail
           destructive_changes="$(
@@ -170,7 +178,19 @@ jobs:
           fi
           echo "Saved pilot plan contains no unapproved delete or replacement actions."
       - name: Apply selected plan
+        if: ${{ !inputs.bootstrap_ecr_repository }}
         run: terraform -chdir=infra/environments/pilot apply -input=false -lock-timeout=5m pilot.tfplan
+      - name: Plan ECR bootstrap only
+        if: ${{ inputs.bootstrap_ecr_repository }}
+        run: terraform -chdir=infra/environments/pilot plan -input=false -lock-timeout=5m -target=aws_ecr_repository.worker -out=pilot-ecr-bootstrap.tfplan -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+      - name: Require ECR-only bootstrap plan
+        if: ${{ inputs.bootstrap_ecr_repository }}
+        run: |
+          changes="$(terraform -chdir=infra/environments/pilot show -json pilot-ecr-bootstrap.tfplan | jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | .address')"
+          test "$changes" = "aws_ecr_repository.worker"
+      - name: Apply ECR bootstrap only
+        if: ${{ inputs.bootstrap_ecr_repository }}
+        run: terraform -chdir=infra/environments/pilot apply -input=false -lock-timeout=5m pilot-ecr-bootstrap.tfplan
       - name: Export concrete main-stack references
         if: ${{ inputs.provision_iam }}
         run: |
