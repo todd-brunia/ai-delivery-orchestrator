@@ -17,6 +17,9 @@ describe("protected pilot deployment workflows", () => {
       expect(workflow).toContain("cancel-in-progress: false");
       expect(workflow).toContain("AWS_RUNTIME_DEPLOY_ROLE_ARN");
       expect(workflow).toContain("ai-delivery-orchestrator-pilot-runtime-deploy");
+      expect(workflow).toContain("Assume exact protected Terraform apply role");
+      expect(workflow).toContain("role-chaining: true");
+      expect(workflow).toContain("role-skip-session-tagging: true");
       expect(workflow).not.toMatch(/access-key-id|secret-access-key/);
     }
   });
@@ -73,5 +76,14 @@ describe("protected pilot deployment workflows", () => {
     expect(terraformApply).toContain("pilot-iam-converged.tfplan");
     expect(terraformApply).toContain("Reject destructive converged pilot IAM plan");
     expect(terraformApply).toContain("Apply converged pilot IAM plan");
+  });
+
+  it("uses a short-lived runtime gate before the existing Terraform authority", () => {
+    const bootstrap = readFileSync(join(process.cwd(), "infra", "bootstrap", "main.tf"), "utf8");
+    expect(bootstrap).toContain('resource "aws_iam_role" "github_runtime_deploy"');
+    expect(bootstrap).toContain('name                 = "ai-delivery-orchestrator-pilot-runtime-deploy"');
+    expect(bootstrap).toContain('sid       = "AssumeExactProtectedApplyRole"');
+    expect(bootstrap).toContain('resources = [aws_iam_role.github_apply.arn]');
+    expect(bootstrap).toContain('identifiers = [aws_iam_role.github_runtime_deploy.arn]');
   });
 });

@@ -69,6 +69,14 @@ jobs:
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ vars.AWS_RUNTIME_DEPLOY_ROLE_ARN }}
+          role-duration-seconds: 900
+      - name: Assume exact protected Terraform apply role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-terraform-pilot-apply
+          role-chaining: true
+          role-skip-session-tagging: true
       - name: Prove exact temporary resource boundary
         env:
           VERIFICATION_ID: ${{ inputs.verification_id }}

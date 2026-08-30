@@ -199,12 +199,59 @@ data "aws_iam_policy_document" "github_apply_trust" {
       values   = ["repo:${local.github_immutable_repository}:environment:${var.pilot_environment_name}"]
     }
   }
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.github_runtime_deploy.arn]
+    }
+  }
 }
 
 resource "aws_iam_role" "github_apply" {
   name                 = "ai-delivery-orchestrator-terraform-pilot-apply"
   assume_role_policy   = data.aws_iam_policy_document.github_apply_trust.json
   max_session_duration = 3600
+}
+
+data "aws_iam_policy_document" "github_runtime_deploy_trust" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:${local.github_immutable_repository}:environment:${var.pilot_environment_name}"]
+    }
+  }
+}
+
+resource "aws_iam_role" "github_runtime_deploy" {
+  name                 = "ai-delivery-orchestrator-pilot-runtime-deploy"
+  assume_role_policy   = data.aws_iam_policy_document.github_runtime_deploy_trust.json
+  max_session_duration = 3600
+}
+
+data "aws_iam_policy_document" "github_runtime_deploy" {
+  statement {
+    sid       = "AssumeExactProtectedApplyRole"
+    actions   = ["sts:AssumeRole"]
+    resources = [aws_iam_role.github_apply.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "github_runtime_deploy" {
+  name   = "assume-protected-pilot-apply"
+  role   = aws_iam_role.github_runtime_deploy.id
+  policy = data.aws_iam_policy_document.github_runtime_deploy.json
 }
 
 data "aws_iam_policy_document" "github_apply" {

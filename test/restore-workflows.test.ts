@@ -15,6 +15,9 @@ describe("protected restore verification workflows", () => {
       expect(workflow).toContain("cancel-in-progress: false");
       expect(workflow).toContain('test "$(git rev-parse origin/main)" = "$SELECTED_SHA"');
       expect(workflow).toContain("ai-delivery-orchestrator-pilot-runtime-deploy");
+      expect(workflow).toContain("Assume exact protected Terraform apply role");
+      expect(workflow).toContain("role-chaining: true");
+      expect(workflow).toContain("role-skip-session-tagging: true");
       expect(workflow).not.toMatch(/access-key-id|secret-access-key/);
     }
   });
