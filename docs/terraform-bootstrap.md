@@ -148,6 +148,24 @@ only. The apply identity receives lifecycle authority over the twelve enumerated
 runtime/provider roles and may pass them only to Lambda or ECS tasks; it cannot
 manage bootstrap or human-operator roles.
 
+## Protected runtime-deployment gate
+
+The protected deployment, rollback, and restore workflows first assume the
+dedicated `ai-delivery-orchestrator-pilot-runtime-deploy` OIDC role. Its trust
+is restricted to the immutable repository identity and `environment:pilot`; it
+has no infrastructure permissions. It may assume only the existing protected
+Terraform apply role, without session tags. This preserves one narrow GitHub
+entry point while reusing the reviewed Terraform lifecycle policy.
+
+For an existing bootstrap, create and review a saved bootstrap plan after the
+implementation is merged. It must add exactly the runtime-deployment role and
+its one-role assume policy, and make one in-place trust-policy update to the
+existing Terraform apply role. Do not accept changes to the OIDC provider,
+state bucket, apply-role permissions, or pilot resources. After human approval
+and application, record the `github_runtime_deploy_role_arn` output as the
+`AWS_RUNTIME_DEPLOY_ROLE_ARN` **pilot environment variable** (not a secret).
+Then rerun the protected deployment from the current `main` SHA.
+
 If role creation succeeds but Terraform cannot complete its post-create read,
 stop before the main stack. Add the missing read action through a reviewed
 bootstrap policy change, verify the created role count, trust, and tags without
