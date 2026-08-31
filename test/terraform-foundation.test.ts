@@ -294,6 +294,7 @@ describe("Terraform foundation policy", () => {
       "apigateway:POST", "application-autoscaling:RegisterScalableTarget", "cloudwatch:PutDashboard",
     ]) expect(runtimeAuthority).toContain(`"${action}"`);
     expect(runtimeAuthority).toMatch(/sid\s*= "RunPilotMigrationAndSmokeTasks"[\s\S]*?actions\s*= \["ecs:RunTask"\][\s\S]*?task-definition\/\$\{local\.pilot_name\}-worker:\*[\s\S]*?task-definition\/\$\{local\.pilot_name\}-migration:\*[\s\S]*?variable\s*= "ecs:cluster"[\s\S]*?values\s*= \["arn:aws:ecs:\$\{var\.aws_region\}:\$\{var\.aws_account_id\}:cluster\/\$\{local\.pilot_name\}-worker"\]/);
+    expect(runtimeAuthority).toMatch(/sid\s*= "InspectPilotTasks"[\s\S]*?actions\s*= \["ecs:DescribeTasks"\][\s\S]*?resources = \["arn:aws:ecs:\$\{var\.aws_region\}:\$\{var\.aws_account_id\}:task\/\$\{local\.pilot_name\}-worker\/\*"\]/);
     const planPolicy = runtimeAuthority.slice(runtimeAuthority.indexOf('data "aws_iam_policy_document" "github_plan_runtime_services"'), runtimeAuthority.indexOf('resource "aws_iam_role_policy" "github_plan_runtime_services"'));
     expect(planPolicy).toContain('"rds:DescribeGlobalClusters"');
     expect(planPolicy).toContain('"kms:ListAliases"');
@@ -318,8 +319,15 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('"ecr:SetRepositoryPolicy"');
     expect(runtimeAuthority).toContain('"ecr:DescribeImages"');
     expect(runtimeAuthority).toContain('"ec2:RevokeSecurityGroupEgress"');
+    expect(runtimeAuthority).toContain('"ec2:AuthorizeSecurityGroupEgress"');
     expect(runtimeAuthority).toContain('"arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:security-group-rule/*"');
     expect(runtimeAuthority).toMatch(/sid\s*= "CreateTaggedPilotSecurityGroupRules"/);
+    expect(pilot).toContain('resource "aws_vpc_security_group_egress_rule" "worker_database"');
+    expect(pilot).toContain('referenced_security_group_id = aws_security_group.database.id');
+    expect(pilot).toContain('from_port                    = 5432');
+    expect(pilot).toContain('resource "aws_vpc_security_group_egress_rule" "worker_private_endpoints"');
+    expect(pilot).toContain('referenced_security_group_id = aws_security_group.private_endpoints.id');
+    expect(pilot).toContain('from_port                    = 443');
     expect(runtimeAuthority).toContain('"rds:CreateDBClusterSnapshot"');
     expect(runtimeAuthority).toContain('"rds:DeleteDBClusterSnapshot"');
     expect(runtimeAuthority).toContain('"rds:DescribeDBClusterSnapshots"');
