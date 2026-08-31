@@ -9,6 +9,7 @@ describe("loadWorkerConfig", () => {
       logLevel: "info",
       heartbeatMilliseconds: 30000,
       providerMode: "stub",
+      supervisedDispatchEnabled: false,
     });
   });
 
@@ -19,12 +20,14 @@ describe("loadWorkerConfig", () => {
         LOG_LEVEL: "warn",
         WORKER_HEARTBEAT_MS: "5000",
         PROVIDER_MODE: "stub",
+        SUPERVISED_DISPATCH_ENABLED: "true",
       }),
     ).toEqual({
       nodeEnvironment: "production",
       logLevel: "warn",
       heartbeatMilliseconds: 5000,
       providerMode: "stub",
+      supervisedDispatchEnabled: true,
     });
   });
 
@@ -38,6 +41,7 @@ describe("loadWorkerConfig", () => {
     [{ WORKER_HEARTBEAT_MS: "999" }, "WORKER_HEARTBEAT_MS"],
     [{ WORKER_HEARTBEAT_MS: "not-a-number" }, "WORKER_HEARTBEAT_MS"],
     [{ PROVIDER_MODE: "github" }, "PROVIDER_MODE must be stub or openai-analysis"],
+    [{ SUPERVISED_DISPATCH_ENABLED: "yes" }, "SUPERVISED_DISPATCH_ENABLED must be true or false"],
   ])("rejects invalid configuration", (environment, message) => {
     expect(() => loadWorkerConfig(environment)).toThrow(message);
   });

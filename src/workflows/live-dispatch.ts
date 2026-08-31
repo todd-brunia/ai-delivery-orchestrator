@@ -152,7 +152,7 @@ function deterministicUuid(scope: string): string {
 }
 
 export type QueueImplementationDispatchResult =
-  | { readonly queued: true; readonly intent: GitHubExecutionIntent; readonly duplicate: boolean }
+  | { readonly queued: true; readonly intent: GitHubExecutionIntent; readonly outboxId: string; readonly duplicate: boolean }
   | { readonly queued: false; readonly reason: DispatchPreparationFailure["reason"] }
   | { readonly queued: false; readonly reason: "already_queued" | "already_dispatched" };
 
@@ -174,6 +174,7 @@ export async function queueImplementationDispatch(input: {
   }
 
   const scope = `sprint-delivery/v1:${input.workItem.id}:${preparation.bindingFingerprint}:dispatch_queued`;
+  const outboxId = deterministicUuid(`${scope}:outbox`);
   const transitioned = await input.repository.transitionWorkItem({
     workItemId: input.workItem.id,
     event: "dispatch_queued",
@@ -192,13 +193,13 @@ export async function queueImplementationDispatch(input: {
       ],
     },
     outbox: {
-      id: deterministicUuid(`${scope}:outbox`),
+      id: outboxId,
       type: "github.mutation.execute",
       payload: preparation.intent,
       idempotencyKey: `outbox:${scope}`,
     },
   });
-  return { queued: true, intent: preparation.intent, duplicate: transitioned.duplicate };
+  return { queued: true, intent: preparation.intent, outboxId, duplicate: transitioned.duplicate };
 }
 
 export function adapterFingerprint(adapter: RepositoryAdapterConfigV1): string {

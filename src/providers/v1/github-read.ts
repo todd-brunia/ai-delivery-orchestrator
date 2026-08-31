@@ -210,4 +210,23 @@ export class GitHubAppReadAdapter implements GitHubReadPort {
     if (String(item.app_id) !== this.config.appId || account?.login !== this.config.installationAccount || Object.entries(this.config.requiredPermissions).some(([name, level]) => observedPermissions[name] !== level)) throw new GitHubReadError("authorization", "GitHub installation identity or permissions drifted");
     return CanonicalInstallationSchema.parse({ appId: this.config.appId, installationId: String(item.id), accountLogin: account?.login, repositoryId: this.config.repositoryId, repository, permissions: observedPermissions, evidence: this.evidence(`github://installations/${this.config.installationId}`) });
   }
+
+  /** Narrow canonical control used by the supervised operator; it cannot select another repository or path. */
+  async getDefaultBranchHead(repository: string, branch: string): Promise<{ readonly sha: string; readonly evidenceUri: string }> {
+    this.assertRepository(repository);
+    const configuration = await this.getRepositoryConfiguration(repository);
+    if (branch !== configuration.defaultBranch) throw new GitHubReadError("authorization", "branch is not the canonical default branch");
+    const item = await this.get(`/repos/${repository}/git/ref/heads/${encodeURIComponent(branch)}`) as { object?: { sha?: unknown } };
+    if (typeof item.object?.sha !== "string" || !/^[a-f0-9]{40}$/.test(item.object.sha)) throw new GitHubReadError("invalid_response", "default branch head is invalid");
+    return { sha: item.object.sha, evidenceUri: `github://repositories/${repository}/refs/heads/${branch}/${item.object.sha}` };
+  }
+
+  /** Proves the one configured workflow exists in GitHub's immutable tree at the exact bound SHA. */
+  async assertWorkflowAtRef(repository: string, workflow: string, ref: string): Promise<{ readonly evidenceUri: string }> {
+    this.assertRepository(repository);
+    if (!/^[A-Za-z0-9_.-]+\.ya?ml$/.test(workflow) || !/^[a-f0-9]{40}$/.test(ref)) throw new GitHubReadError("authorization", "workflow observation is outside the bounded path or ref");
+    const item = await this.get(`/repos/${repository}/contents/.github/workflows/${workflow}?ref=${ref}`) as Record<string, unknown>;
+    if (item.type !== "file" || item.path !== `.github/workflows/${workflow}` || typeof item.sha !== "string") throw new GitHubReadError("invalid_response", "implementation workflow is absent at the bound ref");
+    return { evidenceUri: `github://repositories/${repository}/contents/.github/workflows/${workflow}@${ref}` };
+  }
 }

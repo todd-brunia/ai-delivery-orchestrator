@@ -83,6 +83,12 @@ export class GitHubMutationOutboxConsumer {
     return Promise.all(actions.map((action) => this.consumeAction(action, now)));
   }
 
+  async consumeExact(actionId: string): Promise<readonly { id: string; outcome: "completed" | "retry" | "blocked" }[]> {
+    const now = this.now();
+    const actions = await this.repository.claimOutbox(this.ownerId, 1, new Date(now.getTime() + this.leaseMilliseconds), now, ["github.mutation.execute"], [actionId]);
+    return Promise.all(actions.map((action) => this.consumeAction(action, now)));
+  }
+
   private async consumeAction(action: ClaimedOutboxAction, now: Date): Promise<{ id: string; outcome: "completed" | "retry" | "blocked" }> {
     let intent: GitHubExecutionIntent | undefined;
     try {

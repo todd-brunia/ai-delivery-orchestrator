@@ -181,7 +181,7 @@ export interface SprintRunRepository {
   listRunnableWorkItems(runId: string): Promise<readonly PersistedWorkItem[]>;
   loadSchedulingState?(runId: string): Promise<PersistedSchedulingState>;
   persistDryRunScheduling?(request: PersistSchedulingRequest): Promise<{ readonly duplicate: boolean }>;
-  claimOutbox(ownerId: string, limit: number, expiresAt: Date, now?: Date, actionTypes?: readonly string[]): Promise<readonly ClaimedOutboxAction[]>;
+  claimOutbox(ownerId: string, limit: number, expiresAt: Date, now?: Date, actionTypes?: readonly string[], actionIds?: readonly string[]): Promise<readonly ClaimedOutboxAction[]>;
   completeOutbox(id: string, ownerId: string, now?: Date): Promise<boolean>;
   retryOutbox(id: string, ownerId: string, error: string, now?: Date): Promise<boolean>;
   blockOutbox(id: string, ownerId: string, error: string, now?: Date): Promise<boolean>;

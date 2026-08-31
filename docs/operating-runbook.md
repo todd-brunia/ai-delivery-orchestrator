@@ -1,5 +1,17 @@
 # Local Operating Runbook
 
+## Supervised single-item dispatch
+
+The `supervised-dispatch-command/v1` runtime boundary is a two-phase operator control. It is disabled by default (`SUPERVISED_DISPATCH_ENABLED=false`) and must be composed only with the allowlisted repository adapter, canonical GitHub readers, role-specific providers, PostgreSQL repository, existing live workflow, and `LiveDispatchWorker`. Enabling the flag alone supplies none of those dependencies and grants no authority.
+
+1. Run `preflight` with only the allowlisted repository, issue number, and observation time. It performs canonical reads and returns a redacted `supervised-dispatch-preflight/v1` summary and digest. It does not create a run, write an outbox row, or invoke a mutation provider.
+2. Review the repository/issue/plan/ref/adapter/App/installation/workflow fields and blockers. Any mismatch, blocker, or changed digest stops the checkpoint.
+3. Record explicit owner authorization outside untrusted issue/model/webhook content. An `execute` command must carry a unique evidence identifier, the exact preflight digest, authorization time, and an expiry no more than five minutes later.
+4. Execution repeats preflight, refuses drift, creates or resumes one deterministic durable run/work item, persists the authorization evidence, and runs the existing live workflow. It claims only the exact resulting outbox UUID—not an arbitrary pending mutation—and gives it one processing attempt.
+5. Treat `completed` as a mutation receipt, not sufficient workflow acceptance on its own. The existing dispatch reconciler must find the matching canonical workflow run before the work item reaches `build_dispatched`. Stop after that observation for the M3/E2 checkpoint.
+
+If execution is disabled, authorization is stale, the digest changes, the exact outbox row is absent, a lease is lost, the outcome is ambiguous, or canonical acceptance is missing: stop, drain claims, preserve durable evidence, and do not repair or replay. A retry requires canonical revalidation and fresh owner authorization.
+
 ## Scope and safety boundary
 
 This runbook primarily covers the local foundation environment. The worker runs

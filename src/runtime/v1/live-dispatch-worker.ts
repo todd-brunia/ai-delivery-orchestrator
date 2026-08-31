@@ -9,4 +9,9 @@ export class LiveDispatchWorker {
     if (!this.control.mayClaim) return [];
     return this.consumer.consume(limit);
   }
+
+  async drainExact(actionId: string): Promise<readonly { id: string; outcome: "completed" | "retry" | "blocked" }[]> {
+    if (!this.control.mayClaim) return [];
+    return this.consumer.consumeExact(actionId);
+  }
 }
