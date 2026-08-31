@@ -320,6 +320,9 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('"arn:aws:rds:${var.aws_region}:${var.aws_account_id}:cluster:${local.pilot_name}"');
     expect(runtimeAuthority).toContain('"arn:aws:rds:${var.aws_region}:${var.aws_account_id}:cluster-snapshot:${local.pilot_name}-*"');
     expect(runtimeAuthority).toContain('"arn:aws:rds:${var.aws_region}:${var.aws_account_id}:db:${local.pilot_name}-writer"');
+    expect(runtimeAuthority).toContain('sid       = "InspectRdsGlobalClusters"');
+    expect(runtimeAuthority).toContain('actions   = ["rds:DescribeGlobalClusters"]');
+    expect(runtimeAuthority).toContain('"arn:aws:rds::${var.aws_account_id}:global-cluster:*"');
     expect(runtimeAuthority).not.toContain('cluster:${local.pilot_name}-database');
     expect(runtimeAuthority).not.toContain('db:${local.pilot_name}-database-1');
     expect(runtimeAuthority).toContain('data "aws_kms_alias" "rds"');

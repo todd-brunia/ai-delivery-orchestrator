@@ -88,6 +88,11 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     ]
   }
   statement {
+    sid       = "InspectRdsGlobalClusters"
+    actions   = ["rds:DescribeGlobalClusters"]
+    resources = ["arn:aws:rds::${var.aws_account_id}:global-cluster:*"]
+  }
+  statement {
     sid = "ManagePilotLambda"
     actions = [
       "lambda:AddPermission", "lambda:CreateFunction", "lambda:DeleteFunction", "lambda:DeleteFunctionConcurrency",
