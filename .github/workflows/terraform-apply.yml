@@ -17,6 +17,16 @@ on:
         required: true
         default: false
         type: boolean
+      replace_ecr_dkr_endpoint:
+        description: Replace only the pilot ECR Docker interface endpoint after an approved private-DNS repair
+        required: true
+        default: false
+        type: boolean
+      replacement_confirmation:
+        description: Required exact confirmation for an approved ECR Docker endpoint replacement
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -45,6 +55,16 @@ jobs:
         env:
           SELECTED_SHA: ${{ inputs.commit_sha }}
         run: test "${#SELECTED_SHA}" -eq 40 && test -z "${SELECTED_SHA//[0-9a-f]/}"
+      - name: Require exact ECR Docker endpoint replacement confirmation
+        if: ${{ inputs.replace_ecr_dkr_endpoint }}
+        env:
+          PROVISION_IAM: ${{ inputs.provision_iam }}
+          BOOTSTRAP_ECR_REPOSITORY: ${{ inputs.bootstrap_ecr_repository }}
+          REPLACEMENT_CONFIRMATION: ${{ inputs.replacement_confirmation }}
+        run: |
+          test "$PROVISION_IAM" = "false"
+          test "$BOOTSTRAP_ECR_REPOSITORY" = "false"
+          test "$REPLACEMENT_CONFIRMATION" = "REPLACE ECR DKR ENDPOINT"
       - name: Check out selected commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -154,12 +174,28 @@ jobs:
       - name: Initialize pilot remote state
         run: terraform -chdir=infra/environments/pilot init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
       - name: Plan selected commit
-        if: ${{ !inputs.bootstrap_ecr_repository }}
+        if: ${{ !inputs.bootstrap_ecr_repository && !inputs.replace_ecr_dkr_endpoint }}
         run: terraform -chdir=infra/environments/pilot plan -input=false -lock-timeout=5m -out=pilot.tfplan -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
+      - name: Plan only the approved ECR Docker endpoint replacement
+        if: ${{ inputs.replace_ecr_dkr_endpoint }}
+        run: >-
+          terraform -chdir=infra/environments/pilot plan -input=false -lock-timeout=5m -out=pilot.tfplan
+          -target='aws_vpc_endpoint.worker_interface["ecr.dkr"]'
+          -replace='aws_vpc_endpoint.worker_interface["ecr.dkr"]'
+          -var="aws_account_id=${{ vars.AWS_ACCOUNT_ID }}"
       - name: Reject destructive pilot plan
         if: ${{ !inputs.bootstrap_ecr_repository }}
         run: |
           set -euo pipefail
+          if [ "${{ inputs.replace_ecr_dkr_endpoint }}" = "true" ]; then
+            replacement_changes="$(
+              terraform -chdir=infra/environments/pilot show -json pilot.tfplan |
+                jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | "\(.address): \(.change.actions | join(","))"'
+            )"
+            test "$replacement_changes" = 'aws_vpc_endpoint.worker_interface["ecr.dkr"]: delete,create'
+            echo "Saved pilot plan replaces only the approved ECR Docker interface endpoint."
+            exit 0
+          fi
           destructive_changes="$(
             terraform -chdir=infra/environments/pilot show -json pilot.tfplan |
               jq -r '
