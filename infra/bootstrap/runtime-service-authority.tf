@@ -308,16 +308,6 @@ data "aws_iam_policy_document" "github_apply_rds_kms" {
     actions   = ["secretsmanager:CreateSecret"]
     resources = ["*"]
     condition {
-      test     = "Bool"
-      variable = "aws:ViaAWSService"
-      values   = ["true"]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "aws:CalledViaLast"
-      values   = ["rds.amazonaws.com"]
-    }
-    condition {
       test     = "StringEquals"
       variable = "aws:RequestedRegion"
       values   = [var.aws_region]
