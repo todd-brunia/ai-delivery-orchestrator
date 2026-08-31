@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 
 import { NormalizedGitHubEventSchema, type NormalizedGitHubEvent } from "../github/webhooks/v1/index.js";
+import type { CommitCallbackResultRequest } from "./contracts.js";
 
 export interface InboxAcceptance { readonly event: NormalizedGitHubEvent; readonly duplicate: boolean; }
 export interface ClaimedInboxEvent { readonly event: NormalizedGitHubEvent; readonly attemptCount: number; readonly claimExpiresAt: string; }
@@ -66,4 +67,58 @@ export class PostgresWebhookInbox {
       RETURNING status`, [deliveryId, ownerId, error.slice(0, 4000), maxAttempts, now]);
     return result.rows[0]?.status ?? "not_owned";
   }
+
+  /** Atomically preserves sanitized decision evidence and completes a valid claim. */
+  async commitResult(raw: CommitCallbackResultRequest, now = new Date()): Promise<{ readonly duplicate: boolean }> {
+    const result = validateCallbackResult(raw);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const claimed = await client.query(`SELECT 1 FROM orchestrator.github_webhook_inbox
+        WHERE delivery_id = $1 AND status = 'claimed' AND claimed_by = $2 AND claim_expires_at > $3 FOR UPDATE`,
+      [result.deliveryId, result.deliveryLeaseOwner, now]);
+      if (claimed.rowCount !== 1) throw new Error("callback delivery lease is absent or expired");
+      if (result.workItemId && result.workItemLeaseOwner) {
+        const lease = await client.query(`SELECT 1 FROM orchestrator.leases
+          WHERE aggregate_type = 'work_item' AND aggregate_id = $1 AND owner_id = $2 AND expires_at > $3`,
+        [result.workItemId, result.workItemLeaseOwner, now]);
+        if (lease.rowCount !== 1) throw new Error("callback work-item lease is absent or expired");
+      }
+      const inserted = await client.query(`INSERT INTO orchestrator.github_callback_results
+        (delivery_id, work_item_id, semantic_key, disposition, reason_class, evidence, recorded_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (delivery_id) DO NOTHING RETURNING delivery_id`,
+      [result.deliveryId, result.workItemId ?? null, result.semanticKey ?? null, result.disposition,
+        result.reasonClass, JSON.stringify(result.evidence), result.recordedAt]);
+      if (inserted.rowCount === 1) {
+        await client.query(`UPDATE orchestrator.github_webhook_inbox
+          SET status = 'completed', completed_at = $3, claimed_by = NULL, claim_expires_at = NULL
+          WHERE delivery_id = $1 AND claimed_by = $2`, [result.deliveryId, result.deliveryLeaseOwner, now]);
+      }
+      await client.query("COMMIT");
+      return { duplicate: inserted.rowCount === 0 };
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
+  }
+}
+
+function validateCallbackResult(raw: CommitCallbackResultRequest): CommitCallbackResultRequest {
+  if (!raw.deliveryLeaseOwner || !/^[a-z][a-z0-9_]{1,100}$/.test(raw.reasonClass) ||
+      !["pending", "retrying", "completed", "ignored", "blocked", "dead_letter"].includes(raw.disposition) ||
+      (raw.workItemLeaseOwner !== undefined && !raw.workItemId) ||
+      (raw.semanticKey !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._:/-]{7,199}$/.test(raw.semanticKey)) ||
+      !Number.isFinite(new Date(raw.recordedAt).getTime()) || !isSanitizedCallbackEvidence(raw.evidence)) throw new Error("invalid callback result");
+  return raw;
+}
+
+const callbackEvidenceKeys = new Set([
+  "eventName", "action", "hookId", "installationId", "repository", "runId", "workItemId", "revision",
+  "issueNodeId", "pullRequestNodeId", "workflowRunId", "checkRunId", "checkSuiteId", "reviewId",
+  "headSha", "baseSha", "planningFingerprint", "payloadSha256", "semanticKey", "transitionKey", "outboxKey",
+  "canonicalObservedAt", "attemptCount", "leaseCount", "configurationVersion",
+]);
+
+function isSanitizedCallbackEvidence(evidence: Readonly<Record<string, unknown>>): boolean {
+  const entries = Object.entries(evidence);
+  return entries.length <= 32 && entries.every(([key, value]) => callbackEvidenceKeys.has(key) &&
+    ((typeof value === "string" && value.length <= 200) || (typeof value === "number" && Number.isFinite(value)) || typeof value === "boolean"));
 }

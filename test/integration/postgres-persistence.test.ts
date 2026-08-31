@@ -249,6 +249,18 @@ describe("PostgresSprintRunRepository", () => {
     await expect(repository.getPlanningBinding?.(workItem.id)).resolves.toMatchObject({ evidence: request.evidence });
   });
 
+  it("binds callback correlations immutably and rejects external-object reuse", async () => {
+    const runId = await createRun();
+    const run = await repository.getRun(runId);
+    const [first, second] = run?.workItems ?? [];
+    if (!first || !second) throw new Error("fixture work items are missing");
+    const correlation = { workItemId: first.id, repository: "todd-brunia/ai-consulting-client-portal", issueNodeId: "I_kwDOFoundation81", planningFingerprint: "a".repeat(64), automationMarker: "orchestrator:run:one", expectedBranch: "automation/81", expectedBaseSha: "b".repeat(40), acceptedWorkflowRunId: "workflow-run:81", pullRequestNodeId: "PR_kwDOFoundation81", pullRequestNumber: 81, currentHeadSha: "c".repeat(40), recordedAt: "2026-08-31T12:00:00.000Z" };
+    await expect(repository.saveCallbackCorrelation?.(correlation)).resolves.toEqual({ duplicate: false });
+    await expect(repository.saveCallbackCorrelation?.(correlation)).resolves.toEqual({ duplicate: true });
+    await expect(repository.getCallbackCorrelation?.(first.id)).resolves.toEqual(correlation);
+    await expect(repository.saveCallbackCorrelation?.({ ...correlation, workItemId: second.id, issueNodeId: "I_kwDOFoundation82", automationMarker: "orchestrator:run:two" })).rejects.toMatchObject({ code: "23505" });
+  });
+
   it("stores deterministic workflow node output exactly once", async () => {
     const runId = await createRun();
     const workItem = (await repository.getRun(runId))?.workItems[0];
