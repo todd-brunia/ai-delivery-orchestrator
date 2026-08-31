@@ -108,6 +108,13 @@ globally by GitHub delivery ID. Inbox claims use expiring ownership,
 `SKIP LOCKED`, bounded retries, and dead-letter exhaustion. An HTTP/Lambda
 adapter and canonical GitHub refetch are separate future slices.
 
+Callback processing uses a separate `github-callback/v1` routing contract. A
+bounded worker claims FIFO inbox entries, obtains a work-item lease, refetches
+canonical evidence through an injected resolver, and commits any legal
+transition, projection outbox action, sanitized result, and inbox completion in
+one PostgreSQL transaction. Unsupported or uncertain observations are stable
+no-ops or blockers; they never authorize an external action.
+
 The HTTP adapter is exposed only as `POST /github/webhooks` through an HTTP API
 and a concurrency-bounded Lambda. It caps request size, preserves exact bytes
 through signature verification, loads the webhook secret only through an

@@ -192,6 +192,11 @@ After five failed receives, preserve the message in its DLQ with only delivery
 ID, receive count, and sanitized category. Pause/cancel/drain stop future claims
 but do not reverse completed external actions or discard callbacks.
 
+Callback replay is not automatic. Preserve the inbox row, DLQ evidence, semantic
+key, and canonical blocker class; a reviewed operator action or later
+reconciliation must re-run the same canonical/idempotency checks. Keep callback
+claims disabled until separately authorized for a supervised fixture.
+
 The pilot ECS service is merged at desired/minimum capacity zero and maximum
 capacity two. Do not raise capacity for the all-zero placeholder image SHA or
 before runtime roles are attached. A graceful stop first blocks new claims,
