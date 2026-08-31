@@ -2,6 +2,10 @@ locals {
   worker_interface_endpoints = toset(["ecr.api", "ecr.dkr", "logs", "secretsmanager", "sqs"])
 }
 
+data "aws_prefix_list" "s3" {
+  name = "com.amazonaws.${var.aws_region}.s3"
+}
+
 resource "aws_security_group" "private_endpoints" {
   name        = "${local.name}-private-endpoints"
   description = "TLS access to exact AWS private service endpoints from pilot workers"
