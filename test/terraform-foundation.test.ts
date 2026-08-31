@@ -185,10 +185,10 @@ describe("Terraform foundation policy", () => {
     expect(applyWorkflow).toContain("apply -input=false -lock-timeout=5m pilot-iam.tfplan");
   });
 
-  it("rejects deletes and every replacement except exact ECS task-definition revision promotion", () => {
+  it("rejects deletes and every replacement except explicit, bounded promotions and repairs", () => {
     expect(applyWorkflow).toContain("Reject destructive pilot IAM plan");
     expect(applyWorkflow).toContain("Reject destructive pilot plan");
-    expect(applyWorkflow.match(/show -json pilot(?:-iam|-iam-converged)?\.tfplan/g)).toHaveLength(3);
+    expect(applyWorkflow.match(/show -json pilot(?:-iam|-iam-converged)?\.tfplan/g)).toHaveLength(4);
     expect(applyWorkflow.match(/index\("delete"\)/g)).toHaveLength(3);
     expect(applyWorkflow.indexOf("Reject destructive pilot IAM plan")).toBeGreaterThan(applyWorkflow.indexOf("Plan pilot IAM for selected commit"));
     expect(applyWorkflow.indexOf("Reject destructive pilot IAM plan")).toBeLessThan(applyWorkflow.indexOf("Apply selected pilot IAM plan"));
@@ -197,6 +197,12 @@ describe("Terraform foundation policy", () => {
     expect(applyWorkflow.indexOf("Reject destructive converged pilot IAM plan")).toBeGreaterThan(applyWorkflow.indexOf("Plan converged pilot IAM"));
     expect(applyWorkflow.indexOf("Reject destructive converged pilot IAM plan")).toBeLessThan(applyWorkflow.indexOf("Apply converged pilot IAM plan"));
     expect(applyWorkflow).toContain("allowed_task_definition_replacement");
+    expect(applyWorkflow).toContain("replace_ecr_dkr_endpoint:");
+    expect(applyWorkflow).toContain('test "$REPLACEMENT_CONFIRMATION" = "REPLACE ECR DKR ENDPOINT"');
+    expect(applyWorkflow).toContain("Plan only the approved ECR Docker endpoint replacement");
+    expect(applyWorkflow).toContain("-target='aws_vpc_endpoint.worker_interface[\"ecr.dkr\"]'");
+    expect(applyWorkflow).toContain("-replace='aws_vpc_endpoint.worker_interface[\"ecr.dkr\"]'");
+    expect(applyWorkflow).toContain("Saved pilot plan replaces only the approved ECR Docker interface endpoint.");
     expect(applyWorkflow).toContain('.change.actions == ["delete", "create"]');
     expect(applyWorkflow).toContain('.address == "aws_ecs_task_definition.worker"');
     expect(applyWorkflow).toContain('.address == "aws_ecs_task_definition.migration"');
