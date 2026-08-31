@@ -304,8 +304,8 @@ data "aws_iam_policy_document" "github_apply_rds_kms" {
     }
   }
   statement {
-    sid       = "CreateRdsManagedMasterSecret"
-    actions   = ["secretsmanager:CreateSecret"]
+    sid       = "CreateAndTagRdsManagedMasterSecret"
+    actions   = ["secretsmanager:CreateSecret", "secretsmanager:TagResource"]
     resources = ["*"]
     condition {
       test     = "StringEquals"
