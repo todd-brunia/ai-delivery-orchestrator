@@ -401,12 +401,14 @@ describe("Terraform foundation policy", () => {
   });
 
   it("separates pilot IAM ownership behind an exact reference contract", () => {
+    const pilotIamVariables = read("infra/environments/pilot-iam/variables.tf");
     expect(pilot).not.toMatch(/resource\s+"aws_iam_/);
     expect(pilotIam).toContain('resource "aws_iam_policy" "runtime_secrets"');
     expect(pilot).toContain('variable "runtime_secret_policy_arn"');
     expect(pilot).toContain('var.runtime_secret_policy_arn == "arn:aws:iam::${var.aws_account_id}:policy/ai-delivery-orchestrator-pilot-runtime-secrets"');
     expect(pilot).not.toMatch(/terraform_remote_state/);
     expect(pilotIam).not.toMatch(/terraform_remote_state/);
+    expect(pilotIamVariables).toContain('secret:rds!cluster(:[A-Za-z0-9_-]+|-[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}-[A-Za-z0-9]{6})$');
   });
 
   it("fails closed and orders optional IAM provisioning before the main stack", () => {
