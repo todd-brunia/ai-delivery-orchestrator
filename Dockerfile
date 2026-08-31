@@ -16,7 +16,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY --from=build /app/dist ./dist
+COPY certificates ./certificates
 COPY migrations ./migrations
+
+ENV NODE_EXTRA_CA_CERTS=/app/certificates/aws-rds-us-east-1-rsa2048-g1.pem
 
 USER node
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
