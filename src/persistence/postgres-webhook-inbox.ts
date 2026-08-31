@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import type { Pool } from "pg";
 
 import { NormalizedGitHubEventSchema, type NormalizedGitHubEvent } from "../github/webhooks/v1/index.js";
 import type { CommitCallbackResultRequest } from "./contracts.js";
+import { WorkItemStateSchema, transitionWorkItem, type WorkItemEvent } from "../domain/sprint-delivery/v1/index.js";
 
 export interface InboxAcceptance { readonly event: NormalizedGitHubEvent; readonly duplicate: boolean; }
 export interface ClaimedInboxEvent { readonly event: NormalizedGitHubEvent; readonly attemptCount: number; readonly claimExpiresAt: string; }
@@ -99,7 +101,40 @@ export class PostgresWebhookInbox {
     } catch (error) { await client.query("ROLLBACK"); throw error; }
     finally { client.release(); }
   }
+
+  /** Atomic callback boundary: transitions, projection outbox, evidence, and inbox completion commit together. */
+  async commit(raw: CommitCallbackResultRequest & { readonly events: readonly string[] }, now = new Date()): Promise<{ readonly duplicate: boolean }> {
+    const result = validateCallbackResult(raw);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const claimed = await client.query("SELECT 1 FROM orchestrator.github_webhook_inbox WHERE delivery_id=$1 AND status='claimed' AND claimed_by=$2 AND claim_expires_at>$3 FOR UPDATE", [result.deliveryId, result.deliveryLeaseOwner, now]);
+      if (claimed.rowCount !== 1) throw new Error("callback delivery lease is absent or expired");
+      const prior = await client.query("SELECT 1 FROM orchestrator.github_callback_results WHERE delivery_id=$1 OR (semantic_key IS NOT NULL AND semantic_key=$2)", [result.deliveryId, result.semanticKey ?? null]);
+      if (prior.rowCount === 1) { await client.query("COMMIT"); return { duplicate: true }; }
+      if (result.workItemId && result.workItemLeaseOwner) {
+        const lease = await client.query("SELECT 1 FROM orchestrator.leases WHERE aggregate_type='work_item' AND aggregate_id=$1 AND owner_id=$2 AND expires_at>$3", [result.workItemId, result.workItemLeaseOwner, now]);
+        if (lease.rowCount !== 1) throw new Error("callback work-item lease is absent or expired");
+        const item = await client.query<{ state: string; revision: number }>("SELECT state, revision FROM orchestrator.work_items WHERE id=$1 FOR UPDATE", [result.workItemId]);
+        let state = WorkItemStateSchema.parse(item.rows[0]?.state); let revision = item.rows[0]?.revision;
+        if (revision === undefined) throw new Error("callback work item is missing");
+        for (const rawEvent of raw.events) {
+          const event = rawEvent as WorkItemEvent; const next = transitionWorkItem(state, event); revision += 1;
+          const key = `${result.semanticKey ?? result.deliveryId}:${event}`; const id = deterministicUuid(key);
+          await client.query("INSERT INTO orchestrator.transitions (id, aggregate_type, aggregate_id, aggregate_revision, from_state, to_state, event, actor, evidence, idempotency_key, occurred_at) VALUES ($1,'work_item',$2,$3,$4,$5,$6,$7,$8,$9,$10)", [id, result.workItemId, revision, state, next, JSON.stringify(event), JSON.stringify({ kind: "system", id: "callback-worker" }), JSON.stringify([{ kind: "policy", uri: "callback://canonical" }]), key, result.recordedAt]);
+          await client.query("INSERT INTO orchestrator.outbox (id, transition_id, action_type, payload, idempotency_key, created_at) VALUES ($1,$2,'projection.update',$3,$4,$5)", [deterministicUuid(`${key}:outbox`), id, JSON.stringify({ workItemId: result.workItemId, event }), `${key}:outbox`, result.recordedAt]);
+          state = next;
+        }
+        await client.query("UPDATE orchestrator.work_items SET state=$2, revision=$3, updated_at=$4 WHERE id=$1", [result.workItemId, state, revision, result.recordedAt]);
+      }
+      await client.query("INSERT INTO orchestrator.github_callback_results (delivery_id, work_item_id, semantic_key, disposition, reason_class, evidence, recorded_at) VALUES ($1,$2,$3,$4,$5,$6,$7)", [result.deliveryId, result.workItemId ?? null, result.semanticKey ?? null, result.disposition, result.reasonClass, JSON.stringify(result.evidence), result.recordedAt]);
+      await client.query("UPDATE orchestrator.github_webhook_inbox SET status='completed', completed_at=$3, claimed_by=NULL, claim_expires_at=NULL WHERE delivery_id=$1 AND claimed_by=$2", [result.deliveryId, result.deliveryLeaseOwner, now]);
+      await client.query("COMMIT"); return { duplicate: false };
+    } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
+  }
 }
+
+function deterministicUuid(value: string): string { const hash = createHash("sha256").update(value).digest("hex"); return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`; }
 
 function validateCallbackResult(raw: CommitCallbackResultRequest): CommitCallbackResultRequest {
   if (!raw.deliveryLeaseOwner || !/^[a-z][a-z0-9_]{1,100}$/.test(raw.reasonClass) ||
