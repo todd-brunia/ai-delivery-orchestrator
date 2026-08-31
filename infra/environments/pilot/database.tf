@@ -1,3 +1,7 @@
+data "aws_kms_alias" "rds" {
+  name = "alias/aws/rds"
+}
+
 resource "aws_db_subnet_group" "application" {
   name       = "${local.name}-database"
   subnet_ids = values(aws_subnet.isolated)[*].id
@@ -32,7 +36,7 @@ resource "aws_rds_cluster" "application" {
   master_username                 = "orchestrator_admin"
   manage_master_user_password     = true
   storage_encrypted               = true
-  kms_key_id                      = "arn:aws:kms:${var.aws_region}:${var.aws_account_id}:alias/aws/rds"
+  kms_key_id                      = data.aws_kms_alias.rds.target_key_arn
   db_subnet_group_name            = aws_db_subnet_group.application.name
   vpc_security_group_ids          = [aws_security_group.database.id]
   backup_retention_period         = var.database_backup_retention_days

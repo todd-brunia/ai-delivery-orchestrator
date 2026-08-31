@@ -57,7 +57,9 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain('default = "16.14"');
     expect(pilot).toContain("manage_master_user_password     = true");
     expect(pilot).toContain("storage_encrypted               = true");
-    expect(pilot).toContain('kms_key_id                      = "arn:aws:kms:${var.aws_region}:${var.aws_account_id}:alias/aws/rds"');
+    expect(pilot).toContain('data "aws_kms_alias" "rds"');
+    expect(pilot).toContain('name = "alias/aws/rds"');
+    expect(pilot).toContain('kms_key_id                      = data.aws_kms_alias.rds.target_key_arn');
     expect(pilot).toContain("deletion_protection             = var.database_deletion_protection");
     expect(pilot).toContain("skip_final_snapshot             = var.database_skip_final_snapshot");
     expect(pilot).toContain("copy_tags_to_snapshot           = true");
