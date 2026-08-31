@@ -296,6 +296,7 @@ describe("Terraform foundation policy", () => {
     const planPolicy = runtimeAuthority.slice(runtimeAuthority.indexOf('data "aws_iam_policy_document" "github_plan_runtime_services"'), runtimeAuthority.indexOf('resource "aws_iam_role_policy" "github_plan_runtime_services"'));
     expect(planPolicy).toContain('"rds:DescribeGlobalClusters"');
     expect(planPolicy).toContain('"kms:ListAliases"');
+    expect(planPolicy).toMatch(/sid\s*= "DescribeAwsManagedRdsKey"[\s\S]*?actions\s*= \["kms:DescribeKey"\][\s\S]*?resources = \[data\.aws_kms_alias\.rds\.target_key_arn\]/);
     expect(planPolicy).not.toMatch(/:(?:Create|Delete|Put|Post|Patch|Update|Modify|Register|Deregister|Authorize|Revoke|Tag|Untag)/i);
     expect(runtimeAuthority).toContain('variable = "aws:RequestTag/Project"');
     expect(runtimeAuthority).toContain('variable = "aws:RequestTag/Environment"');

@@ -16,6 +16,11 @@ data "aws_iam_policy_document" "github_plan_runtime_services" {
     ]
     resources = ["*"]
   }
+  statement {
+    sid       = "DescribeAwsManagedRdsKey"
+    actions   = ["kms:DescribeKey"]
+    resources = [data.aws_kms_alias.rds.target_key_arn]
+  }
 }
 
 resource "aws_iam_role_policy" "github_plan_runtime_services" {
