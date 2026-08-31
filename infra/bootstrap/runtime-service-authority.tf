@@ -50,6 +50,19 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     resources = ["*"]
   }
   statement {
+    sid     = "RunPilotMigrationAndSmokeTasks"
+    actions = ["ecs:RunTask"]
+    resources = [
+      "arn:aws:ecs:${var.aws_region}:${var.aws_account_id}:task-definition/${local.pilot_name}-worker:*",
+      "arn:aws:ecs:${var.aws_region}:${var.aws_account_id}:task-definition/${local.pilot_name}-migration:*",
+    ]
+    condition {
+      test     = "ArnEquals"
+      variable = "ecs:cluster"
+      values   = ["arn:aws:ecs:${var.aws_region}:${var.aws_account_id}:cluster/${local.pilot_name}-worker"]
+    }
+  }
+  statement {
     sid       = "RegisterPilotTaskDefinitions"
     actions   = ["ecs:RegisterTaskDefinition"]
     resources = ["*"]
