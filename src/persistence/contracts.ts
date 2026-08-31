@@ -103,6 +103,38 @@ export interface LeaseRequest {
   readonly expiresAt: Date;
 }
 
+export interface CallbackCorrelation {
+  readonly workItemId: string;
+  readonly repository: string;
+  readonly issueNodeId: string;
+  readonly planningFingerprint: string;
+  readonly automationMarker: string;
+  readonly expectedBranch: string;
+  readonly expectedBaseSha: string;
+  readonly acceptedWorkflowRunId?: string;
+  readonly pullRequestNodeId?: string;
+  readonly pullRequestNumber?: number;
+  readonly currentHeadSha?: string;
+  readonly recordedAt: string;
+}
+
+export type CallbackDisposition = "pending" | "retrying" | "completed" | "ignored" | "blocked" | "dead_letter";
+
+export interface CallbackResult {
+  readonly deliveryId: string;
+  readonly workItemId?: string;
+  readonly semanticKey?: string;
+  readonly disposition: CallbackDisposition;
+  readonly reasonClass: string;
+  readonly evidence: Readonly<Record<string, unknown>>;
+  readonly recordedAt: string;
+}
+
+export interface CommitCallbackResultRequest extends CallbackResult {
+  readonly deliveryLeaseOwner: string;
+  readonly workItemLeaseOwner?: string;
+}
+
 /** Immutable canonical evidence collected before feasibility or authorization may run. */
 export interface PlanningBinding {
   readonly workItemId: string;
@@ -161,6 +193,8 @@ export interface SprintRunRepository {
   recordDispatchAttempt?(attempt: DispatchAttempt): Promise<{ readonly duplicate: boolean }>;
   getDispatchAttempt?(workItemId: string, intentFingerprint: string): Promise<DispatchAttempt | undefined>;
   tryAcquireLease(request: LeaseRequest, now?: Date): Promise<boolean>;
+  saveCallbackCorrelation?(correlation: CallbackCorrelation): Promise<{ readonly duplicate: boolean }>;
+  getCallbackCorrelation?(workItemId: string): Promise<CallbackCorrelation | undefined>;
 }
 
 export class ConcurrencyError extends Error {

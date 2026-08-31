@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import { InvalidWebhookError, verifyAndNormalizeGitHubWebhook } from "../src/github/webhooks/v1/index.js";
+import { CallbackRoutingMetadataSchema, InvalidWebhookError, toCallbackRoutingMetadata, verifyAndNormalizeGitHubWebhook } from "../src/github/webhooks/v1/index.js";
 
 const secret = "test-secret-not-a-credential";
 const payload = { action: "labeled", installation: { id: 42 }, sender: { login: "octocat" }, repository: { full_name: "todd-brunia/ai-consulting-client-portal" }, issue: { number: 81 }, ignored_private_content: "must not survive normalization" };
@@ -28,5 +28,13 @@ describe("GitHub webhook verification", () => {
     const missingIssue = Buffer.from(JSON.stringify({ ...payload, issue: undefined }));
     const missingIssueSignature = `sha256=${createHmac("sha256", secret).update(missingIssue).digest("hex")}`;
     expect(() => verifyAndNormalizeGitHubWebhook(missingIssue, { ...headers, signature256: missingIssueSignature }, secret)).toThrow("issueNumber");
+  });
+
+  it("creates a separately versioned, sanitized callback routing contract", () => {
+    const event = verifyAndNormalizeGitHubWebhook(raw, headers, secret, new Date("2026-08-01T12:00:00Z"));
+    const callback = toCallbackRoutingMetadata(event, "config:callback-policy/v1");
+    expect(callback).toMatchObject({ version: "github-callback/v1", deliveryId: headers.deliveryId, issueNumber: 81 });
+    expect(JSON.stringify(callback)).not.toContain("senderLogin");
+    expect(() => CallbackRoutingMetadataSchema.parse({ ...callback, rawBody: "never" })).toThrow();
   });
 });

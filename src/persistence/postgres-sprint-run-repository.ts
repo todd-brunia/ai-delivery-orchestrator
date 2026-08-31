@@ -38,6 +38,7 @@ import {
   type PersistedPlanningBinding,
   type WorkflowNodeResult,
   type DispatchAttempt,
+  type CallbackCorrelation,
 } from "./contracts.js";
 
 interface RunRow {
@@ -451,6 +452,46 @@ export class PostgresSprintRunRepository implements SprintRunRepository {
     const result = await this.pool.query<{ status: DispatchAttempt["status"]; workflow_run_id: string | null; evidence_uri: string | null; recorded_at: Date }>("SELECT status, workflow_run_id, evidence_uri, recorded_at FROM orchestrator.dispatch_attempts WHERE work_item_id = $1 AND intent_fingerprint = $2", [workItemId, intentFingerprint]);
     const row = result.rows[0];
     return row ? { workItemId, intentFingerprint, status: row.status, ...(row.workflow_run_id ? { workflowRunId: row.workflow_run_id } : {}), ...(row.evidence_uri ? { evidenceUri: row.evidence_uri } : {}), recordedAt: row.recorded_at.toISOString() } : undefined;
+  }
+
+  async saveCallbackCorrelation(raw: CallbackCorrelation): Promise<{ readonly duplicate: boolean }> {
+    if (!/^[a-f0-9]{64}$/.test(raw.planningFingerprint) || !/^[a-f0-9]{40}$/.test(raw.expectedBaseSha) ||
+        (raw.currentHeadSha !== undefined && !/^[a-f0-9]{40}$/.test(raw.currentHeadSha)) ||
+        !Number.isFinite(new Date(raw.recordedAt).getTime())) throw new Error("invalid callback correlation");
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const item = await client.query("SELECT 1 FROM orchestrator.work_items WHERE id = $1 FOR UPDATE", [raw.workItemId]);
+      if (item.rowCount !== 1) throw new Error(`work item not found: ${raw.workItemId}`);
+      const existing = await client.query<{ repository: string; issue_node_id: string; planning_fingerprint: string; automation_marker: string; expected_branch: string; expected_base_sha: string; accepted_workflow_run_id: string | null; pull_request_node_id: string | null; pull_request_number: number | null; current_head_sha: string | null; recorded_at: Date }>("SELECT * FROM orchestrator.work_item_callback_correlations WHERE work_item_id = $1", [raw.workItemId]);
+      if (existing.rowCount === 1) {
+        const row = existing.rows[0]!;
+        const prior = this.mapCallbackCorrelation(raw.workItemId, row);
+        if (JSON.stringify(prior) !== JSON.stringify(raw)) throw new ConcurrencyError("immutable callback correlation already exists with different evidence");
+        await client.query("COMMIT");
+        return { duplicate: true };
+      }
+      await client.query(`INSERT INTO orchestrator.work_item_callback_correlations
+        (work_item_id, repository, issue_node_id, planning_fingerprint, automation_marker, expected_branch, expected_base_sha,
+         accepted_workflow_run_id, pull_request_node_id, pull_request_number, current_head_sha, recorded_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [raw.workItemId, raw.repository, raw.issueNodeId, raw.planningFingerprint, raw.automationMarker,
+        raw.expectedBranch, raw.expectedBaseSha, raw.acceptedWorkflowRunId ?? null, raw.pullRequestNodeId ?? null,
+        raw.pullRequestNumber ?? null, raw.currentHeadSha ?? null, raw.recordedAt]);
+      await client.query("COMMIT");
+      return { duplicate: false };
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
+  }
+
+  async getCallbackCorrelation(workItemId: string): Promise<CallbackCorrelation | undefined> {
+    const result = await this.pool.query<{ repository: string; issue_node_id: string; planning_fingerprint: string; automation_marker: string; expected_branch: string; expected_base_sha: string; accepted_workflow_run_id: string | null; pull_request_node_id: string | null; pull_request_number: number | null; current_head_sha: string | null; recorded_at: Date }>("SELECT * FROM orchestrator.work_item_callback_correlations WHERE work_item_id = $1", [workItemId]);
+    const row = result.rows[0];
+    return row ? this.mapCallbackCorrelation(workItemId, row) : undefined;
+  }
+
+  private mapCallbackCorrelation(workItemId: string, row: { repository: string; issue_node_id: string; planning_fingerprint: string; automation_marker: string; expected_branch: string; expected_base_sha: string; accepted_workflow_run_id: string | null; pull_request_node_id: string | null; pull_request_number: number | null; current_head_sha: string | null; recorded_at: Date }): CallbackCorrelation {
+    return { workItemId, repository: row.repository, issueNodeId: row.issue_node_id, planningFingerprint: row.planning_fingerprint, automationMarker: row.automation_marker, expectedBranch: row.expected_branch, expectedBaseSha: row.expected_base_sha, ...(row.accepted_workflow_run_id ? { acceptedWorkflowRunId: row.accepted_workflow_run_id } : {}), ...(row.pull_request_node_id ? { pullRequestNodeId: row.pull_request_node_id } : {}), ...(row.pull_request_number ? { pullRequestNumber: row.pull_request_number } : {}), ...(row.current_head_sha ? { currentHeadSha: row.current_head_sha } : {}), recordedAt: row.recorded_at.toISOString() };
   }
 
   private mapWorkItem(row: WorkItemRow): PersistedWorkItem {
