@@ -232,6 +232,9 @@ describe("Terraform foundation policy", () => {
     }
     expect(pilotIam).toContain('variable = "secretsmanager:VersionStage"');
     expect(pilotIam).toMatch(/values\s*=\s*\["AWSCURRENT"\]/);
+    const migrationSecretInjection = pilotIam.match(/data "aws_iam_policy_document" "migration_secret_injection" \{([\s\S]*?)\n\}/)?.[1];
+    expect(migrationSecretInjection).toContain('resources = [var.database_secret_arn]');
+    expect(migrationSecretInjection).not.toContain("secretsmanager:VersionStage");
     expect(pilotIam).not.toMatch(/iam:PassRole|iam:\*/);
     expect(pilot).not.toMatch(/resource\s+"aws_iam_/);
     expect(pilot).not.toMatch(/aws_secretsmanager_secret_version|secret_string|secret_binary/i);

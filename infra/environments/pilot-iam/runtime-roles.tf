@@ -180,11 +180,6 @@ data "aws_iam_policy_document" "migration_secret_injection" {
   statement {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [var.database_secret_arn]
-    condition {
-      test     = "StringEquals"
-      variable = "secretsmanager:VersionStage"
-      values   = ["AWSCURRENT"]
-    }
   }
 }
 resource "aws_iam_role_policy" "migration_secret_injection" {
