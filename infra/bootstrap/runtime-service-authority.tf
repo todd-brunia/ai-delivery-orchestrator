@@ -120,7 +120,7 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     sid = "ManagePilotLambda"
     actions = [
       "lambda:AddPermission", "lambda:CreateFunction", "lambda:DeleteFunction", "lambda:DeleteFunctionConcurrency",
-      "lambda:GetFunction", "lambda:GetFunctionConcurrency", "lambda:GetPolicy", "lambda:ListTags", "lambda:ListVersionsByFunction",
+      "lambda:GetFunction", "lambda:GetFunctionConcurrency", "lambda:GetFunctionConfiguration", "lambda:GetPolicy", "lambda:ListTags", "lambda:ListVersionsByFunction",
       "lambda:PutFunctionConcurrency", "lambda:RemovePermission", "lambda:TagResource", "lambda:UntagResource",
       "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration",
     ]
