@@ -341,11 +341,12 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('variable = "kms:GrantIsForAWSResource"');
     expect(runtimeAuthority).not.toContain('"kms:Encrypt"');
     expect(runtimeAuthority.match(/data\.aws_kms_alias\.secretsmanager\.target_key_arn/g)).toHaveLength(1);
-    expect(runtimeAuthority).toContain('sid       = "CreateRdsManagedMasterSecret"');
-    expect(runtimeAuthority).toContain('actions   = ["secretsmanager:CreateSecret"]');
-    expect(runtimeAuthority).toMatch(/sid\s*= "CreateRdsManagedMasterSecret"[\s\S]*?actions\s*= \["secretsmanager:CreateSecret"\][\s\S]*?resources = \["\*"\][\s\S]*?variable = "aws:RequestedRegion"[\s\S]*?values\s*= \[var\.aws_region\]/);
-    expect(runtimeAuthority).not.toMatch(/sid\s*= "CreateRdsManagedMasterSecret"[\s\S]*?variable = "aws:(?:ViaAWSService|CalledViaLast)"/);
+    expect(runtimeAuthority).toContain('sid       = "CreateAndTagRdsManagedMasterSecret"');
+    expect(runtimeAuthority).toContain('actions   = ["secretsmanager:CreateSecret", "secretsmanager:TagResource"]');
+    expect(runtimeAuthority).toMatch(/sid\s*= "CreateAndTagRdsManagedMasterSecret"[\s\S]*?actions\s*= \["secretsmanager:CreateSecret", "secretsmanager:TagResource"\][\s\S]*?resources = \["\*"\][\s\S]*?variable = "aws:RequestedRegion"[\s\S]*?values\s*= \[var\.aws_region\]/);
+    expect(runtimeAuthority).not.toMatch(/sid\s*= "CreateAndTagRdsManagedMasterSecret"[\s\S]*?variable = "aws:(?:ViaAWSService|CalledViaLast)"/);
     expect(runtimeAuthority.match(/"secretsmanager:CreateSecret"/g)).toHaveLength(1);
+    expect(runtimeAuthority.match(/"secretsmanager:TagResource"/g)).toHaveLength(1);
     expect(runtimeAuthority).not.toMatch(/"secretsmanager:(?:GetSecretValue|PutSecretValue|UpdateSecret|DeleteSecret|RotateSecret|ReplicateSecretToRegions)"/);
     expect(runtimeAuthority.match(/variable = "kms:ViaService"/g)).toHaveLength(1);
     expect(runtimeAuthority).not.toMatch(/"kms:(?:CreateKey|DisableKey|ScheduleKeyDeletion|PutKeyPolicy|CreateAlias)"/);
