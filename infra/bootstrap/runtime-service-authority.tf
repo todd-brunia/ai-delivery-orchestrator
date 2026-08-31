@@ -84,7 +84,7 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
   }
   statement {
     sid       = "ManagePilotQueues"
-    actions   = ["sqs:CreateQueue", "sqs:DeleteQueue", "sqs:GetQueueAttributes", "sqs:ListQueueTags", "sqs:SetQueueAttributes", "sqs:TagQueue", "sqs:UntagQueue"]
+    actions   = ["sqs:CreateQueue", "sqs:DeleteQueue", "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:ListQueueTags", "sqs:SetQueueAttributes", "sqs:TagQueue", "sqs:UntagQueue"]
     resources = ["arn:aws:sqs:${var.aws_region}:${var.aws_account_id}:${local.pilot_name}-*.fifo"]
   }
   statement {
