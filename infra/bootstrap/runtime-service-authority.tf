@@ -10,7 +10,7 @@ data "aws_iam_policy_document" "github_plan_runtime_services" {
       "dynamodb:DescribeContinuousBackups", "dynamodb:DescribeTable", "dynamodb:DescribeTimeToLive", "dynamodb:ListTagsOfResource",
       "ec2:Describe*", "ecs:DescribeClusters", "ecs:DescribeServices", "ecs:DescribeTaskDefinition", "ecs:ListTagsForResource",
       "lambda:GetFunction", "lambda:GetFunctionConcurrency", "lambda:GetPolicy", "lambda:ListTags", "lambda:ListVersionsByFunction",
-      "rds:DescribeDBClusters", "rds:DescribeDBClusterSnapshots", "rds:DescribeDBInstances",
+      "rds:DescribeDBClusters", "rds:DescribeDBClusterSnapshots", "rds:DescribeDBInstances", "rds:DescribeGlobalClusters",
       "rds:DescribeDBSubnetGroups", "rds:ListTagsForResource", "sqs:GetQueueAttributes", "sqs:ListQueueTags",
     ]
     resources = ["*"]
@@ -86,6 +86,11 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
       "arn:aws:rds:${var.aws_region}:${var.aws_account_id}:db:${local.pilot_name}-writer",
       "arn:aws:rds:${var.aws_region}:${var.aws_account_id}:subgrp:${local.pilot_name}-database",
     ]
+  }
+  statement {
+    sid       = "InspectRdsGlobalClusters"
+    actions   = ["rds:DescribeGlobalClusters"]
+    resources = ["arn:aws:rds::${var.aws_account_id}:global-cluster:*"]
   }
   statement {
     sid = "ManagePilotLambda"

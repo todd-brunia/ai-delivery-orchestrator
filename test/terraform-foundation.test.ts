@@ -292,6 +292,7 @@ describe("Terraform foundation policy", () => {
       "apigateway:POST", "application-autoscaling:RegisterScalableTarget", "cloudwatch:PutDashboard",
     ]) expect(runtimeAuthority).toContain(`"${action}"`);
     const planPolicy = runtimeAuthority.slice(runtimeAuthority.indexOf('data "aws_iam_policy_document" "github_plan_runtime_services"'), runtimeAuthority.indexOf('resource "aws_iam_role_policy" "github_plan_runtime_services"'));
+    expect(planPolicy).toContain('"rds:DescribeGlobalClusters"');
     expect(planPolicy).not.toMatch(/:(?:Create|Delete|Put|Post|Patch|Update|Modify|Register|Deregister|Authorize|Revoke|Tag|Untag)/i);
     expect(runtimeAuthority).toContain('variable = "aws:RequestTag/Project"');
     expect(runtimeAuthority).toContain('variable = "aws:RequestTag/Environment"');
@@ -320,6 +321,9 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('"arn:aws:rds:${var.aws_region}:${var.aws_account_id}:cluster:${local.pilot_name}"');
     expect(runtimeAuthority).toContain('"arn:aws:rds:${var.aws_region}:${var.aws_account_id}:cluster-snapshot:${local.pilot_name}-*"');
     expect(runtimeAuthority).toContain('"arn:aws:rds:${var.aws_region}:${var.aws_account_id}:db:${local.pilot_name}-writer"');
+    expect(runtimeAuthority).toContain('sid       = "InspectRdsGlobalClusters"');
+    expect(runtimeAuthority).toContain('actions   = ["rds:DescribeGlobalClusters"]');
+    expect(runtimeAuthority).toContain('"arn:aws:rds::${var.aws_account_id}:global-cluster:*"');
     expect(runtimeAuthority).not.toContain('cluster:${local.pilot_name}-database');
     expect(runtimeAuthority).not.toContain('db:${local.pilot_name}-database-1');
     expect(runtimeAuthority).toContain('data "aws_kms_alias" "rds"');
