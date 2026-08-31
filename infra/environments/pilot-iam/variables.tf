@@ -40,7 +40,7 @@ variable "database_secret_arn" {
   type      = string
   sensitive = true
   validation {
-    condition     = can(regex("^arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:rds!cluster:[A-Za-z0-9_-]+$", var.database_secret_arn))
+    condition     = can(regex("^arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:rds!cluster(:[A-Za-z0-9_-]+|-[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}-[A-Za-z0-9]{6})$", var.database_secret_arn))
     error_message = "database_secret_arn must identify an RDS-managed cluster secret in the pilot account and region."
   }
 }
