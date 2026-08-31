@@ -292,6 +292,7 @@ describe("Terraform foundation policy", () => {
       "apigateway:POST", "application-autoscaling:RegisterScalableTarget", "cloudwatch:PutDashboard",
     ]) expect(runtimeAuthority).toContain(`"${action}"`);
     const planPolicy = runtimeAuthority.slice(runtimeAuthority.indexOf('data "aws_iam_policy_document" "github_plan_runtime_services"'), runtimeAuthority.indexOf('resource "aws_iam_role_policy" "github_plan_runtime_services"'));
+    expect(planPolicy).toContain('"rds:DescribeGlobalClusters"');
     expect(planPolicy).not.toMatch(/:(?:Create|Delete|Put|Post|Patch|Update|Modify|Register|Deregister|Authorize|Revoke|Tag|Untag)/i);
     expect(runtimeAuthority).toContain('variable = "aws:RequestTag/Project"');
     expect(runtimeAuthority).toContain('variable = "aws:RequestTag/Environment"');
