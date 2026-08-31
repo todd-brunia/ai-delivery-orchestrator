@@ -343,7 +343,8 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority.match(/data\.aws_kms_alias\.secretsmanager\.target_key_arn/g)).toHaveLength(1);
     expect(runtimeAuthority).toContain('sid       = "CreateRdsManagedMasterSecret"');
     expect(runtimeAuthority).toContain('actions   = ["secretsmanager:CreateSecret"]');
-    expect(runtimeAuthority).toMatch(/sid\s*= "CreateRdsManagedMasterSecret"[\s\S]*?actions\s*= \["secretsmanager:CreateSecret"\][\s\S]*?resources = \["\*"\][\s\S]*?variable = "aws:ViaAWSService"[\s\S]*?values\s*= \["true"\][\s\S]*?variable = "aws:CalledViaLast"[\s\S]*?values\s*= \["rds\.amazonaws\.com"\][\s\S]*?variable = "aws:RequestedRegion"[\s\S]*?values\s*= \[var\.aws_region\]/);
+    expect(runtimeAuthority).toMatch(/sid\s*= "CreateRdsManagedMasterSecret"[\s\S]*?actions\s*= \["secretsmanager:CreateSecret"\][\s\S]*?resources = \["\*"\][\s\S]*?variable = "aws:RequestedRegion"[\s\S]*?values\s*= \[var\.aws_region\]/);
+    expect(runtimeAuthority).not.toMatch(/sid\s*= "CreateRdsManagedMasterSecret"[\s\S]*?variable = "aws:(?:ViaAWSService|CalledViaLast)"/);
     expect(runtimeAuthority.match(/"secretsmanager:CreateSecret"/g)).toHaveLength(1);
     expect(runtimeAuthority).not.toMatch(/"secretsmanager:(?:GetSecretValue|PutSecretValue|UpdateSecret|DeleteSecret|RotateSecret|ReplicateSecretToRegions)"/);
     expect(runtimeAuthority.match(/variable = "kms:ViaService"/g)).toHaveLength(1);
