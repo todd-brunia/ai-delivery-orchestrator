@@ -295,6 +295,7 @@ describe("Terraform foundation policy", () => {
     ]) expect(runtimeAuthority).toContain(`"${action}"`);
     const planPolicy = runtimeAuthority.slice(runtimeAuthority.indexOf('data "aws_iam_policy_document" "github_plan_runtime_services"'), runtimeAuthority.indexOf('resource "aws_iam_role_policy" "github_plan_runtime_services"'));
     expect(planPolicy).toContain('"rds:DescribeGlobalClusters"');
+    expect(planPolicy).toContain('"kms:ListAliases"');
     expect(planPolicy).not.toMatch(/:(?:Create|Delete|Put|Post|Patch|Update|Modify|Register|Deregister|Authorize|Revoke|Tag|Untag)/i);
     expect(runtimeAuthority).toContain('variable = "aws:RequestTag/Project"');
     expect(runtimeAuthority).toContain('variable = "aws:RequestTag/Environment"');
@@ -332,6 +333,7 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('name = "alias/aws/rds"');
     expect(runtimeAuthority).toContain('data "aws_kms_alias" "secretsmanager"');
     expect(runtimeAuthority).toContain('name = "alias/aws/secretsmanager"');
+    expect(runtimeAuthority).toMatch(/sid\s*= "ListAwsManagedRdsKeyAlias"[\s\S]*?actions\s*= \["kms:ListAliases"\][\s\S]*?resources = \["\*"\]/);
     expect(runtimeAuthority).toContain('sid       = "DescribeAwsManagedRdsKey"');
     expect(runtimeAuthority).toContain('actions   = ["kms:DescribeKey"]');
     expect(runtimeAuthority).toContain('sid       = "DescribeAwsManagedSecretsManagerKey"');
@@ -346,6 +348,7 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('resources = [data.aws_kms_alias.rds.target_key_arn]');
     expect(runtimeAuthority).toContain('variable = "kms:GrantIsForAWSResource"');
     expect(runtimeAuthority).not.toContain('"kms:Encrypt"');
+    expect(runtimeAuthority.match(/"kms:ListAliases"/g)).toHaveLength(2);
     expect(runtimeAuthority.match(/data\.aws_kms_alias\.secretsmanager\.target_key_arn/g)).toHaveLength(1);
     expect(runtimeAuthority).toContain('sid       = "CreateAndTagRdsManagedMasterSecret"');
     expect(runtimeAuthority).toContain('actions   = ["secretsmanager:CreateSecret", "secretsmanager:TagResource"]');

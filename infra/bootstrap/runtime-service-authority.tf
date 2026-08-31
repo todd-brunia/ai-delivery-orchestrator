@@ -10,6 +10,7 @@ data "aws_iam_policy_document" "github_plan_runtime_services" {
       "dynamodb:DescribeContinuousBackups", "dynamodb:DescribeTable", "dynamodb:DescribeTimeToLive", "dynamodb:ListTagsOfResource",
       "ec2:Describe*", "ecs:DescribeClusters", "ecs:DescribeServices", "ecs:DescribeTaskDefinition", "ecs:ListTagsForResource",
       "lambda:GetFunction", "lambda:GetFunctionConcurrency", "lambda:GetPolicy", "lambda:ListTags", "lambda:ListVersionsByFunction",
+      "kms:ListAliases",
       "rds:DescribeDBClusters", "rds:DescribeDBClusterSnapshots", "rds:DescribeDBInstances", "rds:DescribeGlobalClusters",
       "rds:DescribeDBSubnetGroups", "rds:ListTagsForResource", "sqs:GetQueueAttributes", "sqs:ListQueueTags",
     ]
@@ -278,6 +279,11 @@ data "aws_kms_alias" "secretsmanager" {
 }
 
 data "aws_iam_policy_document" "github_apply_rds_kms" {
+  statement {
+    sid       = "ListAwsManagedRdsKeyAlias"
+    actions   = ["kms:ListAliases"]
+    resources = ["*"]
+  }
   statement {
     sid       = "DescribeAwsManagedRdsKey"
     actions   = ["kms:DescribeKey"]
