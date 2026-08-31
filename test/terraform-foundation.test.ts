@@ -337,6 +337,10 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain('resource "aws_vpc_security_group_egress_rule" "worker_private_endpoints"');
     expect(pilot).toContain('referenced_security_group_id = aws_security_group.private_endpoints.id');
     expect(pilot).toContain('from_port                    = 443');
+    expect(pilot).toContain('data "aws_prefix_list" "s3"');
+    expect(pilot).toContain('resource "aws_vpc_security_group_egress_rule" "worker_s3_gateway"');
+    expect(pilot).toContain('prefix_list_id    = data.aws_prefix_list.s3.id');
+    expect(pilot).toContain('TLS to regional S3 gateway endpoint for ECR image layers');
     expect(runtimeAuthority).toContain('"rds:CreateDBClusterSnapshot"');
     expect(runtimeAuthority).toContain('"rds:DeleteDBClusterSnapshot"');
     expect(runtimeAuthority).toContain('"rds:DescribeDBClusterSnapshots"');
