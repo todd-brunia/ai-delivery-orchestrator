@@ -1,4 +1,5 @@
 export * from "./authorization.js";
+export * from "./callback-policy.js";
 export * from "./contracts.js";
 export * from "./dependencies.js";
 export * from "./feasibility-authorization.js";
