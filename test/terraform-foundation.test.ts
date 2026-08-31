@@ -319,8 +319,15 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).toContain('"ecr:SetRepositoryPolicy"');
     expect(runtimeAuthority).toContain('"ecr:DescribeImages"');
     expect(runtimeAuthority).toContain('"ec2:RevokeSecurityGroupEgress"');
+    expect(runtimeAuthority).toContain('"ec2:AuthorizeSecurityGroupEgress"');
     expect(runtimeAuthority).toContain('"arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:security-group-rule/*"');
     expect(runtimeAuthority).toMatch(/sid\s*= "CreateTaggedPilotSecurityGroupRules"/);
+    expect(pilot).toContain('resource "aws_vpc_security_group_egress_rule" "worker_database"');
+    expect(pilot).toContain('referenced_security_group_id = aws_security_group.database.id');
+    expect(pilot).toContain('from_port                    = 5432');
+    expect(pilot).toContain('resource "aws_vpc_security_group_egress_rule" "worker_private_endpoints"');
+    expect(pilot).toContain('referenced_security_group_id = aws_security_group.private_endpoints.id');
+    expect(pilot).toContain('from_port                    = 443');
     expect(runtimeAuthority).toContain('"rds:CreateDBClusterSnapshot"');
     expect(runtimeAuthority).toContain('"rds:DeleteDBClusterSnapshot"');
     expect(runtimeAuthority).toContain('"rds:DescribeDBClusterSnapshots"');

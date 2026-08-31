@@ -218,7 +218,7 @@ data "aws_iam_policy_document" "github_apply_runtime_network" {
   }
   statement {
     sid       = "CreateTaggedPilotSecurityGroupRules"
-    actions   = ["ec2:AuthorizeSecurityGroupIngress"]
+    actions   = ["ec2:AuthorizeSecurityGroupEgress", "ec2:AuthorizeSecurityGroupIngress"]
     resources = ["arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:security-group-rule/*"]
     condition {
       test     = "StringEquals"
@@ -233,7 +233,7 @@ data "aws_iam_policy_document" "github_apply_runtime_network" {
   }
   statement {
     sid       = "UseTaggedPilotSecurityGroupsForIngress"
-    actions   = ["ec2:AuthorizeSecurityGroupIngress"]
+    actions   = ["ec2:AuthorizeSecurityGroupEgress", "ec2:AuthorizeSecurityGroupIngress"]
     resources = ["arn:aws:ec2:${var.aws_region}:${var.aws_account_id}:security-group/*"]
     condition {
       test     = "StringEquals"
