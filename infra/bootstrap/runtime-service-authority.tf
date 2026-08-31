@@ -50,6 +50,11 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     resources = ["*"]
   }
   statement {
+    sid       = "InspectPilotTasks"
+    actions   = ["ecs:DescribeTasks"]
+    resources = ["arn:aws:ecs:${var.aws_region}:${var.aws_account_id}:task/${local.pilot_name}-worker/*"]
+  }
+  statement {
     sid     = "RunPilotMigrationAndSmokeTasks"
     actions = ["ecs:RunTask"]
     resources = [

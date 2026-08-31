@@ -294,6 +294,7 @@ describe("Terraform foundation policy", () => {
       "apigateway:POST", "application-autoscaling:RegisterScalableTarget", "cloudwatch:PutDashboard",
     ]) expect(runtimeAuthority).toContain(`"${action}"`);
     expect(runtimeAuthority).toMatch(/sid\s*= "RunPilotMigrationAndSmokeTasks"[\s\S]*?actions\s*= \["ecs:RunTask"\][\s\S]*?task-definition\/\$\{local\.pilot_name\}-worker:\*[\s\S]*?task-definition\/\$\{local\.pilot_name\}-migration:\*[\s\S]*?variable\s*= "ecs:cluster"[\s\S]*?values\s*= \["arn:aws:ecs:\$\{var\.aws_region\}:\$\{var\.aws_account_id\}:cluster\/\$\{local\.pilot_name\}-worker"\]/);
+    expect(runtimeAuthority).toMatch(/sid\s*= "InspectPilotTasks"[\s\S]*?actions\s*= \["ecs:DescribeTasks"\][\s\S]*?resources = \["arn:aws:ecs:\$\{var\.aws_region\}:\$\{var\.aws_account_id\}:task\/\$\{local\.pilot_name\}-worker\/\*"\]/);
     const planPolicy = runtimeAuthority.slice(runtimeAuthority.indexOf('data "aws_iam_policy_document" "github_plan_runtime_services"'), runtimeAuthority.indexOf('resource "aws_iam_role_policy" "github_plan_runtime_services"'));
     expect(planPolicy).toContain('"rds:DescribeGlobalClusters"');
     expect(planPolicy).toContain('"kms:ListAliases"');
