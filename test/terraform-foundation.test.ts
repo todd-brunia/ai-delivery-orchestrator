@@ -299,7 +299,7 @@ describe("Terraform foundation policy", () => {
     expect(runtimeAuthority).not.toContain("role       = aws_iam_role.github_plan.name");
     for (const action of [
       "ecs:CreateCluster", "ecs:RegisterTaskDefinition", "ec2:CreateSecurityGroup", "ec2:CreateVpcEndpoint",
-      "sqs:CreateQueue", "sqs:GetQueueUrl", "dynamodb:CreateTable", "rds:CreateDBCluster", "lambda:CreateFunction",
+      "sqs:CreateQueue", "sqs:GetQueueUrl", "dynamodb:CreateTable", "rds:CreateDBCluster", "lambda:CreateFunction", "lambda:GetFunctionConfiguration",
       "apigateway:POST", "application-autoscaling:RegisterScalableTarget", "cloudwatch:PutDashboard",
     ]) expect(runtimeAuthority).toContain(`"${action}"`);
     expect(runtimeAuthority).toMatch(/sid\s*= "RunPilotMigrationAndSmokeTasks"[\s\S]*?actions\s*= \["ecs:RunTask"\][\s\S]*?task-definition\/\$\{local\.pilot_name\}-worker:\*[\s\S]*?task-definition\/\$\{local\.pilot_name\}-migration:\*[\s\S]*?variable\s*= "ecs:cluster"[\s\S]*?values\s*= \["arn:aws:ecs:\$\{var\.aws_region\}:\$\{var\.aws_account_id\}:cluster\/\$\{local\.pilot_name\}-worker"\]/);
