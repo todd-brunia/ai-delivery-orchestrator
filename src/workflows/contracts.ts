@@ -58,6 +58,7 @@ export const LiveWorkflowResultSchema = z.object({
   authorizedIssueNumbers: z.array(z.number().int().positive()),
   waitingIssueNumbers: z.array(z.number().int().positive()),
   scheduledIssueNumbers: z.array(z.number().int().positive()),
+  dispatchOutboxIds: z.record(z.string().regex(/^[1-9][0-9]*$/), z.uuid()),
 }).strict();
 export type LiveWorkflowResult = z.infer<typeof LiveWorkflowResultSchema>;
 

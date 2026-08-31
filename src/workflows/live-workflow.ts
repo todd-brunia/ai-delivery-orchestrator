@@ -47,12 +47,14 @@ export function createLiveBindingWorkflowRuntime(repository: SprintRunRepository
       }
       const items = [...currentItems.values()];
       const schedule = scheduleDryRun({ runId: run.id, candidates: items.filter((item) => authorizedIssueNumbers.includes(item.issueNumber)).map((item) => ({ issueNumber: item.issueNumber, state: item.state, conflictDomains: analysis.conflicts.find((entry) => entry.issueNumber === item.issueNumber)?.domains ?? [] })), dependencies: analysis.dependencies, mergedIssueNumbers: items.filter((item) => item.state === "merged").map((item) => item.issueNumber), activeImplementationCount: items.filter((item) => ["build_dispatched", "building", "pr_open", "checks_pending", "reviewing", "fixing", "ready_for_human_review"].includes(item.state)).length, maximumConcurrentImplementations: adapter.maxParallelImplementations as 1 | 2, evidence: items.map((item) => ({ kind: "issue" as const, uri: `github://issues/${run.input.repository}/${item.issueNumber}` })) });
+      const dispatchOutboxIds: Record<string, string> = {};
       for (const issueNumber of schedule.selectedIssueNumbers) {
         const item = currentItems.get(issueNumber)!;
         const binding = bindings.get(item.id)!;
-        await queueImplementationDispatch({ repository, workItem: item, preparation: { version: "live-dispatch-preparation/v1", binding, adapter, expectedAdapterFingerprint: binding.adapterFingerprint, expectedPlanSha256: binding.plan.bodySha256, expectedDefaultBranchSha: request.defaultBranchSha, now: request.occurredAt, expiresAt: new Date(now.getTime() + 5 * 60_000).toISOString() } });
+        const queued = await queueImplementationDispatch({ repository, workItem: item, preparation: { version: "live-dispatch-preparation/v1", binding, adapter, expectedAdapterFingerprint: binding.adapterFingerprint, expectedPlanSha256: binding.plan.bodySha256, expectedDefaultBranchSha: request.defaultBranchSha, now: request.occurredAt, expiresAt: new Date(now.getTime() + 5 * 60_000).toISOString() } });
+        if (queued.queued) dispatchOutboxIds[String(issueNumber)] = queued.outboxId;
       }
-      return LiveWorkflowResultSchema.parse({ workflowVersion: run.input.workflowVersion, providerContractVersion: "providers/v1", runId: run.id, threadId: request.threadId, status: "bindings_collected", bindingFingerprints, authorizedIssueNumbers, waitingIssueNumbers, scheduledIssueNumbers: schedule.selectedIssueNumbers });
+      return LiveWorkflowResultSchema.parse({ workflowVersion: run.input.workflowVersion, providerContractVersion: "providers/v1", runId: run.id, threadId: request.threadId, status: "bindings_collected", bindingFingerprints, authorizedIssueNumbers, waitingIssueNumbers, scheduledIssueNumbers: schedule.selectedIssueNumbers, dispatchOutboxIds });
     },
   };
 }

@@ -57,6 +57,8 @@ describe("GitHub App canonical read adapter", () => {
       [`GET https://api.github.com/repos/${repository}/pulls/69/reviews?per_page=10`]: { status: 200, body: [{ id: 7, commit_id: sha, state: "APPROVED", submitted_at: "2026-08-25T11:00:00Z", user: { login: "reviewer-bot" } }] },
       [`GET https://api.github.com/repos/${repository}/actions/runs?head_sha=${sha}&per_page=10`]: { status: 200, body: { workflow_runs: [{ id: 8, workflow_id: 9, path: ".github/workflows/ci.yml", event: "pull_request", status: "completed", conclusion: "success", head_sha: sha, created_at: "2026-08-25T10:00:00Z", updated_at: "2026-08-25T11:00:00Z" }] } },
       [`GET https://api.github.com/repos/${repository}`]: { status: 200, body: { id: 1308170964, default_branch: "main", visibility: "public", allow_squash_merge: true, archived: false } },
+      [`GET https://api.github.com/repos/${repository}/git/ref/heads/main`]: { status: 200, body: { object: { sha } } },
+      [`GET https://api.github.com/repos/${repository}/contents/.github/workflows/implementation.yml?ref=${sha}`]: { status: 200, body: { type: "file", path: ".github/workflows/implementation.yml", sha: "c".repeat(40) } },
       "GET https://api.github.com/app/installations/152627422": { status: 200, body: { id: 152627422, app_id: 4545788, account: { login: "todd-brunia" }, permissions: { contents: "read", issues: "read", metadata: "read", pull_requests: "read", actions: "read" } } },
       "GET https://api.github.com/installation/repositories?per_page=10": { status: 200, body: { repositories: [{ id: 1308170964, full_name: repository }] } },
     });
@@ -68,6 +70,8 @@ describe("GitHub App canonical read adapter", () => {
     expect(configuration.defaultBranch).toBe("main");
     expect(configuration.configurationSha256).toMatch(/^[a-f0-9]{64}$/);
     await expect(client.getInstallation(repository)).resolves.toMatchObject({ installationId: "152627422", permissions: { contents: "read" } });
+    await expect(client.getDefaultBranchHead(repository, "main")).resolves.toEqual({ sha, evidenceUri: `github://repositories/${repository}/refs/heads/main/${sha}` });
+    await expect(client.assertWorkflowAtRef(repository, "implementation.yml", sha)).resolves.toEqual({ evidenceUri: `github://repositories/${repository}/contents/.github/workflows/implementation.yml@${sha}` });
   });
 
   it("rejects pagination that escapes the allowlisted repository", async () => {

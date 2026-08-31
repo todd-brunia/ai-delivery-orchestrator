@@ -80,4 +80,20 @@ describe("orchestration persistence primitives", () => {
     expect(await repository.completeOutbox(retried[0]!.id, "worker-b", new Date("2026-07-31T20:02:30Z"))).toBe(true);
     await expect(repository.claimOutbox("worker-c", 1, new Date("2026-07-31T20:04:00Z"), new Date("2026-07-31T20:03:00Z"))).resolves.toHaveLength(0);
   });
+
+  it("claims only the exact supervised outbox action under contention", async () => {
+    const run = await createRun();
+    const first = request(run.workItems[0]!.id, 0, "plan_available");
+    const second = request(run.workItems[1]!.id, 0, "plan_available");
+    await repository.transitionWorkItem(first);
+    await repository.transitionWorkItem(second);
+    const now = new Date("2026-07-31T20:00:00Z");
+    const [exact, competing] = await Promise.all([
+      repository.claimOutbox("supervised", 1, new Date("2026-07-31T20:01:00Z"), now, ["projection.update"], [second.outbox.id]),
+      repository.claimOutbox("ordinary", 1, new Date("2026-07-31T20:01:00Z"), now, ["projection.update"], [first.outbox.id]),
+    ]);
+    expect(exact.map((action) => action.id)).toEqual([second.outbox.id]);
+    expect(competing.map((action) => action.id)).toEqual([first.outbox.id]);
+    await expect(repository.claimOutbox("wrong", 1, new Date("2026-07-31T20:01:00Z"), now, ["projection.update"], [second.outbox.id])).resolves.toEqual([]);
+  });
 });

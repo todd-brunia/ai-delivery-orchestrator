@@ -6,6 +6,7 @@ export interface WorkerConfig {
   readonly logLevel: "debug" | "info" | "warn" | "error";
   readonly heartbeatMilliseconds: number;
   readonly providerMode: "stub" | "openai-analysis";
+  readonly supervisedDispatchEnabled: boolean;
 }
 
 export function loadWorkerConfig(
@@ -15,6 +16,7 @@ export function loadWorkerConfig(
   const logLevel = environment.LOG_LEVEL ?? "info";
   const heartbeatMilliseconds = Number(environment.WORKER_HEARTBEAT_MS ?? "30000");
   const providerMode = environment.PROVIDER_MODE ?? "stub";
+  const supervisedDispatch = environment.SUPERVISED_DISPATCH_ENABLED ?? "false";
 
   if (!NODE_ENVIRONMENTS.has(nodeEnvironment)) {
     throw new Error(`NODE_ENV is invalid: ${nodeEnvironment}`);
@@ -32,11 +34,15 @@ export function loadWorkerConfig(
   if (providerMode !== "stub" && providerMode !== "openai-analysis") {
     throw new Error("PROVIDER_MODE must be stub or openai-analysis");
   }
+  if (supervisedDispatch !== "true" && supervisedDispatch !== "false") {
+    throw new Error("SUPERVISED_DISPATCH_ENABLED must be true or false");
+  }
 
   return {
     nodeEnvironment: nodeEnvironment as WorkerConfig["nodeEnvironment"],
     logLevel: logLevel as WorkerConfig["logLevel"],
     heartbeatMilliseconds,
     providerMode,
+    supervisedDispatchEnabled: supervisedDispatch === "true",
   };
 }
