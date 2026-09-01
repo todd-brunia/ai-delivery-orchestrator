@@ -114,6 +114,24 @@ resource "aws_vpc_security_group_egress_rule" "supervised_dispatch_https" {
   description       = "HTTPS to canonical GitHub, OpenAI, and AWS APIs"
 }
 
+resource "aws_vpc_security_group_egress_rule" "supervised_dispatch_dns_udp" {
+  security_group_id = aws_security_group.supervised_dispatch.id
+  cidr_ipv4         = "${cidrhost(var.vpc_cidr, 2)}/32"
+  from_port         = 53
+  to_port           = 53
+  ip_protocol       = "udp"
+  description       = "DNS to the VPC AmazonProvidedDNS resolver"
+}
+
+resource "aws_vpc_security_group_egress_rule" "supervised_dispatch_dns_tcp" {
+  security_group_id = aws_security_group.supervised_dispatch.id
+  cidr_ipv4         = "${cidrhost(var.vpc_cidr, 2)}/32"
+  from_port         = 53
+  to_port           = 53
+  ip_protocol       = "tcp"
+  description       = "DNS fallback to the VPC AmazonProvidedDNS resolver"
+}
+
 resource "aws_vpc_security_group_egress_rule" "supervised_dispatch_database" {
   security_group_id            = aws_security_group.supervised_dispatch.id
   referenced_security_group_id = aws_security_group.database.id
