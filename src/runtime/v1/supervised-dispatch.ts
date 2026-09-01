@@ -62,7 +62,8 @@ export const SupervisedPreflightResultSchema = z.object({
   installationId: z.string().min(1).max(200),
   workflow: z.string().regex(/^[A-Za-z0-9_.-]+\.ya?ml$/),
   authorized: z.boolean(),
-  blockers: z.array(z.enum(["execution_disabled", "human_approval_required"])).max(2),
+  executionEnabled: z.boolean(),
+  blockers: z.array(z.literal("human_approval_required")).max(1),
 }).strict();
 export type SupervisedPreflightResult = z.infer<typeof SupervisedPreflightResultSchema>;
 
@@ -217,7 +218,6 @@ export class SupervisedDispatchOperator {
       authorized: authorization.authorized,
     };
     const blockers: SupervisedPreflightResult["blockers"] = [];
-    if (!this.config.executionEnabled) blockers.push("execution_disabled");
     if (!authorization.authorized) blockers.push("human_approval_required");
     return SupervisedPreflightResultSchema.parse({
       version: "supervised-dispatch-preflight/v1",
@@ -235,6 +235,7 @@ export class SupervisedDispatchOperator {
       installationId: binding.installation.installationId,
       workflow: this.adapter.workflows.implementation,
       authorized: authorization.authorized,
+      executionEnabled: this.config.executionEnabled,
       blockers,
     });
   }

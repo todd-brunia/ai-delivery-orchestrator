@@ -40,8 +40,7 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     resources = [
       "arn:aws:ecs:${var.aws_region}:${var.aws_account_id}:cluster/${local.pilot_name}-worker",
       "arn:aws:ecs:${var.aws_region}:${var.aws_account_id}:service/${local.pilot_name}-worker/*",
-      "arn:aws:ecs:${var.aws_region}:${var.aws_account_id}:task-definition/${local.pilot_name}-worker:*",
-      "arn:aws:ecs:${var.aws_region}:${var.aws_account_id}:task-definition/${local.pilot_name}-migration:*",
+      "arn:aws:ecs:${var.aws_region}:${var.aws_account_id}:task-definition/${local.pilot_name}-*:*",
     ]
   }
   statement {
@@ -58,8 +57,7 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     sid     = "RunPilotMigrationAndSmokeTasks"
     actions = ["ecs:RunTask"]
     resources = [
-      "arn:aws:ecs:${var.aws_region}:${var.aws_account_id}:task-definition/${local.pilot_name}-worker:*",
-      "arn:aws:ecs:${var.aws_region}:${var.aws_account_id}:task-definition/${local.pilot_name}-migration:*",
+      "arn:aws:ecs:${var.aws_region}:${var.aws_account_id}:task-definition/${local.pilot_name}-*:*",
     ]
     condition {
       test     = "ArnEquals"

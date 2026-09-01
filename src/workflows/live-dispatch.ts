@@ -15,6 +15,7 @@ import {
   CanonicalRepositoryConfigurationSchema,
   CanonicalWorkflowRunSchema,
   GitHubExecutionIntentSchema,
+  fingerprintCanonicalDispatchState,
   type GitHubExecutionIntent,
   type GitHubReadPort,
   type FeasibilityResult,
@@ -140,7 +141,7 @@ export function prepareImplementationDispatch(raw: unknown): DispatchPreparation
         binding_sha256: bindingFingerprint,
         correlation: marker,
       },
-      expectedStateSha256: bindingFingerprint,
+      expectedStateSha256: fingerprintCanonicalDispatchState({ installation: binding.installation, configurationSha256: binding.repositoryConfiguration.configurationSha256, issue: binding.issue, planSha256: binding.plan.bodySha256 }),
       expiresAt: input.expiresAt,
     }),
   };

@@ -47,6 +47,11 @@ jobs:
       TF_VAR_worker_task_role_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-worker
       TF_VAR_migration_execution_role_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-migration-execution
       TF_VAR_migration_task_role_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-migration
+      TF_VAR_supervised_dispatch_execution_role_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-supervised-dispatch-execution
+      TF_VAR_supervised_dispatch_task_role_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-supervised-dispatch
+      TF_VAR_supervised_github_app_id: ${{ vars.SUPERVISED_GITHUB_APP_ID }}
+      TF_VAR_supervised_github_installation_id: ${{ vars.SUPERVISED_GITHUB_INSTALLATION_ID }}
+      TF_VAR_supervised_openai_project_id: ${{ vars.SUPERVISED_OPENAI_PROJECT_ID }}
     steps:
       - name: Validate rollback inputs
         env:
@@ -112,11 +117,11 @@ jobs:
           changes="$(terraform -chdir=infra/environments/pilot show -json pilot-rollback.tfplan | jq -c '[.resource_changes[]? | select(.change.actions != ["no-op"]) | {address,actions:.change.actions}]')"
           disallowed_destructive="$(jq -r '
             def allowed_task_definition_replacement:
-              ((.address == "aws_ecs_task_definition.worker" or .address == "aws_ecs_task_definition.migration") and .actions == ["delete", "create"]);
+              ((.address == "aws_ecs_task_definition.worker" or .address == "aws_ecs_task_definition.migration" or .address == "aws_ecs_task_definition.supervised_dispatch") and .actions == ["delete", "create"]);
             .[] | select(.actions | index("delete")) | select(allowed_task_definition_replacement | not) | .address
           ' <<< "$changes")"
           test -z "$disallowed_destructive"
-          unexpected="$(jq -r '.[] | select(.address | test("^(aws_ecs_task_definition\\.(worker|migration)|aws_lambda_function\\.(webhook|operator)|aws_ecs_service\\.worker)$") | not) | .address' <<< "$changes")"
+          unexpected="$(jq -r '.[] | select(.address | test("^(aws_ecs_task_definition\\.(worker|migration|supervised_dispatch)|aws_lambda_function\\.(webhook|operator)|aws_ecs_service\\.worker)$") | not) | .address' <<< "$changes")"
           test -z "$unexpected"
       - name: Apply saved rollback plan without reverting migrations
         run: terraform -chdir=infra/environments/pilot apply -input=false -lock-timeout=5m pilot-rollback.tfplan

@@ -84,3 +84,5 @@ jobs:
           -var="worker_task_role_arn=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-worker"
           -var="migration_execution_role_arn=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-migration-execution"
           -var="migration_task_role_arn=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-migration"
+          -var="supervised_dispatch_execution_role_arn=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-supervised-dispatch-execution"
+          -var="supervised_dispatch_task_role_arn=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-supervised-dispatch"

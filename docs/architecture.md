@@ -153,10 +153,23 @@ proposed GitHub mutations, feasibility analysis, and pull-request review from
 application policy. Model results retain structured decisions, evidence,
 provenance, policy/model versions, and usage—not raw reasoning.
 
-Only `PROVIDER_MODE=stub` is enabled. Deterministic in-memory adapters require
-explicit fixtures, return isolated copies, capture mutation intent without
-executing it, and make no network calls. Real Octokit and OpenAI adapters are
-deferred and cannot be selected through configuration.
+Ordinary worker composition remains `PROVIDER_MODE=stub`. Deterministic
+in-memory adapters require explicit fixtures, return isolated copies, capture
+mutation intent without executing it, and make no network calls. The dedicated
+supervised-dispatch executable is the sole live composition: it binds one
+allowlisted portal repository to the narrow GitHub App reader, OpenAI
+feasibility adapter, builder-only workflow mutation transport, PostgreSQL
+repository, exact outbox consumer, and canonical workflow-run reconciler. It
+is not reachable from the ordinary worker or operator API and is disabled by
+default.
+
+The supervised pilot task is an unscheduled Fargate task definition, not an ECS
+service. Under the owner-approved checkpoint exception it runs in a public
+subnet with an ephemeral public IP, a dedicated security group with no ingress,
+TCP 443-only internet egress, and exact PostgreSQL egress. Its task role can
+read only the builder GitHub App and portal-builder OpenAI secrets; its
+execution role can inject only the RDS credential and pull/log the immutable
+image. Deployment registers the task but never invokes it.
 
 ## Checkpointed planning and dispatch safety
 

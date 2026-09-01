@@ -27,8 +27,9 @@ describe("OpenAI Responses analysis adapter", () => {
     const transport = new FixtureTransport([{ status: 200, body: { model: "gpt-5.6-terra", status: "completed", output_text: JSON.stringify(result) } }]);
     const adapter = new OpenAiAnalysisAdapter(config, { load: () => Promise.resolve("sk-abcdefghijklmnopqrstuvwxyz") }, { load: () => Promise.resolve({ kind: "issue_bundle", sha256: createHash("sha256").update("issue contents").digest("hex"), bytes: "issue contents" }) }, transport);
     await expect(adapter.analyzeFeasibility(request())).resolves.toEqual(result);
-    const body = JSON.parse(transport.calls[0]!.body) as { store: boolean; tools: unknown[]; model: string; reasoning: { effort: string } };
+    const body = JSON.parse(transport.calls[0]!.body) as { store: boolean; tools: unknown[]; model: string; reasoning: { effort: string }; text: { format: { schema: { properties?: Record<string, unknown> } } } };
     expect(body).toMatchObject({ store: false, tools: [], model: "gpt-5.6-terra", reasoning: { effort: "medium" } });
+    expect(Object.keys(body.text.format.schema.properties ?? {})).toContain("feasible");
     expect(transport.calls[0]!.headers.authorization).not.toContain("issue contents");
   });
 
