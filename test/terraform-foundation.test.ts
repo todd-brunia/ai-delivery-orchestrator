@@ -436,6 +436,13 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain('user                   = "10001:10001"');
     expect(pilot).toContain('resource "aws_vpc_security_group_egress_rule" "supervised_dispatch_https"');
     expect(pilot).toContain('cidr_ipv4         = "0.0.0.0/0"');
+    expect(pilot).toContain('resource "aws_vpc_security_group_egress_rule" "supervised_dispatch_dns_udp"');
+    expect(pilot).toContain('resource "aws_vpc_security_group_egress_rule" "supervised_dispatch_dns_tcp"');
+    const supervisedDns = pilot.slice(pilot.indexOf('resource "aws_vpc_security_group_egress_rule" "supervised_dispatch_dns_udp"'), pilot.indexOf('resource "aws_vpc_security_group_egress_rule" "supervised_dispatch_database"'));
+    expect(supervisedDns.match(/cidr_ipv4\s*= "\$\{cidrhost\(var\.vpc_cidr, 2\)\}\/32"/g)).toHaveLength(2);
+    expect(supervisedDns).toMatch(/supervised_dispatch_dns_udp[\s\S]*?from_port\s*= 53[\s\S]*?to_port\s*= 53[\s\S]*?ip_protocol\s*= "udp"/);
+    expect(supervisedDns).toMatch(/supervised_dispatch_dns_tcp[\s\S]*?from_port\s*= 53[\s\S]*?to_port\s*= 53[\s\S]*?ip_protocol\s*= "tcp"/);
+    expect(supervisedDns).not.toMatch(/0\.0\.0\.0\/0|::\/0|8\.8\.8\.8|1\.1\.1\.1|referenced_security_group_id/);
     expect(pilot).not.toMatch(/resource\s+"aws_vpc_security_group_ingress_rule"\s+"supervised_dispatch/);
     expect(pilotIam).toContain('resource "aws_iam_role" "supervised_dispatch"');
     expect(pilotIam).toContain('github-app-builder-private-key-??????');
