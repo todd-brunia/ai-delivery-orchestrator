@@ -22,6 +22,12 @@ For execute, obtain fresh owner authorization bound to the preflight digest and 
 
 Rollback selects the previous disabled task revision. It does not delete durable evidence or cancel accepted external work. Remove no credentials during incident preservation; instead prevent new task launches and require fresh canonical validation and owner authorization.
 
+### Supervised-role partial-apply recovery
+
+If pilot IAM creates or updates some resources but cannot create the two supervised roles, preserve the failed run and do not rerun it. First review a fresh bootstrap plan that changes only the protected apply role's exact supervised-role lifecycle and ECS-only pass authority. Reject any deletion, replacement, wildcard role resource, trust change, or permission outside the two named supervised roles. Apply that bootstrap plan only after a separate owner checkpoint.
+
+Then produce a fresh pilot-IAM plan. It must reconcile already-converged policies in place and create only the missing supervised resources; do not import, delete, recreate, or manually edit IAM resources. After that plan and apply converge without deletion or replacement, start a new protected deployment at the reviewed current-main commit and require the `pilot` environment approval again. The failed run never authorizes a retry, task launch, preflight, or dispatch.
+
 ## Scope and safety boundary
 
 This runbook primarily covers the local foundation environment. The worker runs

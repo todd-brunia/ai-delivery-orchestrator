@@ -171,7 +171,7 @@ data "aws_iam_policy_document" "github_plan" {
     actions = [
       "iam:GetRole", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies", "iam:ListRoleTags",
     ]
-    resources = local.pilot_runtime_role_arns
+    resources = local.all_pilot_runtime_role_arns
   }
 }
 
@@ -368,6 +368,15 @@ data "aws_iam_policy_document" "github_apply" {
     resources = local.pilot_runtime_role_arns
   }
   statement {
+    sid = "ManageSupervisedDispatchRoles"
+    actions = [
+      "iam:CreateRole", "iam:DeleteRole", "iam:DeleteRolePolicy", "iam:GetRole", "iam:GetRolePolicy",
+      "iam:ListAttachedRolePolicies", "iam:ListRolePolicies", "iam:ListRoleTags", "iam:PutRolePolicy", "iam:TagRole", "iam:UntagRole",
+      "iam:UpdateAssumeRolePolicy",
+    ]
+    resources = local.supervised_dispatch_role_arns
+  }
+  statement {
     sid       = "PassPilotRuntimeRoles"
     actions   = ["iam:PassRole"]
     resources = local.pilot_runtime_role_arns
@@ -375,6 +384,16 @@ data "aws_iam_policy_document" "github_apply" {
       test     = "StringEquals"
       variable = "iam:PassedToService"
       values   = ["ecs-tasks.amazonaws.com", "lambda.amazonaws.com"]
+    }
+  }
+  statement {
+    sid       = "PassSupervisedDispatchRolesToEcs"
+    actions   = ["iam:PassRole"]
+    resources = local.supervised_dispatch_role_arns
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["ecs-tasks.amazonaws.com"]
     }
   }
 }

@@ -57,8 +57,6 @@ locals {
     "ai-delivery-orchestrator-pilot-worker",
     "ai-delivery-orchestrator-pilot-migration",
     "ai-delivery-orchestrator-pilot-migration-execution",
-    "ai-delivery-orchestrator-pilot-supervised-dispatch",
-    "ai-delivery-orchestrator-pilot-supervised-dispatch-execution",
     "ai-delivery-orchestrator-pilot-github-builder",
     "ai-delivery-orchestrator-pilot-github-reviewer",
     "ai-delivery-orchestrator-pilot-github-merger",
@@ -66,7 +64,13 @@ locals {
     "ai-delivery-orchestrator-pilot-openai-portal-reviewer",
     "ai-delivery-orchestrator-pilot-openai-orchestrator-reviewer",
   ])
-  pilot_runtime_role_arns = [for name in local.pilot_runtime_role_names : "arn:aws:iam::${var.aws_account_id}:role/${name}"]
+  supervised_dispatch_role_names = toset([
+    "ai-delivery-orchestrator-pilot-supervised-dispatch",
+    "ai-delivery-orchestrator-pilot-supervised-dispatch-execution",
+  ])
+  pilot_runtime_role_arns       = [for name in local.pilot_runtime_role_names : "arn:aws:iam::${var.aws_account_id}:role/${name}"]
+  supervised_dispatch_role_arns = [for name in local.supervised_dispatch_role_names : "arn:aws:iam::${var.aws_account_id}:role/${name}"]
+  all_pilot_runtime_role_arns   = concat(local.pilot_runtime_role_arns, local.supervised_dispatch_role_arns)
   tags = {
     Project     = "ai-delivery-orchestrator"
     Environment = "bootstrap"
