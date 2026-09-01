@@ -14,7 +14,7 @@ If execution is disabled, authorization is stale, the digest changes, the exact 
 
 ### Protected pilot task
 
-The pilot publishes an unscheduled `ai-delivery-orchestrator-pilot-supervised-dispatch` task definition. It has no service, desired count, timer, queue trigger, or inbound security-group rule. Registering a revision does not authorize running it. The protected Terraform apply must show no deletion other than ordinary task-definition replacement and must leave the worker service at desired count zero.
+The pilot publishes an unscheduled `ai-delivery-orchestrator-pilot-supervised-dispatch` task definition. It has no service, desired count, timer, queue trigger, or inbound security-group rule. Registering a revision does not authorize running it. The protected Terraform apply guard permits `delete,create` replacement only for the exact worker, migration, and supervised task-definition addresses; this registers revisions but invokes no task, creates no service or schedule, and grants no preflight or dispatch authority. All other deletion remains forbidden, and the worker service must remain at desired count zero.
 
 Fargate resolves Secrets Manager, ECR, GitHub, OpenAI, and database hostnames through AmazonProvidedDNS before and during container startup. The supervised security group therefore permits UDP and TCP 53 only to the VPC resolver at `${cidrhost(var.vpc_cidr, 2)}/32`. Port 53 must never target the internet, the full VPC CIDR, a public resolver, or another security group. TCP 443 remains the only internet egress. A DNS initialization failure consumes that task attempt but grants no retry authority.
 

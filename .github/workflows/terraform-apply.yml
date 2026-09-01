@@ -207,7 +207,7 @@ jobs:
             terraform -chdir=infra/environments/pilot show -json pilot.tfplan |
               jq -r '
                 def allowed_task_definition_replacement:
-                  ((.address == "aws_ecs_task_definition.worker" or .address == "aws_ecs_task_definition.migration") and .change.actions == ["delete", "create"]);
+                  ((.address == "aws_ecs_task_definition.worker" or .address == "aws_ecs_task_definition.migration" or .address == "aws_ecs_task_definition.supervised_dispatch") and .change.actions == ["delete", "create"]);
                 .resource_changes[]?
                 | select(.change.actions | index("delete"))
                 | select(allowed_task_definition_replacement | not)

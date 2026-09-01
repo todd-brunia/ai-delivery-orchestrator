@@ -32,12 +32,19 @@ describe("protected pilot deployment workflows", () => {
     expect(deploy).not.toMatch(/:latest|terraform destroy|force-unlock/);
   });
   it("allows only exact ECS task-definition revision replacements", () => {
+    const exactTaskDefinitions = [
+      "aws_ecs_task_definition.worker",
+      "aws_ecs_task_definition.migration",
+      "aws_ecs_task_definition.supervised_dispatch",
+    ];
     for (const workflow of [terraformApply, deploy, rollback]) {
       expect(workflow).toContain("allowed_task_definition_replacement");
-      expect(workflow).toContain('aws_ecs_task_definition.worker');
-      expect(workflow).toContain('aws_ecs_task_definition.migration');
       expect(workflow).toContain('["delete", "create"]');
       expect(workflow).toContain('select(allowed_task_definition_replacement | not)');
+      const guard = workflow.match(/def allowed_task_definition_replacement:\s*([\s\S]*?);/)?.[1];
+      expect(guard).toBeDefined();
+      expect([...guard!.matchAll(/\.address == "([^"]+)"/g)].map((match) => match[1])).toEqual(exactTaskDefinitions);
+      expect(guard).not.toMatch(/\*|test\(|startswith|contains/);
     }
     for (const workflow of [deploy, rollback]) {
       expect(workflow).toContain("disallowed_destructive");
