@@ -50,6 +50,9 @@ jobs:
       TF_VAR_worker_image_sha: ${{ inputs.commit_sha }}
       TF_VAR_budget_notification_email: ${{ secrets.BUDGET_NOTIFICATION_EMAIL }}
       TF_VAR_allowed_operator_principal_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/ai-delivery-orchestrator-pilot-human-operator
+      TF_VAR_supervised_github_app_id: ${{ vars.SUPERVISED_GITHUB_APP_ID }}
+      TF_VAR_supervised_github_installation_id: ${{ vars.SUPERVISED_GITHUB_INSTALLATION_ID }}
+      TF_VAR_supervised_openai_project_id: ${{ vars.SUPERVISED_OPENAI_PROJECT_ID }}
     steps:
       - name: Validate selected commit
         env:
@@ -158,6 +161,8 @@ jobs:
           echo "TF_VAR_worker_task_role_arn=$(jq -r .worker <<< "$roles")" >> "$GITHUB_ENV"
           echo "TF_VAR_migration_execution_role_arn=$(jq -r .migration_execution <<< "$roles")" >> "$GITHUB_ENV"
           echo "TF_VAR_migration_task_role_arn=$(jq -r .migration <<< "$roles")" >> "$GITHUB_ENV"
+          echo "TF_VAR_supervised_dispatch_execution_role_arn=$(jq -r .supervised_dispatch_execution <<< "$roles")" >> "$GITHUB_ENV"
+          echo "TF_VAR_supervised_dispatch_task_role_arn=$(jq -r .supervised_dispatch <<< "$roles")" >> "$GITHUB_ENV"
       - name: Require configured IAM references
         if: ${{ ! inputs.provision_iam }}
         env:
@@ -171,6 +176,8 @@ jobs:
           echo "TF_VAR_worker_task_role_arn=arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-delivery-orchestrator-pilot-worker" >> "$GITHUB_ENV"
           echo "TF_VAR_migration_execution_role_arn=arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-delivery-orchestrator-pilot-migration-execution" >> "$GITHUB_ENV"
           echo "TF_VAR_migration_task_role_arn=arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-delivery-orchestrator-pilot-migration" >> "$GITHUB_ENV"
+          echo "TF_VAR_supervised_dispatch_execution_role_arn=arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-delivery-orchestrator-pilot-supervised-dispatch-execution" >> "$GITHUB_ENV"
+          echo "TF_VAR_supervised_dispatch_task_role_arn=arn:aws:iam::$AWS_ACCOUNT_ID:role/ai-delivery-orchestrator-pilot-supervised-dispatch" >> "$GITHUB_ENV"
       - name: Initialize pilot remote state
         run: terraform -chdir=infra/environments/pilot init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
       - name: Plan selected commit

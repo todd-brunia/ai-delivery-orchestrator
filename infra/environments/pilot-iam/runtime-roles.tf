@@ -37,6 +37,16 @@ resource "aws_iam_role" "worker" {
   assume_role_policy = data.aws_iam_policy_document.ecs_tasks_trust.json
   tags               = local.tags
 }
+resource "aws_iam_role" "supervised_dispatch" {
+  name               = "${local.name}-supervised-dispatch"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_trust.json
+  tags               = local.tags
+}
+resource "aws_iam_role" "supervised_dispatch_execution" {
+  name               = "${local.name}-supervised-dispatch-execution"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_trust.json
+  tags               = local.tags
+}
 resource "aws_iam_role" "migration" {
   name               = "${local.name}-migration"
   assume_role_policy = data.aws_iam_policy_document.ecs_tasks_trust.json
@@ -152,6 +162,25 @@ resource "aws_iam_role_policy" "worker" {
   role   = aws_iam_role.worker.id
   policy = data.aws_iam_policy_document.worker.json
 }
+data "aws_iam_policy_document" "supervised_dispatch" {
+  statement {
+    actions = ["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"]
+    resources = [
+      "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:ai-delivery-orchestrator/pilot/github-app-builder-private-key-??????",
+      "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:ai-delivery-orchestrator/pilot/portal-openai-builder-api-key-??????",
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "secretsmanager:VersionStage"
+      values   = ["AWSCURRENT"]
+    }
+  }
+}
+resource "aws_iam_role_policy" "supervised_dispatch" {
+  name   = "supervised-dispatch-provider-secrets"
+  role   = aws_iam_role.supervised_dispatch.id
+  policy = data.aws_iam_policy_document.supervised_dispatch.json
+}
 data "aws_iam_policy_document" "worker_execution" {
   statement {
     actions   = ["ecr:GetAuthorizationToken"]
@@ -170,6 +199,16 @@ resource "aws_iam_role_policy" "worker_execution" {
   name   = "worker-execution"
   role   = aws_iam_role.worker_execution.id
   policy = data.aws_iam_policy_document.worker_execution.json
+}
+resource "aws_iam_role_policy" "supervised_dispatch_execution" {
+  name   = "supervised-dispatch-execution"
+  role   = aws_iam_role.supervised_dispatch_execution.id
+  policy = data.aws_iam_policy_document.worker_execution.json
+}
+resource "aws_iam_role_policy" "supervised_dispatch_database_injection" {
+  name   = "supervised-dispatch-database-injection"
+  role   = aws_iam_role.supervised_dispatch_execution.id
+  policy = data.aws_iam_policy_document.migration_secret_injection.json
 }
 resource "aws_iam_role_policy" "migration_execution" {
   name   = "migration-execution"

@@ -25,6 +25,8 @@ output "worker_service_name" { value = aws_ecs_service.worker.name }
 output "worker_security_group_id" { value = aws_security_group.worker.id }
 output "worker_task_definition_arn" { value = aws_ecs_task_definition.worker.arn }
 output "migration_task_definition_arn" { value = aws_ecs_task_definition.migration.arn }
+output "supervised_dispatch_task_definition_arn" { value = aws_ecs_task_definition.supervised_dispatch.arn }
+output "supervised_dispatch_security_group_id" { value = aws_security_group.supervised_dispatch.id }
 output "operator_api_endpoint" {
   value     = aws_apigatewayv2_api.operator.api_endpoint
   sensitive = true

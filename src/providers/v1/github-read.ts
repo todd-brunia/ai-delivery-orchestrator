@@ -206,8 +206,9 @@ export class GitHubAppReadAdapter implements GitHubReadPort {
       const value = raw as Record<string, unknown>;
       return String(value.id) === this.config.repositoryId && value.full_name === repository;
     })) throw new GitHubReadError("authorization", "GitHub installation does not select configured repository");
-    const observedPermissions = Object.fromEntries(Object.entries(permissions ?? {}).filter(([, value]) => typeof value === "string"));
-    if (String(item.app_id) !== this.config.appId || account?.login !== this.config.installationAccount || Object.entries(this.config.requiredPermissions).some(([name, level]) => observedPermissions[name] !== level)) throw new GitHubReadError("authorization", "GitHub installation identity or permissions drifted");
+    const observedPermissions: Record<string, string> = Object.fromEntries(Object.entries(permissions ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+    const satisfies = (required: string, observed: string | undefined) => observed === required || (required === "read" && observed === "write");
+    if (String(item.app_id) !== this.config.appId || account?.login !== this.config.installationAccount || Object.entries(this.config.requiredPermissions).some(([name, level]) => !satisfies(level, observedPermissions[name]))) throw new GitHubReadError("authorization", "GitHub installation identity or permissions drifted");
     return CanonicalInstallationSchema.parse({ appId: this.config.appId, installationId: String(item.id), accountLogin: account?.login, repositoryId: this.config.repositoryId, repository, permissions: observedPermissions, evidence: this.evidence(`github://installations/${this.config.installationId}`) });
   }
 

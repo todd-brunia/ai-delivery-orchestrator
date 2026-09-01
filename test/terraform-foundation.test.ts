@@ -302,7 +302,7 @@ describe("Terraform foundation policy", () => {
       "sqs:CreateQueue", "sqs:GetQueueUrl", "dynamodb:CreateTable", "rds:CreateDBCluster", "lambda:CreateFunction", "lambda:GetFunctionConfiguration",
       "apigateway:POST", "application-autoscaling:RegisterScalableTarget", "cloudwatch:PutDashboard",
     ]) expect(runtimeAuthority).toContain(`"${action}"`);
-    expect(runtimeAuthority).toMatch(/sid\s*= "RunPilotMigrationAndSmokeTasks"[\s\S]*?actions\s*= \["ecs:RunTask"\][\s\S]*?task-definition\/\$\{local\.pilot_name\}-worker:\*[\s\S]*?task-definition\/\$\{local\.pilot_name\}-migration:\*[\s\S]*?variable\s*= "ecs:cluster"[\s\S]*?values\s*= \["arn:aws:ecs:\$\{var\.aws_region\}:\$\{var\.aws_account_id\}:cluster\/\$\{local\.pilot_name\}-worker"\]/);
+    expect(runtimeAuthority).toMatch(/sid\s*= "RunPilotMigrationAndSmokeTasks"[\s\S]*?actions\s*= \["ecs:RunTask"\][\s\S]*?task-definition\/\$\{local\.pilot_name\}-\*:\*[\s\S]*?variable\s*= "ecs:cluster"[\s\S]*?values\s*= \["arn:aws:ecs:\$\{var\.aws_region\}:\$\{var\.aws_account_id\}:cluster\/\$\{local\.pilot_name\}-worker"\]/);
     expect(runtimeAuthority).toMatch(/sid\s*= "InspectPilotTasks"[\s\S]*?actions\s*= \["ecs:DescribeTasks"\][\s\S]*?resources = \["arn:aws:ecs:\$\{var\.aws_region\}:\$\{var\.aws_account_id\}:task\/\$\{local\.pilot_name\}-worker\/\*"\]/);
     const planPolicy = runtimeAuthority.slice(runtimeAuthority.indexOf('data "aws_iam_policy_document" "github_plan_runtime_services"'), runtimeAuthority.indexOf('resource "aws_iam_role_policy" "github_plan_runtime_services"'));
     expect(planPolicy).toContain('"rds:DescribeGlobalClusters"');
@@ -409,8 +409,26 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain("task_role_arn            = var.migration_task_role_arn");
     expect(pilot).toContain("role          = var.webhook_lambda_role_arn");
     expect(pilot).toContain("role          = var.operator_lambda_role_arn");
-    expect(pilot.match(/skip_destroy\s*=\s*true/g)).toHaveLength(2);
+    expect(pilot).toContain("execution_role_arn       = var.supervised_dispatch_execution_role_arn");
+    expect(pilot).toContain("task_role_arn            = var.supervised_dispatch_task_role_arn");
+    expect(pilot.match(/skip_destroy\s*=\s*true/g)).toHaveLength(3);
     expect(bootstrap).not.toContain("ecs:DeregisterTaskDefinition");
+  });
+
+  it("keeps supervised dispatch ephemeral, disabled, zero-inbound, and least privilege", () => {
+    expect(pilot).toContain('resource "aws_ecs_task_definition" "supervised_dispatch"');
+    expect(pilot).not.toMatch(/resource\s+"aws_ecs_service"\s+"supervised_dispatch"/);
+    expect(pilot).toContain('{ name = "SUPERVISED_DISPATCH_ENABLED", value = "false" }');
+    expect(pilot).toContain('readonlyRootFilesystem = true');
+    expect(pilot).toContain('user                   = "10001:10001"');
+    expect(pilot).toContain('resource "aws_vpc_security_group_egress_rule" "supervised_dispatch_https"');
+    expect(pilot).toContain('cidr_ipv4         = "0.0.0.0/0"');
+    expect(pilot).not.toMatch(/resource\s+"aws_vpc_security_group_ingress_rule"\s+"supervised_dispatch/);
+    expect(pilotIam).toContain('resource "aws_iam_role" "supervised_dispatch"');
+    expect(pilotIam).toContain('github-app-builder-private-key-??????');
+    expect(pilotIam).toContain('portal-openai-builder-api-key-??????');
+    const supervisedPolicy = pilotIam.slice(pilotIam.indexOf('data "aws_iam_policy_document" "supervised_dispatch"'), pilotIam.indexOf('data "aws_iam_policy_document" "worker_execution"'));
+    expect(supervisedPolicy).not.toMatch(/github-app-reviewer|github-app-merger|portal-openai-reviewer/);
   });
 
   it("separates pilot IAM ownership behind an exact reference contract", () => {

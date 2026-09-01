@@ -57,6 +57,8 @@ locals {
     "ai-delivery-orchestrator-pilot-worker",
     "ai-delivery-orchestrator-pilot-migration",
     "ai-delivery-orchestrator-pilot-migration-execution",
+    "ai-delivery-orchestrator-pilot-supervised-dispatch",
+    "ai-delivery-orchestrator-pilot-supervised-dispatch-execution",
     "ai-delivery-orchestrator-pilot-github-builder",
     "ai-delivery-orchestrator-pilot-github-reviewer",
     "ai-delivery-orchestrator-pilot-github-merger",

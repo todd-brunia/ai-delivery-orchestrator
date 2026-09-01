@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { RepositoryAdapterConfigV1 } from "../src/domain/sprint-delivery/v1/index.js";
 import type { WorkItemTransitionRequest } from "../src/persistence/index.js";
 import type { FeasibilityResult } from "../src/providers/v1/index.js";
+import { CanonicalMutationPreflight } from "../src/providers/v1/index.js";
 import { advanceAcceptedImplementationDispatch, adapterFingerprint, authorizeLiveBuild, collectLiveWorkItemBinding, createDispatchAcceptanceHandler, prepareImplementationDispatch, queueImplementationDispatch, verifyAcceptedImplementationDispatch } from "../src/workflows/index.js";
 
 const sha = "a".repeat(40);
@@ -31,6 +32,19 @@ describe("live implementation dispatch preparation", () => {
     const result = prepareImplementationDispatch(input);
     expect(result).toMatchObject({ ready: true, intent: { type: "dispatch_workflow", workflow: "implementation.yml", ref: sha, issueNumber: 72 } });
     if (result.ready && result.intent.type === "dispatch_workflow") expect(result.intent.inputs).toMatchObject({ issue_number: "72", plan_sha256: plan });
+  });
+
+  it("uses the same canonical fingerprint at preparation and mutation preflight", async () => {
+    const prepared = prepareImplementationDispatch(input);
+    if (!prepared.ready) throw new Error("fixture intent is missing");
+    const github = {
+      getInstallation: () => Promise.resolve(binding.installation),
+      getRepositoryConfiguration: () => Promise.resolve(binding.repositoryConfiguration),
+      getIssue: () => Promise.resolve(binding.issue),
+      getMarkedPlan: () => Promise.resolve(binding.plan),
+    };
+    const policy = { version: "github-mutation-policy/v1", repository, repositoryId: binding.repositoryConfiguration.repositoryId, appId: binding.installation.appId, installationId: binding.installation.installationId, enabledOperations: ["dispatch_workflow"], workflowLabels: [], workflows: [adapter.workflows.implementation] };
+    await expect(new CanonicalMutationPreflight(policy, github as never).assertCurrent(prepared.intent)).resolves.toBeUndefined();
   });
 
   it("fails closed on plan and installation-permission drift", () => {

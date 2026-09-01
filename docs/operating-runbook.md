@@ -12,6 +12,16 @@ The `supervised-dispatch-command/v1` runtime boundary is a two-phase operator co
 
 If execution is disabled, authorization is stale, the digest changes, the exact outbox row is absent, a lease is lost, the outcome is ambiguous, or canonical acceptance is missing: stop, drain claims, preserve durable evidence, and do not repair or replay. A retry requires canonical revalidation and fresh owner authorization.
 
+### Protected pilot task
+
+The pilot publishes an unscheduled `ai-delivery-orchestrator-pilot-supervised-dispatch` task definition. It has no service, desired count, timer, queue trigger, or inbound security-group rule. Registering a revision does not authorize running it. The protected Terraform apply must show no deletion other than ordinary task-definition replacement and must leave the worker service at desired count zero.
+
+For preflight, run exactly one task in the Terraform-output public subnets and supervised security group with `assignPublicIp=ENABLED`. Supply `SUPERVISED_COMMAND_JSON` as a bounded container override and leave `SUPERVISED_DISPATCH_ENABLED=false`. Record the immutable image/task revision and the redacted result; stop on a nonzero exit or any blocker.
+
+For execute, obtain fresh owner authorization bound to the preflight digest and expiry. Run the same immutable task revision with the exact execute command and override `SUPERVISED_DISPATCH_ENABLED=true`. Do not start a service or a second task. Observe the task exit, mutation receipt, and matching canonical workflow run. Stop after observation; do not repair, replay, enable callbacks/claims, review, merge, release, or deploy a target application.
+
+Rollback selects the previous disabled task revision. It does not delete durable evidence or cancel accepted external work. Remove no credentials during incident preservation; instead prevent new task launches and require fresh canonical validation and owner authorization.
+
 ## Scope and safety boundary
 
 This runbook primarily covers the local foundation environment. The worker runs

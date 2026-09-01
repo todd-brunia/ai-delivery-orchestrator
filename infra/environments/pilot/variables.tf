@@ -189,6 +189,62 @@ variable "worker_task_role_arn" {
     error_message = "worker_task_role_arn must name the exact pilot worker role."
   }
 }
+variable "supervised_dispatch_execution_role_arn" {
+  type    = string
+  default = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-supervised-dispatch-execution"
+  validation {
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/ai-delivery-orchestrator-pilot-supervised-dispatch-execution$", var.supervised_dispatch_execution_role_arn))
+    error_message = "supervised_dispatch_execution_role_arn must name the exact pilot supervised execution role."
+  }
+}
+variable "supervised_dispatch_task_role_arn" {
+  type    = string
+  default = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-supervised-dispatch"
+  validation {
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/ai-delivery-orchestrator-pilot-supervised-dispatch$", var.supervised_dispatch_task_role_arn))
+    error_message = "supervised_dispatch_task_role_arn must name the exact pilot supervised task role."
+  }
+}
+variable "supervised_repository_id" {
+  type    = string
+  default = "1308170964"
+  validation {
+    condition     = can(regex("^[1-9][0-9]{0,19}$", var.supervised_repository_id))
+    error_message = "supervised_repository_id must be the canonical numeric portal repository ID."
+  }
+}
+variable "supervised_github_app_id" {
+  type    = string
+  default = "123456"
+  validation {
+    condition     = can(regex("^[1-9][0-9]{0,19}$", var.supervised_github_app_id))
+    error_message = "supervised_github_app_id must be numeric."
+  }
+}
+variable "supervised_github_installation_id" {
+  type    = string
+  default = "12345678"
+  validation {
+    condition     = can(regex("^[1-9][0-9]{0,19}$", var.supervised_github_installation_id))
+    error_message = "supervised_github_installation_id must be numeric."
+  }
+}
+variable "supervised_github_installation_account" {
+  type    = string
+  default = "todd-brunia"
+  validation {
+    condition     = can(regex("^[A-Za-z0-9-]{1,39}$", var.supervised_github_installation_account))
+    error_message = "supervised_github_installation_account must be a GitHub login."
+  }
+}
+variable "supervised_openai_project_id" {
+  type    = string
+  default = "proj_not_configured"
+  validation {
+    condition     = can(regex("^proj_[A-Za-z0-9_-]{8,100}$", var.supervised_openai_project_id))
+    error_message = "supervised_openai_project_id must be an OpenAI project ID."
+  }
+}
 variable "migration_execution_role_arn" {
   type    = string
   default = "arn:aws:iam::123456789012:role/ai-delivery-orchestrator-pilot-migration-execution"
