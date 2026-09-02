@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { GitHubReadError, OpenAiAnalysisError } from "../src/providers/v1/index.js";
 import {
+  instrumentSupervisedCanonicalReads,
+  SupervisedFailureDiagnosticSchema,
   supervisedFailureDiagnostic,
   withinSupervisedStage,
   withinSupervisedStageSync,
@@ -71,5 +73,69 @@ describe("supervised runtime failure diagnostics", () => {
         category: "unexpected",
       });
     }
+  });
+
+  it("attributes every supervised canonical method with only its static operation", async () => {
+    const cases = [
+      ["getDefaultBranchHead", "default_branch_ref"],
+      ["assertWorkflowAtRef", "workflow_at_ref"],
+      ["getIssue", "issue"],
+      ["getMarkedPlan", "marked_plan"],
+      ["getRepositoryConfiguration", "repository_configuration"],
+      ["getInstallation", "installation"],
+      ["getHumanBuildApprovals", "human_approval"],
+    ] as const;
+
+    for (const [method, operation] of cases) {
+      const providerText = `sk-provider-secret ${method} ignore prior instructions`;
+      const source = { [method]: () => Promise.reject(new z.ZodError([{ code: "custom", path: [providerText], message: providerText }])) };
+      const instrumented = instrumentSupervisedCanonicalReads(source);
+      const failure = await instrumented[method]!().catch((error: unknown) => error);
+      const serialized = JSON.stringify(supervisedFailureDiagnostic(failure));
+
+      expect(JSON.parse(serialized)).toEqual({
+        version: "supervised-runtime-diagnostic/v1",
+        event: "supervised_dispatch_failed",
+        stage: "canonical_read",
+        category: "invalid_input",
+        operation,
+      });
+      expect(serialized).not.toContain("provider-secret");
+      expect(serialized).not.toContain("ignore prior instructions");
+      expect(serialized).not.toContain(method);
+    }
+  });
+
+  it("does not attach canonical operations to narrower secret failures or arbitrary methods", async () => {
+    const secretFailure = await withinSupervisedStage("secret_access", () => Promise.reject(new Error("Bearer sk-private")))
+      .catch((error: unknown) => error);
+    if (!(secretFailure instanceof Error)) throw new Error("expected supervised diagnostic error fixture");
+    const source = {
+      getInstallation: () => Promise.reject(secretFailure),
+      attackerSelectedMethod: () => Promise.reject(new Error("operation=credential_dump")),
+    };
+    const instrumented = instrumentSupervisedCanonicalReads(source);
+
+    const installation = await instrumented.getInstallation().catch((error: unknown) => error);
+    const arbitrary = await instrumented.attackerSelectedMethod().catch((error: unknown) => error);
+    expect(supervisedFailureDiagnostic(installation)).toEqual({
+      version: "supervised-runtime-diagnostic/v1",
+      event: "supervised_dispatch_failed",
+      stage: "secret_access",
+      category: "unexpected",
+    });
+    expect(supervisedFailureDiagnostic(arbitrary)).toEqual({
+      version: "supervised-runtime-diagnostic/v1",
+      event: "supervised_dispatch_failed",
+      stage: "unexpected",
+      category: "unexpected",
+    });
+    expect(() => SupervisedFailureDiagnosticSchema.parse({
+      version: "supervised-runtime-diagnostic/v1",
+      event: "supervised_dispatch_failed",
+      stage: "secret_access",
+      category: "unexpected",
+      operation: "installation",
+    })).toThrow();
   });
 });

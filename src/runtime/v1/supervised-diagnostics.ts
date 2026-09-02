@@ -30,16 +30,32 @@ export const SupervisedFailureCategorySchema = z.enum([
 ]);
 export type SupervisedFailureCategory = z.infer<typeof SupervisedFailureCategorySchema>;
 
+export const SupervisedCanonicalOperationSchema = z.enum([
+  "default_branch_ref",
+  "workflow_at_ref",
+  "issue",
+  "marked_plan",
+  "repository_configuration",
+  "installation",
+  "human_approval",
+]);
+export type SupervisedCanonicalOperation = z.infer<typeof SupervisedCanonicalOperationSchema>;
+
 export const SupervisedFailureDiagnosticSchema = z.object({
   version: z.literal("supervised-runtime-diagnostic/v1"),
   event: z.literal("supervised_dispatch_failed"),
   stage: SupervisedFailureStageSchema,
   category: SupervisedFailureCategorySchema,
-}).strict();
+  operation: SupervisedCanonicalOperationSchema.optional(),
+}).strict().superRefine((value, context) => {
+  if (value.operation && value.stage !== "canonical_read") {
+    context.addIssue({ code: "custom", path: ["operation"], message: "operation is limited to canonical-read failures" });
+  }
+});
 export type SupervisedFailureDiagnostic = z.infer<typeof SupervisedFailureDiagnosticSchema>;
 
 export class SupervisedDiagnosticError extends Error {
-  constructor(readonly stage: SupervisedFailureStage, readonly category: SupervisedFailureCategory) {
+  constructor(readonly stage: SupervisedFailureStage, readonly category: SupervisedFailureCategory, readonly operation?: SupervisedCanonicalOperation) {
     super("supervised operation failed");
   }
 }
@@ -79,5 +95,39 @@ export function supervisedFailureDiagnostic(error: unknown): SupervisedFailureDi
     event: "supervised_dispatch_failed",
     stage: normalized.stage,
     category: normalized.category,
+    ...(normalized.stage === "canonical_read" && normalized.operation ? { operation: normalized.operation } : {}),
+  });
+}
+
+const canonicalMethodOperations: Readonly<Record<string, SupervisedCanonicalOperation>> = {
+  getDefaultBranchHead: "default_branch_ref",
+  assertWorkflowAtRef: "workflow_at_ref",
+  getIssue: "issue",
+  getMarkedPlan: "marked_plan",
+  getRepositoryConfiguration: "repository_configuration",
+  getInstallation: "installation",
+  getHumanBuildApprovals: "human_approval",
+};
+
+async function withinCanonicalOperation<T>(operation: SupervisedCanonicalOperation, action: () => Promise<T>): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    const normalized = supervisedFailure("canonical_read", error);
+    if (normalized.stage !== "canonical_read" || normalized.operation) throw normalized;
+    throw new SupervisedDiagnosticError(normalized.stage, normalized.category, operation);
+  }
+}
+
+/** Decorates only named canonical reads; arbitrary method names cannot become diagnostic values. */
+export function instrumentSupervisedCanonicalReads<T extends object>(source: T): T {
+  return new Proxy(source, {
+    get(target, property) {
+      const value: unknown = Reflect.get(target, property, target);
+      if (typeof value !== "function") return value;
+      const operation = typeof property === "string" ? canonicalMethodOperations[property] : undefined;
+      if (!operation) return value.bind(target) as unknown;
+      return ((...args: readonly unknown[]) => withinCanonicalOperation(operation, () => Reflect.apply(value, target, args) as Promise<unknown>)) as unknown;
+    },
   });
 }
