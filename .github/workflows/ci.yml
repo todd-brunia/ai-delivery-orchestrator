@@ -67,6 +67,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Test compiled supervised diagnostic boundary
+        run: npm run test:compiled
+
       - name: Build container
         run: npm run docker:build
 

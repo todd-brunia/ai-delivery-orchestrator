@@ -1,5 +1,7 @@
 import { createHash, createSign } from "node:crypto";
 
+import { z } from "zod";
+
 import {
   CanonicalCheckSchema,
   CanonicalDiffSchema,
@@ -32,10 +34,29 @@ export class GitHubReadError extends Error {
   constructor(readonly code: "authentication" | "authorization" | "not_found" | "rate_limited" | "timeout" | "transport" | "response_bounds" | "invalid_response", message: string) { super(message); }
 }
 
-export class GitHubReadValidationError extends Error {
-  constructor(readonly pathSegment: PropertyKey | undefined, readonly reason: "missing" | "wrong_type" | "invalid_value" | "unknown_reason") {
+const GitHubReadValidationFieldSchema = z.enum([
+  "repository", "repositoryId", "defaultBranch", "visibility", "allowSquashMerge",
+  "archive", "configurationSha256", "evidence", "unknownField",
+]);
+const GitHubReadValidationReasonSchema = z.enum(["missing", "wrong_type", "invalid_value", "unknown_reason"]);
+export const GitHubReadValidationFailureSchema = z.object({
+  version: z.literal("github-read-validation-failure/v1"),
+  field: GitHubReadValidationFieldSchema,
+  reason: GitHubReadValidationReasonSchema,
+}).strict();
+export type GitHubReadValidationFailure = z.infer<typeof GitHubReadValidationFailureSchema>;
+
+class GitHubReadValidationFailureError extends Error implements GitHubReadValidationFailure {
+  readonly version = "github-read-validation-failure/v1" as const;
+
+  constructor(readonly field: GitHubReadValidationFailure["field"], readonly reason: GitHubReadValidationFailure["reason"]) {
     super("canonical GitHub response failed validation");
   }
+}
+
+export function githubReadValidationFailure(error: unknown): GitHubReadValidationFailure | undefined {
+  const parsed = GitHubReadValidationFailureSchema.safeParse(error);
+  return parsed.success ? parsed.data : undefined;
 }
 
 export interface GitHubPrivateKeySource { load(secretReference: string): Promise<string>; }
@@ -202,13 +223,17 @@ export class GitHubAppReadAdapter implements GitHubReadPort {
     if (parsed.success) return parsed.data;
     const issue = parsed.error.issues[0];
     const segment = issue?.path[0];
-    const input = typeof segment === "string" ? raw[segment] : undefined;
+    const fieldResult = GitHubReadValidationFieldSchema.safeParse(segment);
+    const field = fieldResult.success ? fieldResult.data : "unknownField";
+    const input = field !== "unknownField" ? raw[field] : undefined;
     const reason = issue?.code === "invalid_type"
       ? (input === undefined ? "missing" : "wrong_type")
       : issue && ["invalid_value", "invalid_format", "too_big", "too_small", "not_multiple_of"].includes(issue.code)
         ? "invalid_value"
         : "unknown_reason";
-    throw new GitHubReadValidationError(segment, reason);
+    const failure = new GitHubReadValidationFailureError(field, reason);
+    Object.freeze(failure);
+    throw failure;
   }
 
   async getInstallation(repository: string): Promise<CanonicalInstallation> {

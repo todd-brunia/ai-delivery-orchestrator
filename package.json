@@ -17,6 +17,7 @@
     "supervised-dispatch": "tsx src/runtime/v1/supervised-dispatch-cli.ts",
     "start": "node dist/index.js",
     "test": "vitest run --coverage test/*.test.ts",
+    "test:compiled": "node scripts/test-compiled-supervised-diagnostics.mjs",
     "test:integration": "vitest run --no-file-parallelism test/integration",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

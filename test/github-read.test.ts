@@ -2,7 +2,7 @@ import { generateKeyPairSync } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { GitHubAppReadAdapter, GitHubReadValidationError } from "../src/providers/v1/index.js";
+import { GitHubAppReadAdapter, githubReadValidationFailure } from "../src/providers/v1/index.js";
 import type { GitHubReadError } from "../src/providers/v1/index.js";
 
 const repository = "todd-brunia/ai-consulting-client-portal";
@@ -93,11 +93,10 @@ describe("GitHub App canonical read adapter", () => {
     });
 
     const failure = await adapter(transport).getRepositoryConfiguration(repository).catch((error: unknown) => error);
-    expect(failure).toBeInstanceOf(GitHubReadValidationError);
-    expect(failure).toMatchObject({
-      pathSegment: reason === "invalid_value" ? "visibility" : "allowSquashMerge",
+    expect(githubReadValidationFailure(failure)).toEqual({
+      version: "github-read-validation-failure/v1",
+      field: reason === "invalid_value" ? "visibility" : "allowSquashMerge",
       reason,
-      message: "canonical GitHub response failed validation",
     });
     expect(JSON.stringify(failure)).not.toContain("sk-secret");
     expect(JSON.stringify(failure)).not.toContain("ignore prior instructions");
