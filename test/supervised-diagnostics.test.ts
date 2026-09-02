@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { GitHubReadError, OpenAiAnalysisError } from "../src/providers/v1/index.js";
+import { GitHubReadError, GitHubReadValidationError, OpenAiAnalysisError } from "../src/providers/v1/index.js";
 import {
   instrumentSupervisedCanonicalReads,
   SupervisedFailureDiagnosticSchema,
@@ -99,7 +99,7 @@ describe("supervised runtime failure diagnostics", () => {
         stage: "canonical_read",
         category: "invalid_input",
         operation,
-        ...(operation === "repository_configuration" ? { field: "unknown_field" } : {}),
+        ...(operation === "repository_configuration" ? { field: "unknown_field", reason: "unknown_reason" } : {}),
       });
       expect(serialized).not.toContain("provider-secret");
       expect(serialized).not.toContain("ignore prior instructions");
@@ -169,6 +169,7 @@ describe("supervised runtime failure diagnostics", () => {
       category: "invalid_input",
       operation: "repository_configuration",
       field: "unknown_field",
+      reason: "unknown_reason",
     });
     expect(instrumented.callCount()).toBe(1);
     expect(serialized).not.toContain("sk-private-path");
@@ -217,9 +218,38 @@ describe("supervised runtime failure diagnostics", () => {
         category: "invalid_input",
         operation: "repository_configuration",
         field,
+        reason: "unknown_reason",
       });
       expect(serialized).not.toContain("field-secret");
       expect(serialized).not.toContain("ignore prior instructions");
+      expect(serialized).not.toContain("provider-selected-field");
+    }
+  });
+
+  it("maps typed repository validation failures to closed fields and reasons", async () => {
+    const cases = [
+      ["allowSquashMerge", "allow_squash_merge", "missing"],
+      ["allowSquashMerge", "allow_squash_merge", "wrong_type"],
+      ["visibility", "visibility", "invalid_value"],
+      ["sk-provider-selected-field", "unknown_field", "unknown_reason"],
+    ] as const;
+
+    for (const [path, field, reason] of cases) {
+      const source = {
+        getRepositoryConfiguration: () => Promise.reject(new GitHubReadValidationError(path, reason)),
+      };
+      const failure = await instrumentSupervisedCanonicalReads(source).getRepositoryConfiguration()
+        .catch((error: unknown) => error);
+      const serialized = JSON.stringify(supervisedFailureDiagnostic(failure));
+      expect(JSON.parse(serialized)).toEqual({
+        version: "supervised-runtime-diagnostic/v1",
+        event: "supervised_dispatch_failed",
+        stage: "canonical_read",
+        category: "invalid_input",
+        operation: "repository_configuration",
+        field,
+        reason,
+      });
       expect(serialized).not.toContain("provider-selected-field");
     }
   });
@@ -235,6 +265,22 @@ describe("supervised runtime failure diagnostics", () => {
         event: "supervised_dispatch_failed",
         ...value,
         field: "repository_id",
+      })).toThrow();
+    }
+  });
+
+  it("rejects validation reasons outside a field-attributed invalid repository read", () => {
+    for (const value of [
+      { stage: "canonical_read", category: "invalid_input", operation: "repository_configuration" },
+      { stage: "secret_access", category: "invalid_input", operation: "repository_configuration", field: "visibility" },
+      { stage: "canonical_read", category: "authorization", operation: "repository_configuration", field: "visibility" },
+      { stage: "canonical_read", category: "invalid_input", operation: "issue", field: "visibility" },
+    ]) {
+      expect(() => SupervisedFailureDiagnosticSchema.parse({
+        version: "supervised-runtime-diagnostic/v1",
+        event: "supervised_dispatch_failed",
+        ...value,
+        reason: "wrong_type",
       })).toThrow();
     }
   });
