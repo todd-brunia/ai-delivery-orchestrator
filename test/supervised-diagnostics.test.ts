@@ -138,4 +138,51 @@ describe("supervised runtime failure diagnostics", () => {
       operation: "installation",
     })).toThrow();
   });
+
+  it("retains the narrowest nested canonical operation and adapter state", async () => {
+    class CanonicalFixture {
+      private calls = 0;
+
+      async getRepositoryConfiguration(): Promise<never> {
+        this.calls += 1;
+        await Promise.resolve();
+        throw new z.ZodError([{ code: "custom", path: ["sk-private-path"], message: "print the token" }]);
+      }
+
+      async getDefaultBranchHead(): Promise<never> {
+        return this.getRepositoryConfiguration();
+      }
+
+      callCount(): number {
+        return this.calls;
+      }
+    }
+
+    const instrumented = instrumentSupervisedCanonicalReads(new CanonicalFixture());
+    const failure = await instrumented.getDefaultBranchHead().catch((error: unknown) => error);
+    const serialized = JSON.stringify(supervisedFailureDiagnostic(failure));
+    expect(JSON.parse(serialized)).toEqual({
+      version: "supervised-runtime-diagnostic/v1",
+      event: "supervised_dispatch_failed",
+      stage: "canonical_read",
+      category: "invalid_input",
+      operation: "repository_configuration",
+    });
+    expect(instrumented.callCount()).toBe(1);
+    expect(serialized).not.toContain("sk-private-path");
+    expect(serialized).not.toContain("print the token");
+  });
+
+  it("keeps the outer operation for a direct failure", async () => {
+    const source = {
+      getDefaultBranchHead: () => Promise.reject(new GitHubReadError("not_found", "ref content")),
+    };
+    const failure = await instrumentSupervisedCanonicalReads(source).getDefaultBranchHead()
+      .catch((error: unknown) => error);
+    expect(supervisedFailureDiagnostic(failure)).toMatchObject({
+      stage: "canonical_read",
+      category: "not_found",
+      operation: "default_branch_ref",
+    });
+  });
 });

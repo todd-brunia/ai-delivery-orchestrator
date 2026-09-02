@@ -10,6 +10,8 @@ Supervised failures cross a separate versioned diagnostic boundary. Only static 
 
 Canonical-read attribution adds only a closed operation enum for the exact adapter methods used by supervised preflight. Provider-selected method names, schema paths, field values, and arbitrary strings cannot become operation values. A nested secret-access failure retains its narrower stage and omits the canonical operation, preventing the diagnostic from disguising a credential-boundary failure as ordinary provider validation. Operation attribution does not relax canonical schemas, installation identity, permissions, repository audience, immutable refs, plan markers, or response bounds.
 
+Decorated public canonical calls execute through the same constrained proxy receiver so nested public reads retain the innermost operation. Private helpers and adapter state remain bound to the original adapter and are never copied into the diagnostic layer. The outer boundary preserves an existing inner operation instead of overwriting it; this prevents a composite ref lookup from hiding a repository-configuration failure while retaining the same closed enum and redaction contract.
+
 The immutable runtime image contains one reviewed RDS trust asset, `aws-rds-us-east-1-rsa2048-g1.pem`; both Node's additional CA configuration and the supervised PostgreSQL client bind to that packaged file. TLS peer verification remains mandatory. Missing, unreadable, oversized, malformed, or filename-drifted certificate state fails in the static configuration boundary without emitting paths or contents. Runtime download, generated trust material, implicit certificate substitution, and disabling peer verification are forbidden.
 
 ## Status and scope

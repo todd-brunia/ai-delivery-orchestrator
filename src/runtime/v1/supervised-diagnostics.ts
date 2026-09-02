@@ -122,12 +122,12 @@ async function withinCanonicalOperation<T>(operation: SupervisedCanonicalOperati
 /** Decorates only named canonical reads; arbitrary method names cannot become diagnostic values. */
 export function instrumentSupervisedCanonicalReads<T extends object>(source: T): T {
   return new Proxy(source, {
-    get(target, property) {
+    get(target, property, receiver) {
       const value: unknown = Reflect.get(target, property, target);
       if (typeof value !== "function") return value;
       const operation = typeof property === "string" ? canonicalMethodOperations[property] : undefined;
       if (!operation) return value.bind(target) as unknown;
-      return ((...args: readonly unknown[]) => withinCanonicalOperation(operation, () => Reflect.apply(value, target, args) as Promise<unknown>)) as unknown;
+      return ((...args: readonly unknown[]) => withinCanonicalOperation(operation, () => Reflect.apply(value, receiver, args) as Promise<unknown>)) as unknown;
     },
   });
 }
