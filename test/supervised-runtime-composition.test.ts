@@ -27,6 +27,13 @@ describe("protected supervised runtime composition", () => {
     expect(cli).toContain("SupervisedDispatchCommandSchema.parse");
   });
 
+  it("keeps trusted setup and PostgreSQL certificate validation inside the configuration boundary", () => {
+    expect(cli).toContain('withinSupervisedStageSync("configuration"');
+    expect(cli).toContain("loadSupervisedTlsCertificate()");
+    expect(cli).toContain("rejectUnauthorized: true");
+    expect(cli).not.toContain("us-east-1-bundle.pem");
+  });
+
   it("grants no queue, review, merge, or generic secret authority", () => {
     const policy = iam.slice(iam.indexOf('data "aws_iam_policy_document" "supervised_dispatch"'), iam.indexOf('data "aws_iam_policy_document" "worker_execution"'));
     expect(policy).toContain("secretsmanager:GetSecretValue");
