@@ -8,6 +8,8 @@ The owner-approved public-subnet exception exposes only ephemeral outbound conne
 
 Supervised failures cross a separate versioned diagnostic boundary. Only static stage names and allowlisted categories may leave the process; unknown objects and exceptions collapse to `unexpected`. Raw error messages, causes, stacks, provider responses, request metadata, prompts, canonical artifacts, repository content, database values, and credentials are prohibited because each may contain secrets or attacker-controlled instructions. Nested boundaries retain the narrowest stage, so a secret-access or canonical-read failure is not relabeled as model analysis. These diagnostics improve operator attribution but grant no retry or mutation authority.
 
+The immutable runtime image contains one reviewed RDS trust asset, `aws-rds-us-east-1-rsa2048-g1.pem`; both Node's additional CA configuration and the supervised PostgreSQL client bind to that packaged file. TLS peer verification remains mandatory. Missing, unreadable, oversized, malformed, or filename-drifted certificate state fails in the static configuration boundary without emitting paths or contents. Runtime download, generated trust material, implicit certificate substitution, and disabling peer verification are forbidden.
+
 ## Status and scope
 
 This model covers governed planning, building, independent review, and a future

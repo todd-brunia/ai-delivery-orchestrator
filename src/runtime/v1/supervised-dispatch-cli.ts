@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { Pool } from "pg";
 import { z } from "zod";
@@ -24,6 +22,7 @@ import { LiveDispatchWorker } from "./live-dispatch-worker.js";
 import { RuntimeGenerationControl } from "./queue-consumer.js";
 import { SupervisedDispatchCommandSchema, SupervisedDispatchOperator } from "./supervised-dispatch.js";
 import { supervisedFailureDiagnostic, withinSupervisedStage, withinSupervisedStageSync } from "./supervised-diagnostics.js";
+import { loadSupervisedTlsCertificate } from "./supervised-tls.js";
 
 const EnvironmentSchema = z.object({
   SUPERVISED_DISPATCH_ENABLED: z.enum(["true", "false"]).default("false"),
@@ -76,42 +75,47 @@ async function main(): Promise<void> {
   withinSupervisedStageSync("policy", () => {
     if (command.repository !== adapter.repository) throw new Error("command repository is outside configured adapter");
   });
-  const secrets = new ExactSecretSource(new SecretsManagerClient({ region: environment.AWS_REGION }), new Set([githubKeyReference, openAiKeyReference]));
-  const githubRead = new GitHubAppReadAdapter({
-    version: "github-read/v1", repository: adapter.repository, repositoryId: environment.GITHUB_REPOSITORY_ID,
-    appId: environment.GITHUB_APP_ID, installationId: environment.GITHUB_INSTALLATION_ID,
-    installationAccount: environment.GITHUB_INSTALLATION_ACCOUNT, apiBaseUrl: "https://api.github.com",
-    apiVersion: "2022-11-28", maxPages: 10, maxItems: 100, maxResponseBytes: 1_000_000,
-    timeoutMilliseconds: 10_000, tokenTtlSeconds: 600,
-    requiredPermissions: { actions: "read", contents: "read", issues: "read", metadata: "read", pull_requests: "read" },
-  }, githubKeyReference, secrets, githubHttp);
-  const modelAnalysis = new OpenAiAnalysisAdapter({
-    version: "openai-analysis/v1", projectId: environment.OPENAI_PROJECT_ID,
-    credentialReference: openAiKeyReference, timeoutMilliseconds: 30_000, maxRetries: 1, maxOutputTokens: 4_096,
-  }, secrets, new CanonicalGitHubArtifactSource(githubRead), openAiHttp);
-  const certificate = await readFile(new URL("../../../certificates/us-east-1-bundle.pem", import.meta.url), "utf8");
-  const pool = new Pool({ host: environment.PGHOST, port: environment.PGPORT, database: environment.PGDATABASE, user: environment.PGUSER, password: environment.PGPASSWORD, ssl: { ca: certificate, rejectUnauthorized: true }, max: 2 });
-  try {
-    const repository = new PostgresSprintRunRepository(pool);
-    const preflight = new CanonicalMutationPreflight({
-      version: "github-mutation-policy/v1", repository: adapter.repository, repositoryId: environment.GITHUB_REPOSITORY_ID,
+  const { secrets, githubRead, modelAnalysis } = withinSupervisedStageSync("configuration", () => {
+    const exactSecrets = new ExactSecretSource(new SecretsManagerClient({ region: environment.AWS_REGION }), new Set([githubKeyReference, openAiKeyReference]));
+    const canonicalGitHub = new GitHubAppReadAdapter({
+      version: "github-read/v1", repository: adapter.repository, repositoryId: environment.GITHUB_REPOSITORY_ID,
       appId: environment.GITHUB_APP_ID, installationId: environment.GITHUB_INSTALLATION_ID,
-      enabledOperations: ["dispatch_workflow"], workflowLabels: [], workflows: [adapter.workflows.implementation],
-    }, githubRead);
-    const transport = new GitHubAppMutationTransport({
-      version: "github-mutation-transport/v1", repository: adapter.repository, appId: environment.GITHUB_APP_ID,
-      installationId: environment.GITHUB_INSTALLATION_ID, actorRole: "builder", apiBaseUrl: "https://api.github.com",
-      apiVersion: "2022-11-28", timeoutMilliseconds: 10_000, permissions: { actions: "write", issues: "write" },
-    }, githubKeyReference, secrets, mutationHttp);
-    const executor = new GitHubMutationExecutor(preflight, transport, new Set(["dispatch_workflow"]), () => new Date(), new CanonicalMutationReconciler(githubRead, ""));
-    const acceptance = createDispatchAcceptanceHandler(repository, githubRead);
-    const consumer = new GitHubMutationOutboxConsumer(repository, executor, "supervised-dispatch/v1", 60_000, () => new Date(), acceptance);
-    const control = new RuntimeGenerationControl();
-    if (environment.SUPERVISED_DISPATCH_ENABLED !== "true") control.drain(0);
-    const operator = new SupervisedDispatchOperator({ executionEnabled: environment.SUPERVISED_DISPATCH_ENABLED === "true", adapter }, {
-      repository, githubRead, modelAnalysis, canonicalControl: githubRead,
-      workflow: createLiveBindingWorkflowRuntime(repository, { githubRead, modelAnalysis }),
-      dispatchWorker: new LiveDispatchWorker(control, consumer),
+      installationAccount: environment.GITHUB_INSTALLATION_ACCOUNT, apiBaseUrl: "https://api.github.com",
+      apiVersion: "2022-11-28", maxPages: 10, maxItems: 100, maxResponseBytes: 1_000_000,
+      timeoutMilliseconds: 10_000, tokenTtlSeconds: 600,
+      requiredPermissions: { actions: "read", contents: "read", issues: "read", metadata: "read", pull_requests: "read" },
+    }, githubKeyReference, exactSecrets, githubHttp);
+    const analysis = new OpenAiAnalysisAdapter({
+      version: "openai-analysis/v1", projectId: environment.OPENAI_PROJECT_ID,
+      credentialReference: openAiKeyReference, timeoutMilliseconds: 30_000, maxRetries: 1, maxOutputTokens: 4_096,
+    }, exactSecrets, new CanonicalGitHubArtifactSource(canonicalGitHub), openAiHttp);
+    return { secrets: exactSecrets, githubRead: canonicalGitHub, modelAnalysis: analysis };
+  });
+  const certificate = await loadSupervisedTlsCertificate();
+  const pool = withinSupervisedStageSync("configuration", () => new Pool({ host: environment.PGHOST, port: environment.PGPORT, database: environment.PGDATABASE, user: environment.PGUSER, password: environment.PGPASSWORD, ssl: { ca: certificate, rejectUnauthorized: true }, max: 2 }));
+  try {
+    const operator = withinSupervisedStageSync("configuration", () => {
+      const repository = new PostgresSprintRunRepository(pool);
+      const preflight = new CanonicalMutationPreflight({
+        version: "github-mutation-policy/v1", repository: adapter.repository, repositoryId: environment.GITHUB_REPOSITORY_ID,
+        appId: environment.GITHUB_APP_ID, installationId: environment.GITHUB_INSTALLATION_ID,
+        enabledOperations: ["dispatch_workflow"], workflowLabels: [], workflows: [adapter.workflows.implementation],
+      }, githubRead);
+      const transport = new GitHubAppMutationTransport({
+        version: "github-mutation-transport/v1", repository: adapter.repository, appId: environment.GITHUB_APP_ID,
+        installationId: environment.GITHUB_INSTALLATION_ID, actorRole: "builder", apiBaseUrl: "https://api.github.com",
+        apiVersion: "2022-11-28", timeoutMilliseconds: 10_000, permissions: { actions: "write", issues: "write" },
+      }, githubKeyReference, secrets, mutationHttp);
+      const executor = new GitHubMutationExecutor(preflight, transport, new Set(["dispatch_workflow"]), () => new Date(), new CanonicalMutationReconciler(githubRead, ""));
+      const acceptance = createDispatchAcceptanceHandler(repository, githubRead);
+      const consumer = new GitHubMutationOutboxConsumer(repository, executor, "supervised-dispatch/v1", 60_000, () => new Date(), acceptance);
+      const control = new RuntimeGenerationControl();
+      if (environment.SUPERVISED_DISPATCH_ENABLED !== "true") control.drain(0);
+      return new SupervisedDispatchOperator({ executionEnabled: environment.SUPERVISED_DISPATCH_ENABLED === "true", adapter }, {
+        repository, githubRead, modelAnalysis, canonicalControl: githubRead,
+        workflow: createLiveBindingWorkflowRuntime(repository, { githubRead, modelAnalysis }),
+        dispatchWorker: new LiveDispatchWorker(control, consumer),
+      });
     });
     const result = await operator.run(command);
     process.stdout.write(`${JSON.stringify({ event: "supervised_dispatch_result", result })}\n`);
