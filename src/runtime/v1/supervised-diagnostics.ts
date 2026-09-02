@@ -41,21 +41,38 @@ export const SupervisedCanonicalOperationSchema = z.enum([
 ]);
 export type SupervisedCanonicalOperation = z.infer<typeof SupervisedCanonicalOperationSchema>;
 
+export const SupervisedRepositoryConfigurationFieldSchema = z.enum([
+  "repository",
+  "repository_id",
+  "default_branch",
+  "visibility",
+  "allow_squash_merge",
+  "archive",
+  "fingerprint",
+  "evidence",
+  "unknown_field",
+]);
+export type SupervisedRepositoryConfigurationField = z.infer<typeof SupervisedRepositoryConfigurationFieldSchema>;
+
 export const SupervisedFailureDiagnosticSchema = z.object({
   version: z.literal("supervised-runtime-diagnostic/v1"),
   event: z.literal("supervised_dispatch_failed"),
   stage: SupervisedFailureStageSchema,
   category: SupervisedFailureCategorySchema,
   operation: SupervisedCanonicalOperationSchema.optional(),
+  field: SupervisedRepositoryConfigurationFieldSchema.optional(),
 }).strict().superRefine((value, context) => {
   if (value.operation && value.stage !== "canonical_read") {
     context.addIssue({ code: "custom", path: ["operation"], message: "operation is limited to canonical-read failures" });
+  }
+  if (value.field && (value.stage !== "canonical_read" || value.category !== "invalid_input" || value.operation !== "repository_configuration")) {
+    context.addIssue({ code: "custom", path: ["field"], message: "field is limited to invalid repository-configuration reads" });
   }
 });
 export type SupervisedFailureDiagnostic = z.infer<typeof SupervisedFailureDiagnosticSchema>;
 
 export class SupervisedDiagnosticError extends Error {
-  constructor(readonly stage: SupervisedFailureStage, readonly category: SupervisedFailureCategory, readonly operation?: SupervisedCanonicalOperation) {
+  constructor(readonly stage: SupervisedFailureStage, readonly category: SupervisedFailureCategory, readonly operation?: SupervisedCanonicalOperation, readonly field?: SupervisedRepositoryConfigurationField) {
     super("supervised operation failed");
   }
 }
@@ -96,6 +113,7 @@ export function supervisedFailureDiagnostic(error: unknown): SupervisedFailureDi
     stage: normalized.stage,
     category: normalized.category,
     ...(normalized.stage === "canonical_read" && normalized.operation ? { operation: normalized.operation } : {}),
+    ...(normalized.stage === "canonical_read" && normalized.category === "invalid_input" && normalized.operation === "repository_configuration" && normalized.field ? { field: normalized.field } : {}),
   });
 }
 
@@ -109,13 +127,33 @@ const canonicalMethodOperations: Readonly<Record<string, SupervisedCanonicalOper
   getHumanBuildApprovals: "human_approval",
 };
 
+const repositoryConfigurationFields: Readonly<Record<string, SupervisedRepositoryConfigurationField>> = {
+  repository: "repository",
+  repositoryId: "repository_id",
+  defaultBranch: "default_branch",
+  visibility: "visibility",
+  allowSquashMerge: "allow_squash_merge",
+  archive: "archive",
+  configurationSha256: "fingerprint",
+  evidence: "evidence",
+};
+
+function repositoryConfigurationField(error: unknown): SupervisedRepositoryConfigurationField | undefined {
+  if (!(error instanceof z.ZodError)) return undefined;
+  const segment = error.issues[0]?.path[0];
+  return typeof segment === "string" ? repositoryConfigurationFields[segment] ?? "unknown_field" : "unknown_field";
+}
+
 async function withinCanonicalOperation<T>(operation: SupervisedCanonicalOperation, action: () => Promise<T>): Promise<T> {
   try {
     return await action();
   } catch (error) {
     const normalized = supervisedFailure("canonical_read", error);
     if (normalized.stage !== "canonical_read" || normalized.operation) throw normalized;
-    throw new SupervisedDiagnosticError(normalized.stage, normalized.category, operation);
+    const field = operation === "repository_configuration" && normalized.category === "invalid_input"
+      ? repositoryConfigurationField(error)
+      : undefined;
+    throw new SupervisedDiagnosticError(normalized.stage, normalized.category, operation, field);
   }
 }
 
