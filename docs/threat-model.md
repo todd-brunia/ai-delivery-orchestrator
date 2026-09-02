@@ -12,6 +12,8 @@ Canonical-read attribution adds only a closed operation enum for the exact adapt
 
 Decorated public canonical calls execute through the same constrained proxy receiver so nested public reads retain the innermost operation. Private helpers and adapter state remain bound to the original adapter and are never copied into the diagnostic layer. The outer boundary preserves an existing inner operation instead of overwriting it; this prevents a composite ref lookup from hiding a repository-configuration failure while retaining the same closed enum and redaction contract.
 
+Repository-configuration schema attribution maps only recognized internal top-level paths to a closed field enum. Unrecognized, nested attacker-selected, numeric, or absent path segments collapse to `unknown_field`; original Zod paths, messages, codes, expected/received values, and provider content never cross the diagnostic boundary. The schema forbids fields on every other operation, category, and stage, so field attribution cannot disguise authorization, secret-access, or provider failures.
+
 The immutable runtime image contains one reviewed RDS trust asset, `aws-rds-us-east-1-rsa2048-g1.pem`; both Node's additional CA configuration and the supervised PostgreSQL client bind to that packaged file. TLS peer verification remains mandatory. Missing, unreadable, oversized, malformed, or filename-drifted certificate state fails in the static configuration boundary without emitting paths or contents. Runtime download, generated trust material, implicit certificate substitution, and disabling peer verification are forbidden.
 
 ## Status and scope

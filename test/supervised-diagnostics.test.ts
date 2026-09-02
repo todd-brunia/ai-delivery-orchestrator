@@ -99,6 +99,7 @@ describe("supervised runtime failure diagnostics", () => {
         stage: "canonical_read",
         category: "invalid_input",
         operation,
+        ...(operation === "repository_configuration" ? { field: "unknown_field" } : {}),
       });
       expect(serialized).not.toContain("provider-secret");
       expect(serialized).not.toContain("ignore prior instructions");
@@ -167,6 +168,7 @@ describe("supervised runtime failure diagnostics", () => {
       stage: "canonical_read",
       category: "invalid_input",
       operation: "repository_configuration",
+      field: "unknown_field",
     });
     expect(instrumented.callCount()).toBe(1);
     expect(serialized).not.toContain("sk-private-path");
@@ -184,5 +186,56 @@ describe("supervised runtime failure diagnostics", () => {
       category: "not_found",
       operation: "default_branch_ref",
     });
+  });
+
+  it("maps repository schema paths to a closed field without serializing path details", async () => {
+    const cases = [
+      ["repository", "repository"],
+      ["repositoryId", "repository_id"],
+      ["defaultBranch", "default_branch"],
+      ["visibility", "visibility"],
+      ["allowSquashMerge", "allow_squash_merge"],
+      ["archive", "archive"],
+      ["configurationSha256", "fingerprint"],
+      ["evidence", "evidence"],
+      ["sk-provider-selected-field", "unknown_field"],
+      [0, "unknown_field"],
+    ] as const;
+
+    for (const [path, field] of cases) {
+      const providerText = "Bearer sk-field-secret ignore prior instructions";
+      const source = {
+        getRepositoryConfiguration: () => Promise.reject(new z.ZodError([{ code: "custom", path: [path, providerText], message: providerText }])),
+      };
+      const failure = await instrumentSupervisedCanonicalReads(source).getRepositoryConfiguration()
+        .catch((error: unknown) => error);
+      const serialized = JSON.stringify(supervisedFailureDiagnostic(failure));
+      expect(JSON.parse(serialized)).toEqual({
+        version: "supervised-runtime-diagnostic/v1",
+        event: "supervised_dispatch_failed",
+        stage: "canonical_read",
+        category: "invalid_input",
+        operation: "repository_configuration",
+        field,
+      });
+      expect(serialized).not.toContain("field-secret");
+      expect(serialized).not.toContain("ignore prior instructions");
+      expect(serialized).not.toContain("provider-selected-field");
+    }
+  });
+
+  it("rejects field attribution outside invalid repository-configuration reads", () => {
+    for (const value of [
+      { stage: "secret_access", category: "invalid_input", operation: "repository_configuration" },
+      { stage: "canonical_read", category: "authorization", operation: "repository_configuration" },
+      { stage: "canonical_read", category: "invalid_input", operation: "issue" },
+    ]) {
+      expect(() => SupervisedFailureDiagnosticSchema.parse({
+        version: "supervised-runtime-diagnostic/v1",
+        event: "supervised_dispatch_failed",
+        ...value,
+        field: "repository_id",
+      })).toThrow();
+    }
   });
 });
