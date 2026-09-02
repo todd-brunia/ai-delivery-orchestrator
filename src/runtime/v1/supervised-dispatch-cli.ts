@@ -21,7 +21,7 @@ import { createDispatchAcceptanceHandler, createLiveBindingWorkflowRuntime } fro
 import { LiveDispatchWorker } from "./live-dispatch-worker.js";
 import { RuntimeGenerationControl } from "./queue-consumer.js";
 import { SupervisedDispatchCommandSchema, SupervisedDispatchOperator } from "./supervised-dispatch.js";
-import { supervisedFailureDiagnostic, withinSupervisedStage, withinSupervisedStageSync } from "./supervised-diagnostics.js";
+import { instrumentSupervisedCanonicalReads, supervisedFailureDiagnostic, withinSupervisedStage, withinSupervisedStageSync } from "./supervised-diagnostics.js";
 import { loadSupervisedTlsCertificate } from "./supervised-tls.js";
 
 const EnvironmentSchema = z.object({
@@ -77,14 +77,14 @@ async function main(): Promise<void> {
   });
   const { secrets, githubRead, modelAnalysis } = withinSupervisedStageSync("configuration", () => {
     const exactSecrets = new ExactSecretSource(new SecretsManagerClient({ region: environment.AWS_REGION }), new Set([githubKeyReference, openAiKeyReference]));
-    const canonicalGitHub = new GitHubAppReadAdapter({
+    const canonicalGitHub = instrumentSupervisedCanonicalReads(new GitHubAppReadAdapter({
       version: "github-read/v1", repository: adapter.repository, repositoryId: environment.GITHUB_REPOSITORY_ID,
       appId: environment.GITHUB_APP_ID, installationId: environment.GITHUB_INSTALLATION_ID,
       installationAccount: environment.GITHUB_INSTALLATION_ACCOUNT, apiBaseUrl: "https://api.github.com",
       apiVersion: "2022-11-28", maxPages: 10, maxItems: 100, maxResponseBytes: 1_000_000,
       timeoutMilliseconds: 10_000, tokenTtlSeconds: 600,
       requiredPermissions: { actions: "read", contents: "read", issues: "read", metadata: "read", pull_requests: "read" },
-    }, githubKeyReference, exactSecrets, githubHttp);
+    }, githubKeyReference, exactSecrets, githubHttp));
     const analysis = new OpenAiAnalysisAdapter({
       version: "openai-analysis/v1", projectId: environment.OPENAI_PROJECT_ID,
       credentialReference: openAiKeyReference, timeoutMilliseconds: 30_000, maxRetries: 1, maxOutputTokens: 4_096,

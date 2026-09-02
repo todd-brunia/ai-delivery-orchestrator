@@ -34,6 +34,11 @@ describe("protected supervised runtime composition", () => {
     expect(cli).not.toContain("us-east-1-bundle.pem");
   });
 
+  it("attributes canonical reads through the static operation decorator", () => {
+    expect(cli).toContain("instrumentSupervisedCanonicalReads(new GitHubAppReadAdapter");
+    expect(cli).not.toContain("operation: error");
+  });
+
   it("grants no queue, review, merge, or generic secret authority", () => {
     const policy = iam.slice(iam.indexOf('data "aws_iam_policy_document" "supervised_dispatch"'), iam.indexOf('data "aws_iam_policy_document" "worker_execution"'));
     expect(policy).toContain("secretsmanager:GetSecretValue");
