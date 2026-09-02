@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { githubReadValidationFailure, GitHubReadError, OpenAiAnalysisError } from "../../providers/v1/index.js";
+import { githubReadValidationFailure, githubRepositoryReadCheckpointFailure, GitHubReadError, OpenAiAnalysisError } from "../../providers/v1/index.js";
 
 export const SupervisedFailureStageSchema = z.enum([
   "configuration",
@@ -57,6 +57,9 @@ export type SupervisedRepositoryConfigurationField = z.infer<typeof SupervisedRe
 export const SupervisedValidationReasonSchema = z.enum(["missing", "wrong_type", "invalid_value", "unknown_reason"]);
 export type SupervisedValidationReason = z.infer<typeof SupervisedValidationReasonSchema>;
 
+export const SupervisedRepositoryReadCheckpointSchema = z.enum(["response_read", "snapshot", "schema_validation", "failure_handoff", "unknown_checkpoint"]);
+export type SupervisedRepositoryReadCheckpoint = z.infer<typeof SupervisedRepositoryReadCheckpointSchema>;
+
 export const SupervisedFailureDiagnosticSchema = z.object({
   version: z.literal("supervised-runtime-diagnostic/v1"),
   event: z.literal("supervised_dispatch_failed"),
@@ -65,6 +68,7 @@ export const SupervisedFailureDiagnosticSchema = z.object({
   operation: SupervisedCanonicalOperationSchema.optional(),
   field: SupervisedRepositoryConfigurationFieldSchema.optional(),
   reason: SupervisedValidationReasonSchema.optional(),
+  checkpoint: SupervisedRepositoryReadCheckpointSchema.optional(),
 }).strict().superRefine((value, context) => {
   if (value.operation && value.stage !== "canonical_read") {
     context.addIssue({ code: "custom", path: ["operation"], message: "operation is limited to canonical-read failures" });
@@ -75,11 +79,14 @@ export const SupervisedFailureDiagnosticSchema = z.object({
   if (value.reason && (value.stage !== "canonical_read" || value.category !== "invalid_input" || value.operation !== "repository_configuration" || !value.field)) {
     context.addIssue({ code: "custom", path: ["reason"], message: "reason requires an invalid repository-configuration field" });
   }
+  if (value.checkpoint && (value.stage !== "canonical_read" || value.category !== "unexpected" || value.operation !== "repository_configuration" || value.field || value.reason)) {
+    context.addIssue({ code: "custom", path: ["checkpoint"], message: "checkpoint is limited to unexpected repository-configuration reads" });
+  }
 });
 export type SupervisedFailureDiagnostic = z.infer<typeof SupervisedFailureDiagnosticSchema>;
 
 export class SupervisedDiagnosticError extends Error {
-  constructor(readonly stage: SupervisedFailureStage, readonly category: SupervisedFailureCategory, readonly operation?: SupervisedCanonicalOperation, readonly field?: SupervisedRepositoryConfigurationField, readonly reason?: SupervisedValidationReason) {
+  constructor(readonly stage: SupervisedFailureStage, readonly category: SupervisedFailureCategory, readonly operation?: SupervisedCanonicalOperation, readonly field?: SupervisedRepositoryConfigurationField, readonly reason?: SupervisedValidationReason, readonly checkpoint?: SupervisedRepositoryReadCheckpoint) {
     super("supervised operation failed");
   }
 }
@@ -122,6 +129,7 @@ export function supervisedFailureDiagnostic(error: unknown): SupervisedFailureDi
     ...(normalized.stage === "canonical_read" && normalized.operation ? { operation: normalized.operation } : {}),
     ...(normalized.stage === "canonical_read" && normalized.category === "invalid_input" && normalized.operation === "repository_configuration" && normalized.field ? { field: normalized.field } : {}),
     ...(normalized.stage === "canonical_read" && normalized.category === "invalid_input" && normalized.operation === "repository_configuration" && normalized.field && normalized.reason ? { reason: normalized.reason } : {}),
+    ...(normalized.stage === "canonical_read" && normalized.category === "unexpected" && normalized.operation === "repository_configuration" && normalized.checkpoint ? { checkpoint: normalized.checkpoint } : {}),
   });
 }
 
@@ -163,7 +171,10 @@ async function withinCanonicalOperation<T>(operation: SupervisedCanonicalOperati
       ? repositoryConfigurationField(error)
       : undefined;
     const reason = githubReadValidationFailure(error)?.reason ?? (field ? "unknown_reason" : undefined);
-    throw new SupervisedDiagnosticError(normalized.stage, normalized.category, operation, field, reason);
+    const checkpoint = operation === "repository_configuration" && normalized.category === "unexpected"
+      ? githubRepositoryReadCheckpointFailure(error)?.checkpoint
+      : undefined;
+    throw new SupervisedDiagnosticError(normalized.stage, normalized.category, operation, field, reason, checkpoint);
   }
 }
 

@@ -49,4 +49,17 @@ assert.deepEqual(supervisedFailureDiagnostic(unexpected), {
   stage: "canonical_read", category: "unexpected", operation: "repository_configuration",
 });
 
+const failedTransport = { request: () => Promise.reject(new Error("sk-fake network prompt injection")) };
+const responseReadAdapter = new GitHubAppReadAdapter(config,
+  "ai-delivery-orchestrator/pilot/github-app-reviewer-private-key",
+  { load: () => Promise.resolve(privateKey) }, failedTransport, () => new Date("2026-09-02T16:00:00.000Z"));
+const responseReadFailure = await instrumentSupervisedCanonicalReads(responseReadAdapter)
+  .getRepositoryConfiguration(repository).catch((error) => error);
+const checkpointSerialized = JSON.stringify(supervisedFailureDiagnostic(responseReadFailure));
+assert.deepEqual(JSON.parse(checkpointSerialized), {
+  version: "supervised-runtime-diagnostic/v1", event: "supervised_dispatch_failed",
+  stage: "canonical_read", category: "unexpected", operation: "repository_configuration", checkpoint: "response_read",
+});
+assert.doesNotMatch(checkpointSerialized, /sk-fake|network|prompt injection/);
+
 stdout.write("compiled supervised diagnostic boundary passed\n");

@@ -59,6 +59,32 @@ export function githubReadValidationFailure(error: unknown): GitHubReadValidatio
   return parsed.success ? parsed.data : undefined;
 }
 
+export const GitHubRepositoryReadCheckpointFailureSchema = z.object({
+  version: z.literal("github-repository-read-checkpoint-failure/v1"),
+  checkpoint: z.enum(["response_read", "snapshot", "schema_validation", "failure_handoff", "unknown_checkpoint"]),
+}).strict();
+export type GitHubRepositoryReadCheckpointFailure = z.infer<typeof GitHubRepositoryReadCheckpointFailureSchema>;
+
+class GitHubRepositoryReadCheckpointError extends Error implements GitHubRepositoryReadCheckpointFailure {
+  readonly version = "github-repository-read-checkpoint-failure/v1" as const;
+
+  constructor(readonly checkpoint: GitHubRepositoryReadCheckpointFailure["checkpoint"]) {
+    super("canonical repository read failed unexpectedly");
+  }
+}
+
+export function githubRepositoryReadCheckpointFailure(error: unknown): GitHubRepositoryReadCheckpointFailure | undefined {
+  const parsed = GitHubRepositoryReadCheckpointFailureSchema.safeParse(error);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function rethrowAtRepositoryCheckpoint(error: unknown, checkpoint: GitHubRepositoryReadCheckpointFailure["checkpoint"]): never {
+  if (error instanceof GitHubReadError || githubReadValidationFailure(error) || githubRepositoryReadCheckpointFailure(error)) throw error;
+  const failure = new GitHubRepositoryReadCheckpointError(checkpoint);
+  Object.freeze(failure);
+  throw failure;
+}
+
 export interface GitHubPrivateKeySource { load(secretReference: string): Promise<string>; }
 export interface GitHubHttpResponse { readonly status: number; readonly headers: Readonly<Record<string, string | undefined>>; readonly body: string; }
 export interface GitHubHttpTransport { request(input: { method: "GET" | "POST"; url: string; headers: Readonly<Record<string, string>>; body?: string; timeoutMilliseconds: number }): Promise<GitHubHttpResponse>; }
@@ -215,25 +241,44 @@ export class GitHubAppReadAdapter implements GitHubReadPort {
   }
 
   async getRepositoryConfiguration(repository: string): Promise<CanonicalRepositoryConfiguration> {
-    this.assertRepository(repository);
-    const item = await this.get(`/repos/${repository}`) as Record<string, unknown>;
-    const snapshot = JSON.stringify({ id: item.id, default_branch: item.default_branch, visibility: item.visibility, allow_squash_merge: item.allow_squash_merge, archived: item.archived });
-    const raw: Record<string, unknown> = { repository, repositoryId: String(item.id), defaultBranch: item.default_branch, visibility: item.visibility, allowSquashMerge: item.allow_squash_merge, archive: item.archived, configurationSha256: digest(snapshot), evidence: this.evidence(`github://repositories/${repository}/configuration`, snapshot) };
-    const parsed = CanonicalRepositoryConfigurationSchema.safeParse(raw);
+    let item: Record<string, unknown>;
+    try {
+      this.assertRepository(repository);
+      item = await this.get(`/repos/${repository}`) as Record<string, unknown>;
+    } catch (error) {
+      rethrowAtRepositoryCheckpoint(error, "response_read");
+    }
+    let raw: Record<string, unknown>;
+    try {
+      const snapshot = JSON.stringify({ id: item.id, default_branch: item.default_branch, visibility: item.visibility, allow_squash_merge: item.allow_squash_merge, archived: item.archived });
+      raw = { repository, repositoryId: String(item.id), defaultBranch: item.default_branch, visibility: item.visibility, allowSquashMerge: item.allow_squash_merge, archive: item.archived, configurationSha256: digest(snapshot), evidence: this.evidence(`github://repositories/${repository}/configuration`, snapshot) };
+    } catch (error) {
+      rethrowAtRepositoryCheckpoint(error, "snapshot");
+    }
+    let parsed: ReturnType<typeof CanonicalRepositoryConfigurationSchema.safeParse>;
+    try {
+      parsed = CanonicalRepositoryConfigurationSchema.safeParse(raw);
+    } catch (error) {
+      rethrowAtRepositoryCheckpoint(error, "schema_validation");
+    }
     if (parsed.success) return parsed.data;
-    const issue = parsed.error.issues[0];
-    const segment = issue?.path[0];
-    const fieldResult = GitHubReadValidationFieldSchema.safeParse(segment);
-    const field = fieldResult.success ? fieldResult.data : "unknownField";
-    const input = field !== "unknownField" ? raw[field] : undefined;
-    const reason = issue?.code === "invalid_type"
-      ? (input === undefined ? "missing" : "wrong_type")
-      : issue && ["invalid_value", "invalid_format", "too_big", "too_small", "not_multiple_of"].includes(issue.code)
-        ? "invalid_value"
-        : "unknown_reason";
-    const failure = new GitHubReadValidationFailureError(field, reason);
-    Object.freeze(failure);
-    throw failure;
+    try {
+      const issue = parsed.error.issues[0];
+      const segment = issue?.path[0];
+      const fieldResult = GitHubReadValidationFieldSchema.safeParse(segment);
+      const field = fieldResult.success ? fieldResult.data : "unknownField";
+      const input = field !== "unknownField" ? raw[field] : undefined;
+      const reason = issue?.code === "invalid_type"
+        ? (input === undefined ? "missing" : "wrong_type")
+        : issue && ["invalid_value", "invalid_format", "too_big", "too_small", "not_multiple_of"].includes(issue.code)
+          ? "invalid_value"
+          : "unknown_reason";
+      const failure = new GitHubReadValidationFailureError(field, reason);
+      Object.freeze(failure);
+      throw failure;
+    } catch (error) {
+      rethrowAtRepositoryCheckpoint(error, "failure_handoff");
+    }
   }
 
   async getInstallation(repository: string): Promise<CanonicalInstallation> {
