@@ -21,6 +21,15 @@ resource "aws_vpc_security_group_ingress_rule" "private_endpoints_worker" {
   description                  = "TLS from worker and migration tasks"
 }
 
+resource "aws_vpc_security_group_ingress_rule" "private_endpoints_supervised_dispatch" {
+  security_group_id            = aws_security_group.private_endpoints.id
+  referenced_security_group_id = aws_security_group.supervised_dispatch.id
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  description                  = "TLS from ephemeral supervised dispatch tasks"
+}
+
 resource "aws_vpc_endpoint" "worker_interface" {
   for_each            = local.worker_interface_endpoints
   vpc_id              = aws_vpc.main.id

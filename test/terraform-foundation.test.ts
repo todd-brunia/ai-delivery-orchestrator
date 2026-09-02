@@ -444,6 +444,11 @@ describe("Terraform foundation policy", () => {
     expect(supervisedDns).toMatch(/supervised_dispatch_dns_tcp[\s\S]*?from_port\s*= 53[\s\S]*?to_port\s*= 53[\s\S]*?ip_protocol\s*= "tcp"/);
     expect(supervisedDns).not.toMatch(/0\.0\.0\.0\/0|::\/0|8\.8\.8\.8|1\.1\.1\.1|referenced_security_group_id/);
     expect(pilot).not.toMatch(/resource\s+"aws_vpc_security_group_ingress_rule"\s+"supervised_dispatch/);
+    const endpointIngress = pilot.slice(pilot.indexOf('resource "aws_vpc_security_group_ingress_rule" "private_endpoints_supervised_dispatch"'), pilot.indexOf('resource "aws_vpc_endpoint" "worker_interface"'));
+    expect(endpointIngress).toMatch(/security_group_id\s*= aws_security_group\.private_endpoints\.id/);
+    expect(endpointIngress).toMatch(/referenced_security_group_id\s*= aws_security_group\.supervised_dispatch\.id/);
+    expect(endpointIngress).toMatch(/from_port\s*= 443[\s\S]*?to_port\s*= 443[\s\S]*?ip_protocol\s*= "tcp"/);
+    expect(endpointIngress).not.toMatch(/cidr_ipv[46]|prefix_list|0\.0\.0\.0\/0|::\/0/);
     expect(pilotIam).toContain('resource "aws_iam_role" "supervised_dispatch"');
     expect(pilotIam).toContain('github-app-builder-private-key-??????');
     expect(pilotIam).toContain('portal-openai-builder-api-key-??????');
