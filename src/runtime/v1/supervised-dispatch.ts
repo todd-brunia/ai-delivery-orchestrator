@@ -18,6 +18,7 @@ import {
   type LiveWorkflowRuntime,
 } from "../../workflows/index.js";
 import type { LiveDispatchWorker } from "./live-dispatch-worker.js";
+import { withinSupervisedStage, withinSupervisedStageSync } from "./supervised-diagnostics.js";
 
 const shaSchema = z.string().regex(/^[a-f0-9]{40}$/);
 const fingerprintSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -122,24 +123,24 @@ export class SupervisedDispatchOperator {
   }
 
   async run(raw: unknown): Promise<SupervisedDispatchResult> {
-    const command = SupervisedDispatchCommandSchema.parse(raw);
-    this.assertAudience(command.repository);
+    const command = withinSupervisedStageSync("configuration", () => SupervisedDispatchCommandSchema.parse(raw));
+    withinSupervisedStageSync("policy", () => this.assertAudience(command.repository));
     const preflight = await this.preflight(command.issueNumber, command.occurredAt);
     if (command.mode === "preflight") return { mode: "preflight", preflight };
-    this.assertAuthorization(command, preflight);
+    withinSupervisedStageSync("execution_gate", () => this.assertAuthorization(command, preflight));
 
     const runId = deterministicUuid(`supervised-run:${command.authorization.id}`);
-    let run = await this.dependencies.repository.getRun(runId);
+    let run = await withinSupervisedStage("database", () => this.dependencies.repository.getRun(runId));
     if (!run) {
       try {
-        run = await this.dependencies.repository.createRun(runId, {
+        run = await withinSupervisedStage("database", () => this.dependencies.repository.createRun(runId, {
           workflowVersion: WORKFLOW_VERSION,
           repository: this.adapter.repository,
           issueNumbers: [command.issueNumber],
           mergePolicy: "human",
-        }, new Date(command.occurredAt));
+        }, new Date(command.occurredAt)));
       } catch (error) {
-        run = await this.dependencies.repository.getRun(runId);
+        run = await withinSupervisedStage("database", () => this.dependencies.repository.getRun(runId));
         if (!run) throw error;
       }
     }
@@ -149,7 +150,7 @@ export class SupervisedDispatchOperator {
 
     const workItem = run.workItems[0];
     if (!workItem) throw new Error("supervised run has no work item");
-    await this.recordAuthorization(workItem.id, command, preflight);
+    await withinSupervisedStage("database", () => this.recordAuthorization(workItem.id, command, preflight));
     const workflowResult = await this.dependencies.workflow.execute({
       workflowVersion: WORKFLOW_VERSION,
       providerMode: "live",
@@ -161,7 +162,7 @@ export class SupervisedDispatchOperator {
     });
     const outboxId = workflowResult.dispatchOutboxIds[String(command.issueNumber)];
     const outcomes = outboxId ? await this.dependencies.dispatchWorker.drainExact(outboxId) : [];
-    run = await this.dependencies.repository.getRun(runId);
+    run = await withinSupervisedStage("database", () => this.dependencies.repository.getRun(runId));
     const current = run?.workItems.find((candidate) => candidate.id === workItem.id);
     if (!current) throw new Error("supervised work item disappeared");
     return {
@@ -175,12 +176,12 @@ export class SupervisedDispatchOperator {
   }
 
   private async preflight(issueNumber: number, occurredAt: string): Promise<SupervisedPreflightResult> {
-    const branch = await this.dependencies.canonicalControl.getDefaultBranchHead(this.adapter.repository, this.adapter.defaultBranch);
-    const defaultBranchSha = shaSchema.parse(branch.sha);
-    await this.dependencies.canonicalControl.assertWorkflowAtRef(this.adapter.repository, this.adapter.workflows.implementation, defaultBranchSha);
+    const branch = await withinSupervisedStage("canonical_read", () => this.dependencies.canonicalControl.getDefaultBranchHead(this.adapter.repository, this.adapter.defaultBranch));
+    const defaultBranchSha = withinSupervisedStageSync("canonical_read", () => shaSchema.parse(branch.sha));
+    await withinSupervisedStage("canonical_read", () => this.dependencies.canonicalControl.assertWorkflowAtRef(this.adapter.repository, this.adapter.workflows.implementation, defaultBranchSha));
     const previewRunId = deterministicUuid(`supervised-preflight:${this.adapter.repository}:${issueNumber}`);
     const previewWorkItemId = deterministicUuid(`supervised-preflight-item:${this.adapter.repository}:${issueNumber}`);
-    const binding = await collectLiveWorkItemBinding({
+    const binding = await withinSupervisedStage("canonical_read", () => collectLiveWorkItemBinding({
       github: this.dependencies.githubRead,
       adapter: this.adapter,
       runId: previewRunId,
@@ -188,15 +189,16 @@ export class SupervisedDispatchOperator {
       issueNumber,
       defaultBranchSha,
       observedAt: occurredAt,
-    });
-    const analysis = validateFeasibilityForRun(await this.dependencies.modelAnalysis.analyzeFeasibility({
+    }));
+    const rawAnalysis = await withinSupervisedStage("model_analysis", () => this.dependencies.modelAnalysis.analyzeFeasibility({
       version: "providers/v1",
       repository: this.adapter.repository,
       issueNumbers: [issueNumber],
       planFingerprints: { [String(issueNumber)]: binding.plan.bodySha256 },
       defaultBranchSha,
-    }), [issueNumber]);
-    const authorization = await authorizeLiveBuild({ github: this.dependencies.githubRead, repository: this.adapter.repository, issueNumber, plan: binding.plan, analysis });
+    }));
+    const analysis = withinSupervisedStageSync("model_analysis", () => validateFeasibilityForRun(rawAnalysis, [issueNumber]));
+    const authorization = await withinSupervisedStage("policy", () => authorizeLiveBuild({ github: this.dependencies.githubRead, repository: this.adapter.repository, issueNumber, plan: binding.plan, analysis }));
     const stableEvidence = {
       repository: this.adapter.repository,
       repositoryId: binding.repositoryConfiguration.repositoryId,

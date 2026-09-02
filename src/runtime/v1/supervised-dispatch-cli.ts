@@ -23,6 +23,7 @@ import { createDispatchAcceptanceHandler, createLiveBindingWorkflowRuntime } fro
 import { LiveDispatchWorker } from "./live-dispatch-worker.js";
 import { RuntimeGenerationControl } from "./queue-consumer.js";
 import { SupervisedDispatchCommandSchema, SupervisedDispatchOperator } from "./supervised-dispatch.js";
+import { supervisedFailureDiagnostic, withinSupervisedStage, withinSupervisedStageSync } from "./supervised-diagnostics.js";
 
 const EnvironmentSchema = z.object({
   SUPERVISED_DISPATCH_ENABLED: z.enum(["true", "false"]).default("false"),
@@ -47,10 +48,12 @@ const openAiKeyReference = "ai-delivery-orchestrator/pilot/portal-openai-builder
 class ExactSecretSource {
   constructor(private readonly client: SecretsManagerClient, private readonly allowed: ReadonlySet<string>) {}
   async load(reference: string): Promise<string> {
-    if (!this.allowed.has(reference)) throw new Error("secret reference is outside the supervised allowlist");
-    const result = await this.client.send(new GetSecretValueCommand({ SecretId: reference, VersionStage: "AWSCURRENT" }));
-    if (!result.SecretString) throw new Error("supervised secret value is unavailable");
-    return result.SecretString;
+    return withinSupervisedStage("secret_access", async () => {
+      if (!this.allowed.has(reference)) throw new Error("secret reference is outside the supervised allowlist");
+      const result = await this.client.send(new GetSecretValueCommand({ SecretId: reference, VersionStage: "AWSCURRENT" }));
+      if (!result.SecretString) throw new Error("supervised secret value is unavailable");
+      return result.SecretString;
+    });
   }
 }
 
@@ -67,10 +70,12 @@ const openAiHttp: OpenAiHttpTransport = { request: async (input) => {
 } };
 
 async function main(): Promise<void> {
-  const environment = EnvironmentSchema.parse(process.env);
-  const command = SupervisedDispatchCommandSchema.parse(JSON.parse(environment.SUPERVISED_COMMAND_JSON) as unknown);
-  const adapter = RepositoryAdapterConfigV1Schema.parse(JSON.parse(environment.REPOSITORY_ADAPTER_JSON) as unknown);
-  if (command.repository !== adapter.repository) throw new Error("command repository is outside configured adapter");
+  const environment = withinSupervisedStageSync("configuration", () => EnvironmentSchema.parse(process.env));
+  const command = withinSupervisedStageSync("configuration", () => SupervisedDispatchCommandSchema.parse(JSON.parse(environment.SUPERVISED_COMMAND_JSON) as unknown));
+  const adapter = withinSupervisedStageSync("configuration", () => RepositoryAdapterConfigV1Schema.parse(JSON.parse(environment.REPOSITORY_ADAPTER_JSON) as unknown));
+  withinSupervisedStageSync("policy", () => {
+    if (command.repository !== adapter.repository) throw new Error("command repository is outside configured adapter");
+  });
   const secrets = new ExactSecretSource(new SecretsManagerClient({ region: environment.AWS_REGION }), new Set([githubKeyReference, openAiKeyReference]));
   const githubRead = new GitHubAppReadAdapter({
     version: "github-read/v1", repository: adapter.repository, repositoryId: environment.GITHUB_REPOSITORY_ID,
@@ -115,7 +120,7 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch(() => {
-  process.stderr.write(`${JSON.stringify({ event: "supervised_dispatch_failed", errorClass: "fail_closed" })}\n`);
+main().catch((error: unknown) => {
+  process.stderr.write(`${JSON.stringify(supervisedFailureDiagnostic(error))}\n`);
   process.exitCode = 1;
 });

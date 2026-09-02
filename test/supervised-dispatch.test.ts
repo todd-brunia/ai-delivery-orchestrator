@@ -83,7 +83,7 @@ describe("supervised dispatch operator", () => {
     const state = fixture(false);
     const checked = await state.operator.run({ version: "supervised-dispatch-command/v1", mode: "preflight", repository: repositoryName, issueNumber, occurredAt: "2026-08-31T21:40:00Z" });
     expect(checked.preflight).toMatchObject({ ready: true, executionEnabled: false, blockers: [] });
-    await expect(state.operator.run({ version: "supervised-dispatch-command/v1", mode: "execute", repository: repositoryName, issueNumber, occurredAt: "2026-08-31T21:42:00Z", authorization: { id: "owner-checkpoint-142", preflightDigest: "f".repeat(64), authorizedAt: "2026-08-31T21:41:00Z", expiresAt: "2026-08-31T21:45:00Z" } })).rejects.toThrow("execution is disabled");
-    await expect(state.operator.run({ version: "supervised-dispatch-command/v1", mode: "preflight", repository: "other/repository", issueNumber, occurredAt: "2026-08-31T21:40:00Z" })).rejects.toThrow("outside supervised adapter audience");
+    await expect(state.operator.run({ version: "supervised-dispatch-command/v1", mode: "execute", repository: repositoryName, issueNumber, occurredAt: "2026-08-31T21:42:00Z", authorization: { id: "owner-checkpoint-142", preflightDigest: "f".repeat(64), authorizedAt: "2026-08-31T21:41:00Z", expiresAt: "2026-08-31T21:45:00Z" } })).rejects.toMatchObject({ stage: "execution_gate", category: "unexpected" });
+    await expect(state.operator.run({ version: "supervised-dispatch-command/v1", mode: "preflight", repository: "other/repository", issueNumber, occurredAt: "2026-08-31T21:40:00Z" })).rejects.toMatchObject({ stage: "policy", category: "unexpected" });
   });
 });

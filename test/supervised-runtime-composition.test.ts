@@ -15,8 +15,9 @@ describe("protected supervised runtime composition", () => {
     expect(cli).toContain('ai-delivery-orchestrator/pilot/portal-openai-builder-api-key');
     expect(cli).not.toMatch(/github-app-(?:reviewer|merger)|portal-openai-reviewer/);
     expect(cli).toContain('new Set([githubKeyReference, openAiKeyReference])');
-    expect(cli).toContain('errorClass: "fail_closed"');
+    expect(cli).toContain("supervisedFailureDiagnostic(error)");
     expect(cli).not.toContain("error.message");
+    expect(cli).not.toContain("error.stack");
   });
 
   it("keeps execution off in the task and requires an explicit bounded command", () => {
