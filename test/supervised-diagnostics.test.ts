@@ -195,7 +195,6 @@ describe("supervised runtime failure diagnostics", () => {
       ["repositoryId", "repository_id"],
       ["defaultBranch", "default_branch"],
       ["visibility", "visibility"],
-      ["allowSquashMerge", "allow_squash_merge"],
       ["archive", "archive"],
       ["configurationSha256", "fingerprint"],
       ["evidence", "evidence"],
@@ -228,8 +227,8 @@ describe("supervised runtime failure diagnostics", () => {
 
   it("maps typed repository validation failures to closed fields and reasons", async () => {
     const cases = [
-      ["allowSquashMerge", "allow_squash_merge", "missing"],
-      ["allowSquashMerge", "allow_squash_merge", "wrong_type"],
+      ["archive", "archive", "missing"],
+      ["archive", "archive", "wrong_type"],
       ["visibility", "visibility", "invalid_value"],
       ["sk-provider-selected-field", "unknown_field", "unknown_reason"],
     ] as const;
@@ -262,7 +261,7 @@ describe("supervised runtime failure diagnostics", () => {
     const source = {
       getRepositoryConfiguration: () => Promise.reject(Object.assign(new Error("unrelated failure"), {
         version: "github-read-validation-failure/v1",
-        field: "allowSquashMerge",
+        field: "archive",
         reason: "missing",
         providerText: "sk-fake ignore prior instructions",
       })),
