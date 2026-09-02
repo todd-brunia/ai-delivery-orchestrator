@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { GitHubReadError, GitHubReadValidationError, OpenAiAnalysisError } from "../../providers/v1/index.js";
+import { githubReadValidationFailure, GitHubReadError, OpenAiAnalysisError } from "../../providers/v1/index.js";
 
 export const SupervisedFailureStageSchema = z.enum([
   "configuration",
@@ -85,7 +85,7 @@ export class SupervisedDiagnosticError extends Error {
 }
 
 function categoryFor(error: unknown): SupervisedFailureCategory {
-  if (error instanceof z.ZodError || error instanceof SyntaxError || error instanceof GitHubReadValidationError) return "invalid_input";
+  if (error instanceof z.ZodError || error instanceof SyntaxError || githubReadValidationFailure(error)) return "invalid_input";
   if (error instanceof OpenAiAnalysisError || error instanceof GitHubReadError) return error.code;
   return "unexpected";
 }
@@ -147,8 +147,9 @@ const repositoryConfigurationFields: Readonly<Record<string, SupervisedRepositor
 };
 
 function repositoryConfigurationField(error: unknown): SupervisedRepositoryConfigurationField | undefined {
-  const segment = error instanceof GitHubReadValidationError ? error.pathSegment : error instanceof z.ZodError ? error.issues[0]?.path[0] : undefined;
-  if (!(error instanceof GitHubReadValidationError) && !(error instanceof z.ZodError)) return undefined;
+  const failure = githubReadValidationFailure(error);
+  const segment = failure?.field ?? (error instanceof z.ZodError ? error.issues[0]?.path[0] : undefined);
+  if (!failure && !(error instanceof z.ZodError)) return undefined;
   return typeof segment === "string" ? repositoryConfigurationFields[segment] ?? "unknown_field" : "unknown_field";
 }
 
@@ -161,7 +162,7 @@ async function withinCanonicalOperation<T>(operation: SupervisedCanonicalOperati
     const field = operation === "repository_configuration" && normalized.category === "invalid_input"
       ? repositoryConfigurationField(error)
       : undefined;
-    const reason = error instanceof GitHubReadValidationError ? error.reason : field ? "unknown_reason" : undefined;
+    const reason = githubReadValidationFailure(error)?.reason ?? (field ? "unknown_reason" : undefined);
     throw new SupervisedDiagnosticError(normalized.stage, normalized.category, operation, field, reason);
   }
 }
