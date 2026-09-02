@@ -18,6 +18,8 @@ Repository-configuration validation reasons are likewise closed to `missing`, `w
 
 Unknown exceptions inside the canonical repository-configuration method may carry only a strict checkpoint record for `response_read`, `snapshot`, `schema_validation`, `failure_handoff`, or `unknown_checkpoint`. Known provider and validation failures bypass this wrapper and retain their existing category; checkpoints are schema-forbidden outside `canonical_read / unexpected / repository_configuration` and cannot coexist with field or reason. The original exception is discarded, so its class, cause, message, stack, response, and attacker-controlled content cannot cross the boundary.
 
+Secret loading occurs before the repository response parse checkpoint, allowing an existing supervised `secret_access` failure to retain its narrower stage. The supervised GitHub-read HTTP wrapper converts rejected fetch promises to a generic `GitHubReadError` with the closed `transport` code and static message; it never retains the rejected value or cause. Mutation and OpenAI transports remain separate, and HTTP status, response-bound, schema, permission, identity, and immutable-ref behavior is unchanged.
+
 The immutable runtime image contains one reviewed RDS trust asset, `aws-rds-us-east-1-rsa2048-g1.pem`; both Node's additional CA configuration and the supervised PostgreSQL client bind to that packaged file. TLS peer verification remains mandatory. Missing, unreadable, oversized, malformed, or filename-drifted certificate state fails in the static configuration boundary without emitting paths or contents. Runtime download, generated trust material, implicit certificate substitution, and disabling peer verification are forbidden.
 
 ## Status and scope

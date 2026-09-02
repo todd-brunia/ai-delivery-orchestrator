@@ -7,4 +7,5 @@ export * from "./dynamo-projection-writer.js";
 export * from "./live-dispatch-worker.js";
 export * from "./supervised-dispatch.js";
 export * from "./supervised-diagnostics.js";
+export * from "./supervised-http.js";
 export * from "./supervised-tls.js";

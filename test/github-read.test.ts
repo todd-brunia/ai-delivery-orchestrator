@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { GitHubAppReadAdapter, githubReadValidationFailure } from "../src/providers/v1/index.js";
 import type { GitHubReadError } from "../src/providers/v1/index.js";
+import { instrumentSupervisedCanonicalReads, supervisedFailureDiagnostic, withinSupervisedStage } from "../src/runtime/v1/index.js";
 
 const repository = "todd-brunia/ai-consulting-client-portal";
 const sha = "a".repeat(40);
@@ -101,5 +102,22 @@ describe("GitHub App canonical read adapter", () => {
     expect(JSON.stringify(failure)).not.toContain("sk-secret");
     expect(JSON.stringify(failure)).not.toContain("ignore prior instructions");
     expect(JSON.stringify(failure)).not.toContain("attacker-selected");
+  });
+
+  it("preserves a narrower secret-access failure before the repository response boundary", async () => {
+    const client = new GitHubAppReadAdapter(config, "ai-delivery-orchestrator/pilot/github-app-reviewer-private-key", {
+      load: () => withinSupervisedStage("secret_access", () => Promise.reject(new Error("sk-fake secret failure"))),
+    }, new FixtureTransport({}), () => new Date("2026-08-25T12:00:00.000Z"));
+    const failure = await instrumentSupervisedCanonicalReads(client).getRepositoryConfiguration(repository)
+      .catch((error: unknown) => error);
+    const serialized = JSON.stringify(supervisedFailureDiagnostic(failure));
+    expect(JSON.parse(serialized)).toEqual({
+      version: "supervised-runtime-diagnostic/v1",
+      event: "supervised_dispatch_failed",
+      stage: "secret_access",
+      category: "unexpected",
+    });
+    expect(serialized).not.toContain("sk-fake");
+    expect(serialized).not.toContain("secret failure");
   });
 });
