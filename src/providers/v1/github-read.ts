@@ -148,7 +148,16 @@ export class GitHubAppReadAdapter implements GitHubReadPort {
     try { return JSON.parse(response.body) as unknown; } catch { throw new GitHubReadError("invalid_response", "GitHub response was not valid JSON"); }
   }
 
-  private async get(path: string): Promise<unknown> { const token = await this.installationToken(); return this.parse(await this.transport.request({ method: "GET", url: githubPath(this.config, path), headers: this.headers(token), timeoutMilliseconds: this.config.timeoutMilliseconds })); }
+  private async get(path: string, checkpointUnexpectedParse = false): Promise<unknown> {
+    const token = await this.installationToken();
+    const response = await this.transport.request({ method: "GET", url: githubPath(this.config, path), headers: this.headers(token), timeoutMilliseconds: this.config.timeoutMilliseconds });
+    if (!checkpointUnexpectedParse) return this.parse(response);
+    try {
+      return this.parse(response);
+    } catch (error) {
+      rethrowAtRepositoryCheckpoint(error, "response_read");
+    }
+  }
   private assertRepository(repository: string): void { if (repository !== this.config.repository) throw new GitHubReadError("authorization", "repository is outside configured audience"); }
   private evidence(uri: string, value?: string) { return { uri, observedAt: this.now().toISOString(), ...(value ? { sha256: digest(value) } : {}) }; }
 
@@ -241,13 +250,8 @@ export class GitHubAppReadAdapter implements GitHubReadPort {
   }
 
   async getRepositoryConfiguration(repository: string): Promise<CanonicalRepositoryConfiguration> {
-    let item: Record<string, unknown>;
-    try {
-      this.assertRepository(repository);
-      item = await this.get(`/repos/${repository}`) as Record<string, unknown>;
-    } catch (error) {
-      rethrowAtRepositoryCheckpoint(error, "response_read");
-    }
+    this.assertRepository(repository);
+    const item = await this.get(`/repos/${repository}`, true) as Record<string, unknown>;
     let raw: Record<string, unknown>;
     try {
       const snapshot = JSON.stringify({ id: item.id, default_branch: item.default_branch, visibility: item.visibility, allow_squash_merge: item.allow_squash_merge, archived: item.archived });

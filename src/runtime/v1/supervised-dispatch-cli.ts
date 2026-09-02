@@ -22,6 +22,7 @@ import { LiveDispatchWorker } from "./live-dispatch-worker.js";
 import { RuntimeGenerationControl } from "./queue-consumer.js";
 import { SupervisedDispatchCommandSchema, SupervisedDispatchOperator } from "./supervised-dispatch.js";
 import { instrumentSupervisedCanonicalReads, supervisedFailureDiagnostic, withinSupervisedStage, withinSupervisedStageSync } from "./supervised-diagnostics.js";
+import { createSupervisedGitHubReadTransport } from "./supervised-http.js";
 import { loadSupervisedTlsCertificate } from "./supervised-tls.js";
 
 const EnvironmentSchema = z.object({
@@ -61,7 +62,7 @@ async function fetchText(input: { readonly method: string; readonly url: string;
   return { status: response.status, headers: { link: response.headers.get("link") ?? undefined, "x-ratelimit-remaining": response.headers.get("x-ratelimit-remaining") ?? undefined, "x-github-request-id": response.headers.get("x-github-request-id") ?? undefined }, body: await response.text() };
 }
 
-const githubHttp: GitHubHttpTransport = { request: (input) => fetchText(input) };
+const githubHttp: GitHubHttpTransport = createSupervisedGitHubReadTransport((input) => fetchText(input));
 const mutationHttp: GitHubMutationHttpTransport = { request: (input) => fetchText(input) };
 const openAiHttp: OpenAiHttpTransport = { request: async (input) => {
   const response = await fetchText({ method: "POST", ...input });
