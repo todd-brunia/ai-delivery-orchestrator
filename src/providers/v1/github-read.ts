@@ -32,6 +32,12 @@ export class GitHubReadError extends Error {
   constructor(readonly code: "authentication" | "authorization" | "not_found" | "rate_limited" | "timeout" | "transport" | "response_bounds" | "invalid_response", message: string) { super(message); }
 }
 
+export class GitHubReadValidationError extends Error {
+  constructor(readonly pathSegment: PropertyKey | undefined, readonly reason: "missing" | "wrong_type" | "invalid_value" | "unknown_reason") {
+    super("canonical GitHub response failed validation");
+  }
+}
+
 export interface GitHubPrivateKeySource { load(secretReference: string): Promise<string>; }
 export interface GitHubHttpResponse { readonly status: number; readonly headers: Readonly<Record<string, string | undefined>>; readonly body: string; }
 export interface GitHubHttpTransport { request(input: { method: "GET" | "POST"; url: string; headers: Readonly<Record<string, string>>; body?: string; timeoutMilliseconds: number }): Promise<GitHubHttpResponse>; }
@@ -191,7 +197,18 @@ export class GitHubAppReadAdapter implements GitHubReadPort {
     this.assertRepository(repository);
     const item = await this.get(`/repos/${repository}`) as Record<string, unknown>;
     const snapshot = JSON.stringify({ id: item.id, default_branch: item.default_branch, visibility: item.visibility, allow_squash_merge: item.allow_squash_merge, archived: item.archived });
-    return CanonicalRepositoryConfigurationSchema.parse({ repository, repositoryId: String(item.id), defaultBranch: item.default_branch, visibility: item.visibility, allowSquashMerge: item.allow_squash_merge, archive: item.archived, configurationSha256: digest(snapshot), evidence: this.evidence(`github://repositories/${repository}/configuration`, snapshot) });
+    const raw: Record<string, unknown> = { repository, repositoryId: String(item.id), defaultBranch: item.default_branch, visibility: item.visibility, allowSquashMerge: item.allow_squash_merge, archive: item.archived, configurationSha256: digest(snapshot), evidence: this.evidence(`github://repositories/${repository}/configuration`, snapshot) };
+    const parsed = CanonicalRepositoryConfigurationSchema.safeParse(raw);
+    if (parsed.success) return parsed.data;
+    const issue = parsed.error.issues[0];
+    const segment = issue?.path[0];
+    const input = typeof segment === "string" ? raw[segment] : undefined;
+    const reason = issue?.code === "invalid_type"
+      ? (input === undefined ? "missing" : "wrong_type")
+      : issue && ["invalid_value", "invalid_format", "too_big", "too_small", "not_multiple_of"].includes(issue.code)
+        ? "invalid_value"
+        : "unknown_reason";
+    throw new GitHubReadValidationError(segment, reason);
   }
 
   async getInstallation(repository: string): Promise<CanonicalInstallation> {
