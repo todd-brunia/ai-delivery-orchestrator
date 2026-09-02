@@ -35,7 +35,7 @@ export class GitHubReadError extends Error {
 }
 
 const GitHubReadValidationFieldSchema = z.enum([
-  "repository", "repositoryId", "defaultBranch", "visibility", "allowSquashMerge",
+  "repository", "repositoryId", "defaultBranch", "visibility",
   "archive", "configurationSha256", "evidence", "unknownField",
 ]);
 const GitHubReadValidationReasonSchema = z.enum(["missing", "wrong_type", "invalid_value", "unknown_reason"]);
@@ -254,8 +254,8 @@ export class GitHubAppReadAdapter implements GitHubReadPort {
     const item = await this.get(`/repos/${repository}`, true) as Record<string, unknown>;
     let raw: Record<string, unknown>;
     try {
-      const snapshot = JSON.stringify({ id: item.id, default_branch: item.default_branch, visibility: item.visibility, allow_squash_merge: item.allow_squash_merge, archived: item.archived });
-      raw = { repository, repositoryId: String(item.id), defaultBranch: item.default_branch, visibility: item.visibility, allowSquashMerge: item.allow_squash_merge, archive: item.archived, configurationSha256: digest(snapshot), evidence: this.evidence(`github://repositories/${repository}/configuration`, snapshot) };
+      const snapshot = JSON.stringify({ id: item.id, default_branch: item.default_branch, visibility: item.visibility, archived: item.archived });
+      raw = { repository, repositoryId: String(item.id), defaultBranch: item.default_branch, visibility: item.visibility, archive: item.archived, configurationSha256: digest(snapshot), evidence: this.evidence(`github://repositories/${repository}/configuration`, snapshot) };
     } catch (error) {
       rethrowAtRepositoryCheckpoint(error, "snapshot");
     }

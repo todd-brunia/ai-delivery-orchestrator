@@ -21,7 +21,7 @@ const binding = {
   issue: { version: "providers/v1" as const, repository, number: 72, nodeId: "I_72", title: "Test", body: "untrusted", state: "open" as const, labels: ["approved-for-ai-build"], updatedAt: "2026-08-29T12:00:00Z" },
   plan: { issueNumber: 72, commentId: "72", bodySha256: plan, createdAt: "2026-08-29T11:00:00Z", updatedAt: "2026-08-29T11:00:00Z", evidence: { uri: "github://issue/72/comment/72", observedAt: "2026-08-29T12:00:00Z" } },
   defaultBranchSha: sha,
-  repositoryConfiguration: { repository, repositoryId: "123", defaultBranch: "main", visibility: "private" as const, allowSquashMerge: true, archive: false, configurationSha256: "c".repeat(64), evidence: { uri: "github://repo/123", observedAt: "2026-08-29T12:00:00Z" } },
+  repositoryConfiguration: { repository, repositoryId: "123", defaultBranch: "main", visibility: "private" as const, archive: false, configurationSha256: "c".repeat(64), evidence: { uri: "github://repo/123", observedAt: "2026-08-29T12:00:00Z" } },
   installation: { appId: "456", installationId: "789", accountLogin: "todd-brunia", repositoryId: "123", repository, permissions: { actions: "write", issues: "write" }, evidence: { uri: "github://installation/789", observedAt: "2026-08-29T12:00:00Z" } },
   adapterFingerprint: adapterFingerprint(adapter), observedAt: "2026-08-29T12:00:00Z",
 };
