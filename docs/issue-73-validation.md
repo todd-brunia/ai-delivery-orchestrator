@@ -228,6 +228,19 @@ A revised diagnostic is prepared with closed stage/error categories and checks
 for the exact required table names; another launch needs fresh owner approval.
 No automatic retry, callback claim, migration, or service change was performed.
 
+After fresh owner authorization, the revised read-only diagnostic ran as task
+`b41c05317e424131976c50356a4f23a1` using the same task revision, roles, network,
+and image digest. Command SHA-256:
+`2199c2f2412d77d797ac3a6bae1bed58959f862c032d96d54d44e88fe4f78b81`.
+It exited 0 and recorded `status: observed`, `issue: 142`, and zero for all six
+counts: work items, planning bindings, dispatch attempts, accepted dispatches,
+outbox intents, and mutation receipts. `dispatchAuthorized` remained false.
+The log stream suffix is that exact task ID. This clears the inspected retained
+record gate, not full dispatch eligibility; the first failure remains unexplained.
+The next distinct checkpoint is the existing disabled supervised preflight,
+which includes an OpenAI feasibility request. That model-assisted task requires
+separate owner authorization and must not use execute mode or dispatch work.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).
