@@ -40,6 +40,6 @@
     "@langchain/langgraph-checkpoint-postgres": "^1.0.4",
     "aws-lambda-ric": "^4.0.2",
     "pg": "^8.23.0",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   }
 }
