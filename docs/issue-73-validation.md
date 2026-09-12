@@ -423,6 +423,31 @@ and whitespace validation. A future live check requires a newly published
 immutable candidate containing this repair and separate authorization for one
 bounded disabled preflight; revision 15 does not contain it.
 
+The owner authorized publication and one disabled preflight for commit
+`6b370a89a0f6cd14de7b4690aa6b5a9a431b4c38`. The Linux AMD64 candidate was published
+as immutable tag `issue73-6b370a89a0f6cd14de7b4690aa6b5a9a431b4c38`, digest
+`sha256:4606bdfe6f7862fbbee4916e07da6a943a23ead10bfedd233787e3bce33095be`.
+Pre-launch canonical checks confirmed unchanged fixture plan, default SHA,
+installation permissions, and required CI success. Supervised revision 16 was
+registered and verified equal to revision 15 in configurable fields except image.
+
+Task `5f0fa21b41e1409e9d195f48068356d3` ran with the existing roles/network,
+dispatch disabled, and a 180-second execution deadline. ECS confirmed the expected
+image digest, start at 2026-09-12T16:00:11.074Z, and stop at 16:00:51.151Z with exit
+code 1. The result remained `feasibility_validation / feasibility_rejected`, reason
+`unresolved_decisions`, now after successful acquisition of hash-verified plan
+content and model-response/schema validation. This demonstrates that adding plan
+text alone did not clear the gate. It does not reveal which decisions were
+reported or prove that they are the same as in the previous invocation.
+
+No retry, dispatch, migration, callback enablement, service update, or new PR was
+performed. Worker service desired/running/pending counts remained zero. Raw model
+output and decision text were not retrieved or logged. Before another live model
+attempt, review how to produce bounded, operator-visible decision evidence without
+logging raw model reasoning, private source, credentials, or provider bodies.
+Do not suppress unresolved decisions, assume they are merely future authorization
+gates, or repeatedly invoke the model hoping for an approving result.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).
