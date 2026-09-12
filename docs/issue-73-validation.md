@@ -520,7 +520,7 @@ service update, or PR occurred.
 | Acceptance evidence | The plan defines separate dispatch and callback checkpoints. Make the evaluated checkpoint explicit; do not imply later callback acceptance has occurred. |
 | Checkpoint consumption | The earlier approved DB inspection observed zero retained records across six tables. It is historical, not a permanent eligibility guarantee; revalidate before dispatch and bind the observation to the checkpoint. |
 | Dependency readiness | Fresh canonical reads confirm the current approved plan/default SHA and successful required CI. The model input contains issue/plan content, not a complete independently verified operational-evidence packet. |
-| Fixture publishing path | Recommend the existing local operator GitHub identity for the later exact disposable branch/PR, subject to separate approval. Keep the runtime source/ref mutation prohibition unchanged. This route choice has not yet been approved. |
+| Fixture publishing path | The owner selected the existing local operator GitHub identity for the later exact disposable branch/PR. Keep the runtime source/ref mutation prohibition unchanged. Approval for the exact branch, content, and PR is still required before creation; route selection is not that approval. |
 | Operational authorization | Current approval covers this disabled preflight only. Dispatch, fixture publication, migrations, and callback enablement remain distinct future gates; do not mark them granted. |
 
 Do not retry unchanged input or suppress model rejection. Review the publishing
@@ -528,6 +528,14 @@ route choice and the design of a checkpoint-scoped, independently verified
 operational-evidence packet before another model invocation. Do not insert stale
 facts or conversational approval into trusted runtime evidence without an explicit
 binding/validation contract. #73 live acceptance remains incomplete.
+
+The owner approved the local-operator publishing route after reviewing revision
+17's report. No branch/PR creation, credential change, permission expansion, or
+live retry is authorized by that choice. The proposed next local implementation
+is specified in [issue-73-checkpoint-evidence-design.md](issue-73-checkpoint-evidence-design.md).
+This follow-up changed documentation only; whitespace validation passed and
+runtime checks were not rerun. No AWS or GitHub API access was performed; the
+documentation was committed/pushed on the existing #73 branch only.
 
 ## Following the supervised test in the AWS console
 
