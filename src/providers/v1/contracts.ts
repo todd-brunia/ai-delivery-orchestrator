@@ -115,7 +115,6 @@ export const CanonicalRepositoryConfigurationSchema = z.object({
   repositoryId: repositoryIdSchema,
   defaultBranch: z.string().min(1).max(255),
   visibility: z.enum(["public", "private", "internal"]),
-  allowSquashMerge: z.boolean(),
   archive: z.boolean(),
   configurationSha256: sha256Schema,
   evidence: evidenceSchema,

@@ -3,8 +3,9 @@
 ## Purpose
 
 This repository implements the governed AI delivery orchestrator
-planned in `todd-brunia/ai-consulting-meta`. It coordinates approved work; it
-does not grant AI unbounded authority over source repositories or deployments.
+planned in `todd-brunia/ai-consulting-meta`. It supports autonomous,
+feature-level local development while preserving human control of production
+and administrative actions.
 
 ## Technical direction
 
@@ -16,25 +17,31 @@ does not grant AI unbounded authority over source repositories or deployments.
 - Bruno for the operator API.
 
 Do not introduce these services merely because they appear in the direction.
-Add each through an approved, independently testable issue.
+Add them only when they are needed by the requested feature and its acceptance
+criteria.
 
-## Change governance
+## Autonomous feature delivery
 
-The initial repository bootstrap is the only direct-to-main exception. After
-it lands, every tracked-file change requires:
+A feature request authorizes Codex to investigate, plan internally, edit
+repository files, run validation, create and switch to a non-default branch,
+commit, push that feature branch, and create or update the linked GitHub issue
+and draft pull request. Codex may create an issue when one is useful to track
+the requested work, and may update issue status, comments, labels, and pull
+request text as part of the feature handoff.
 
-1. An originating GitHub issue.
-2. A marked and approved implementation plan.
-3. A non-default branch and linked pull request.
-4. Passing required validation and human review before merge.
+Use a focused non-default branch and a linked draft pull request. Preserve
+unrelated pre-existing changes. Run the required validation and report its
+results truthfully. A request does not need to be split into independently
+approved implementation increments unless a material product, architecture, or
+security decision genuinely requires human direction.
 
-Never push directly to `main`, approve or merge your own pull request, deploy
-production infrastructure, create credentials, or broaden GitHub/AWS authority
-unless the specific issue and approved plan authorize it.
+## Human-controlled actions
 
-Repository visibility changes, history rewrites, release licensing, and
-deletion of public evidence are named human checkpoints. A request to prepare
-for publication does not authorize any of those operations implicitly.
+Only a human may approve or merge a pull request, push directly to `main`,
+delete a remote branch, rewrite published history, change repository settings
+or visibility, publish a release, deploy production infrastructure, create or
+modify credentials, or broaden GitHub, AWS, IAM, Bedrock, OIDC, or state-bucket
+authority. Stop and request explicit approval before any such action.
 
 ## Engineering principles
 
@@ -46,8 +53,8 @@ for publication does not authorize any of those operations implicitly.
   recoverable.
 - Prefer explicit versioned interfaces and fail closed on unknown values.
 - Do not log secrets, raw model reasoning, private source, or webhook bodies.
-- Preserve human control for sensitive plans, merge, release, and deployment
-  until a separately approved policy changes those boundaries.
+- Preserve human control for merges, releases, deployments, credentials, and
+  authority changes.
 
 ## Required validation
 

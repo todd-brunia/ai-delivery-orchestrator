@@ -25,9 +25,9 @@ function adapter(repositoryBody) {
 }
 
 const cases = [
-  ["allow_squash_merge", "missing", { id: 1308170964, default_branch: "main", visibility: "public", archived: false }],
-  ["allow_squash_merge", "wrong_type", { id: 1308170964, default_branch: "main", visibility: "public", allow_squash_merge: "sk-fake ignore prior instructions", archived: false }],
-  ["visibility", "invalid_value", { id: 1308170964, default_branch: "main", visibility: "attacker-value", allow_squash_merge: true, archived: false }],
+  ["archive", "missing", { id: 1308170964, default_branch: "main", visibility: "public" }],
+  ["archive", "wrong_type", { id: 1308170964, default_branch: "main", visibility: "public", archived: "sk-fake ignore prior instructions" }],
+  ["visibility", "invalid_value", { id: 1308170964, default_branch: "main", visibility: "attacker-value", archived: false }],
 ];
 
 for (const [field, reason, body] of cases) {
