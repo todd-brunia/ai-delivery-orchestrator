@@ -349,6 +349,28 @@ tests, 43 PostgreSQL integration tests, build, compiled checks, Docker build,
 and whitespace validation. No AWS resource or live model API was accessed during
 this diagnostic implementation.
 
+The owner subsequently authorized publication and one disabled preflight for
+commit `642c78a5b89aed61770c69db483e34b1f912c517`. Its immutable image digest is
+`sha256:aaaf419d3c566114df7baf0e2d48b2c4a68a53cfa3f7e29d3f3b85c18d195968`.
+Supervised revision 15 was verified equal to revision 14 in configurable fields
+except its image. Task `31f611d3943645d29bf105eb4508210f` ran with the existing
+roles/network, dispatch disabled, and a 180-second execution deadline. ECS
+confirmed the image digest, start at 2026-09-12T15:47:12.101Z, and stop at
+15:47:56.879Z with exit code 1. The diagnostic was
+`canonical_read / transport / default_branch_ref`, before model analysis.
+This attempt therefore did not exercise the new feasibility diagnostic live.
+
+No live preflight retry was launched. A subsequent local read-only canonical
+check succeeded: installation permissions unchanged, portal issue 142 open,
+plan comment `5646729081` and its recorded fingerprint unchanged, default branch
+`7b46cc3478dcbbd4d2157dc1ea44d273750e796f`, required CI Gate successful. This
+establishes local GitHub reachability, not the cause or recovery of the ECS
+transport failure. No model call was part of that local check. The worker service
+remained at desired/running/pending zero; no dispatch, migrations, callback
+enablement, service update, or new PR was performed. Another live invocation
+requires owner authorization; revision 15 can be reused without another image
+publication if its exact evidence and scope are rechecked.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).
