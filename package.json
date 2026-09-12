@@ -16,7 +16,7 @@
     "dry-run:schedule": "tsx src/workflows/dry-run-cli.ts",
     "supervised-dispatch": "tsx src/runtime/v1/supervised-dispatch-cli.ts",
     "start": "node dist/index.js",
-    "test": "vitest run --coverage test/*.test.ts",
+    "test": "vitest run --coverage test/*.test.ts && node --test scripts/callback-progress.test.mjs",
     "test:compiled": "node scripts/test-compiled-supervised-diagnostics.mjs && node scripts/test-compiled-callback-runtime.mjs",
     "test:integration": "vitest run --no-file-parallelism test/integration",
     "typecheck": "tsc -p tsconfig.json --noEmit"

@@ -26,6 +26,7 @@ npm run test:integration
 npm run docker:build
 npm audit --audit-level=high
 gitleaks git --redact --no-banner .
+node --test scripts/callback-progress.test.mjs
 git diff --check
 ```
 
@@ -135,8 +136,49 @@ The portal's `.github/workflows/implementation.yml` currently validates dispatch
 inputs only. It has no correlation `run-name`, does not create a branch/PR, and
 its workflow-runs endpoint returned no runs. #72 being closed therefore does not
 supply the prerequisite live fixture evidence. Changing that target workflow
-is a separate operational scope decision. Local synthetic observations do not
-prove this live checkpoint.
+requires an approved target-repository plan amendment. The owner has authorized
+preparing the fixture extension interactively, but portal #142's current frozen
+plan explicitly excludes tracked-file changes and source/ref/PR creation. It is
+the dedicated fixture; portal #74 is substantive inquiry-persistence work and
+must not be used instead. The portal implementation skill requires the amended
+scope to be recorded and approved before edits. Local synthetic observations do
+not prove this live checkpoint.
+
+## Following the supervised test in the AWS console
+
+Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).
+Before any live launch, record the approved candidate digest and exact task ARNs
+here or in the acceptance evidence. Existing tasks and queue traffic are not
+automatically evidence of this candidate.
+
+- [ECS tasks](https://us-east-1.console.aws.amazon.com/ecs/v2/clusters/ai-delivery-orchestrator-pilot-worker/tasks?region=us-east-1):
+  select the announced task ID. Watch its status and inspect the container's image
+  digest and exit code. Include stopped tasks after a bounded invocation exits.
+  The worker service can remain at desired count zero while a one-off task runs.
+- From that task's **Logs** tab, open its CloudWatch log stream. Use the announced
+  test time window and task ID. Processor `callback_batch` records show sanitized
+  dispositions; ingress `callback_ingress_retry` indicates failed acceptance.
+  An absent batch log does not prove success. Do not post raw log exports publicly.
+- [SQS](https://us-east-1.console.aws.amazon.com/sqs/v3/home?region=us-east-1#/queues):
+  select `ai-delivery-orchestrator-pilot-callbacks.fifo` and view **Monitoring**.
+  Visible and in-flight message counts are approximate and metrics may lag. Do
+  not use **Poll for messages**, purge, or redrive to observe this test: those
+  actions affect delivery. An empty queue proves neither a transition nor a
+  successful projection; compare exact delivery results in operator run events.
+
+A read-only CLI snapshot provides the same resource links and optional exact-task
+status without retrieving credentials, message bodies, or log contents:
+
+```sh
+node scripts/callback-progress.mjs
+# After a task is announced, pass its exact ARN (up to three):
+node scripts/callback-progress.mjs EXACT_TASK_ARN
+```
+
+The script uses the existing `ai-orchestrator-pilot` AWS profile, verifies the
+account, and only calls STS identity, ECS describe, and SQS attribute reads. It
+does not deploy, start/stop tasks, receive messages, or enable callbacks. Run its
+offline regression checks with `node --test scripts/callback-progress.test.mjs`.
 
 ## Proposed cloud iteration without intermediate PRs
 
