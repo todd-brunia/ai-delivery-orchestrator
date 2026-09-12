@@ -25,6 +25,27 @@ export interface ModelArtifactSource { load(request: FeasibilityRequest | PullRe
 
 const modelFor = (operation: "feasibility" | "review") => operation === "feasibility" ? { model: "gpt-5.6-terra", effort: "medium" } : { model: "gpt-5.6-sol", effort: "high" };
 
+const responseOutputSchema = z.object({
+  status: z.literal("completed"),
+  error: z.null().optional(),
+  incomplete_details: z.null().optional(),
+  output: z.array(z.discriminatedUnion("type", [
+    // Reasoning metadata can precede the answer. Never extract its content.
+    z.object({ type: z.literal("reasoning"), status: z.literal("completed").optional() }),
+    z.object({ type: z.literal("message"), role: z.literal("assistant"), status: z.literal("completed"),
+      content: z.array(z.object({ type: z.literal("output_text"), text: z.string().min(1).max(1_000_000) })).min(1).max(100),
+    }),
+  ])).min(1).max(100),
+});
+
+/** Raw REST output, not the SDK-only output_text convenience property. */
+function responseText(raw: unknown): string {
+  const response = responseOutputSchema.parse(raw);
+  const text = response.output.flatMap((item) => item.type === "message" ? item.content.map((part) => part.text) : []).join("");
+  if (!text.trim() || Buffer.byteLength(text, "utf8") > 1_000_000) throw new OpenAiAnalysisError("invalid_response", "OpenAI response text is unavailable");
+  return text;
+}
+
 /** Bounded Responses API adapter. The model receives no GitHub or AWS credential. */
 export class OpenAiAnalysisAdapter implements ModelAnalysisPort {
   private readonly config: OpenAiAnalysisConfigV1;
@@ -50,10 +71,10 @@ export class OpenAiAnalysisAdapter implements ModelAnalysisPort {
         if (response.status === 403) throw new OpenAiAnalysisError("authorization", "OpenAI project access was denied");
         if (response.status === 429) throw new OpenAiAnalysisError("rate_limited", "OpenAI request was rate limited");
         if (response.status < 200 || response.status >= 300) throw new OpenAiAnalysisError("transport", `OpenAI returned HTTP ${response.status}`);
-        const parsed = JSON.parse(response.body) as { model?: unknown; output_text?: unknown; status?: unknown };
+        if (Buffer.byteLength(response.body, "utf8") > 1_000_000) throw new OpenAiAnalysisError("invalid_response", "OpenAI response exceeds configured bound");
+        const parsed = JSON.parse(response.body) as { model?: unknown };
         if (parsed.model !== target.model) throw new OpenAiAnalysisError("model_mismatch", "OpenAI resolved an unexpected model");
-        if (parsed.status !== "completed" || typeof parsed.output_text !== "string") throw new OpenAiAnalysisError("invalid_response", "OpenAI response is incomplete");
-        return schema.parse(JSON.parse(parsed.output_text));
+        return schema.parse(JSON.parse(responseText(parsed)));
       } catch (error) {
         const normalized = error instanceof OpenAiAnalysisError ? error : new OpenAiAnalysisError("invalid_response", "OpenAI response was invalid");
         if (!["rate_limited", "transport", "timeout"].includes(normalized.code) || attempt === this.config.maxRetries) throw normalized;

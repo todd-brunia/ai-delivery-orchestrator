@@ -276,8 +276,27 @@ use the same incorrect top-level shape, hiding this failure. The live diagnostic
 does not establish whether this was its only cause; raw model output was not
 retrieved or logged. See the official
 [text-generation response format](https://developers.openai.com/api/docs/guides/text).
-Repairing the model adapter is a prerequisite scope extension to #73's callback
-work, to be reviewed before implementation or another live preflight attempt.
+The owner approved this prerequisite repair locally. The adapter now extracts
+assistant text from completed REST `output` messages, ignores reasoning metadata,
+and retains model matching and structured-result validation. Refusals, incomplete
+responses, unexpected tool/content types, invalid JSON/schema results, and oversized
+response bodies fail closed without retrying or exposing provider text. Configured
+models, request permissions, and the transient-error retry policy are unchanged.
+
+Local repair validation: lint, typecheck, build, and Docker build passed; 228 unit
+tests and six observer-script tests passed; all 43 PostgreSQL integration tests
+passed against the existing local test container (the sandboxed attempt could not
+connect, so the suite was rerun with local-network access). Compiled startup and
+diagnostic checks passed, including a new offline REST-envelope adapter fixture.
+The adapter suite contains 19 tests, including realistic feasibility/review
+responses and rejection cases. No live model request or AWS task was started for
+this repair. These synthetic tests prove the parser correction, not successful
+live preflight or completion of #73.
+
+The repair remains on the existing #73 feature branch. The next live checkpoint
+requires an owner-authorized immutable candidate image containing this code,
+a candidate task revision retaining existing authority, and explicit approval
+for one bounded disabled-preflight retry. Revision 13 does not contain this fix.
 
 ## Following the supervised test in the AWS console
 
