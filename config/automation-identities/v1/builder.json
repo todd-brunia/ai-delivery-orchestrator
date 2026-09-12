@@ -1,6 +1,6 @@
 {
   "schemaVersion": "automation-identities/v1",
-  "configurationRevision": "1ecfb583eb81f49719d2d96c2907bc06b37843db90d2f591cab87c7e7bcb2693",
+  "configurationRevision": "7bd291737c9099cd9f791937dad4ee5bcdfa0969aef08ed7dd7c3597bda375e0",
   "role": "builder",
   "appSlug": "todd-brunia-ai-delivery-builder",
   "appId": "4744942",
@@ -15,7 +15,8 @@
     "contents:write",
     "issues:write",
     "actions:write",
-    "pull_requests:write"
+    "pull_requests:write",
+    "checks:read"
   ],
   "allowedOperations": [
     "set_workflow_labels",

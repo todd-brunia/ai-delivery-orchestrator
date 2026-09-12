@@ -86,7 +86,7 @@ curl "${api_headers[@]}" -H "Authorization: Bearer $jwt" https://api.github.com/
 curl "${api_headers[@]}" -H "Authorization: Bearer $jwt" "https://api.github.com/app/installations/$installation_id" >"$installation_file"
 
 if [[ "$role" == "builder" ]]; then
-  token_request='{"repositories":["ai-consulting-client-portal"],"permissions":{"actions":"write","contents":"write","issues":"write","pull_requests":"write"}}'
+  token_request='{"repositories":["ai-consulting-client-portal"],"permissions":{"actions":"write","contents":"write","issues":"write","pull_requests":"write","checks":"read"}}'
 elif [[ "$role" == "reviewer" ]]; then
   token_request='{"repositories":["ai-consulting-client-portal"],"permissions":{"checks":"read","contents":"read","pull_requests":"write"}}'
 else

@@ -157,6 +157,20 @@ the existing key was used in memory for a GET of installation metadata only.
 The full canonical preflight and retained database checkpoint verification have
 not completed, and this metadata check is not a dispatch-ready result.
 
+The owner subsequently authorized adding only `checks:read`. The tracked builder
+ceiling and strict role schema now include that read permission; allowed mutation
+operations, repository audience, and all other permissions are unchanged. The
+new builder configuration revision is the SHA-256 of compact `JSON.stringify`
+of the updated contract, omitting `configurationRevision`. The verifier requests
+the new read permission explicitly; the older M3/E1 mutation fixture still
+requests only the permissions needed for its original operations.
+
+The GitHub App registration and installation approval require the owner's
+authenticated settings session. This code change does not prove that the live
+permission has changed. Recheck installation metadata and a narrowed exact-head
+checks read after the owner saves and accepts the update. Do not reuse a prior
+planning binding across this permission change or enable callbacks automatically.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).

@@ -24,7 +24,7 @@ config="config/automation-identities/v1/builder.json"
 app_id="$(jq -er .appId "$config")"
 installation_id="$(jq -er .installationId "$config")"
 [[ "$(jq -r .appSlug "$config")" == "todd-brunia-ai-delivery-builder" ]] || { echo "builder contract drifted" >&2; exit 1; }
-[[ "$(jq -c .permissionCeiling "$config")" == '["metadata:read","contents:write","issues:write","actions:write","pull_requests:write"]' ]] || { echo "builder permission ceiling drifted" >&2; exit 1; }
+[[ "$(jq -c .permissionCeiling "$config")" == '["metadata:read","contents:write","issues:write","actions:write","pull_requests:write","checks:read"]' ]] || { echo "builder permission ceiling drifted" >&2; exit 1; }
 
 work="$(mktemp -d)"; chmod 700 "$work"; trap 'rm -f "$work"/*; rmdir "$work"' EXIT; umask 077
 secret="ai-delivery-orchestrator/pilot/github-app-builder-private-key"
