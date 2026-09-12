@@ -140,12 +140,22 @@ unchanged, and it still does not create a branch/PR. The workflow-runs endpoint
 returned zero runs after the merge, so #72 being closed does not supply the
 prerequisite live fixture evidence.
 
-Portal #142 was closed immediately after the merge and must be reopened with
-owner authorization before it can serve as the open issue-bound fixture. Its
-`approved-for-build` label remains present. Refresh canonical issue, approval,
+Portal #142 was closed immediately after the merge, then reopened with explicit
+owner authorization on 2026-09-12. Its `approved-for-build` label remains present.
+Refresh canonical issue, approval,
 default-SHA and checkpoint evidence before proposing any live dispatch. Portal
 #74 is substantive inquiry-persistence work and must not be substituted. Local
 synthetic observations do not prove this live checkpoint.
+
+The subsequent read-only App-authenticated installation check confirmed builder
+installation `157133323` (App `4744942`) is not suspended and has selected-repository
+access, with `issues:write`, `actions:write`, `contents:write`, `metadata:read`, and
+`pull_requests:write`. It has **no `checks:read` permission**. The callback runtime
+requests that permission, so live callback validation is blocked until the owner
+reviews the required authority change. No permission or credential was changed;
+the existing key was used in memory for a GET of installation metadata only.
+The full canonical preflight and retained database checkpoint verification have
+not completed, and this metadata check is not a dispatch-ready result.
 
 ## Following the supervised test in the AWS console
 
