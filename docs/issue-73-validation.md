@@ -298,6 +298,34 @@ requires an owner-authorized immutable candidate image containing this code,
 a candidate task revision retaining existing authority, and explicit approval
 for one bounded disabled-preflight retry. Revision 13 does not contain this fix.
 
+The owner authorized that checkpoint. Commit
+`aee45719333607ed8a1d260cf07ab1924507224d` was built for Linux AMD64 and published
+under the immutable ECR tag `issue73-aee45719333607ed8a1d260cf07ab1924507224d`,
+digest `sha256:5ba5a39b86c195737445b02469c8431b3bc94ae4a35fe546362273c3c3df686e`.
+Supervised task revision 14 was registered and its configurable fields compared
+equal to revision 13 except for that image. A local CLI input-method failure
+occurred before registration; correcting it did not consume a live invocation.
+
+One disabled preflight for portal issue 142 ran as
+`b5ae9e234a9444378f415acf6858c6ba`, with the existing roles/network and 180-second
+deadline. ECS confirmed the expected image digest. It started at
+2026-09-12T15:39:23.494Z and stopped at 15:40:00.995Z with exit code 1. Its sanitized
+diagnostic was `model_analysis / unexpected`. No preflight-ready result was
+observed and no retry was launched. The worker service remained at desired,
+running, and pending counts zero. No migrations, callback enablement, execute-mode
+dispatch, service update, or additional PR was performed.
+
+Read-only local inspection found that `validateFeasibilityForRun` throws generic
+errors for infeasible results, unresolved decisions, missing conflict coverage,
+and out-of-scope dependencies. A synthetic schema-valid result with empty
+conflicts reproduced the same `model_analysis / unexpected` diagnostic. This is
+diagnostic ambiguity, not proof of the live cause: artifact drift and other
+pre-request failures can also surface in that stage. Raw model output was not
+retrieved or logged. The next local step is narrowly scoped, allowlisted
+diagnostics distinguishing artifact acquisition, response handling, and feasibility
+validation without weakening those checks; another live attempt needs separate
+authorization after that evidence is reviewed.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).
