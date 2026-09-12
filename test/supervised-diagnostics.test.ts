@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { validateFeasibilityForRun } from "../src/domain/sprint-delivery/v1/feasibility-authorization.js";
 
 import { GitHubReadError, OpenAiAnalysisError } from "../src/providers/v1/index.js";
 import {
@@ -11,6 +12,48 @@ import {
 } from "../src/runtime/v1/index.js";
 
 describe("supervised runtime failure diagnostics", () => {
+  const feasible = { feasible: true, dependencies: [], conflicts: [{ issueNumber: 142, domains: [] }], risk: { categories: ["ordinary"], confidence: "high", rationale: "private-sentinel" }, unresolvedDecisions: [], evidenceUris: [], provenance: { model: "stub", modelVersion: "v1", policyVersion: "v1", artifactSha256: "b".repeat(64), usage: { inputTokens: 0, outputTokens: 0 } } };
+
+  it.each([
+    ["infeasible", { ...feasible, feasible: false }, [142]],
+    ["unresolved_decisions", { ...feasible, unresolvedDecisions: ["private-sentinel"] }, [142]],
+    ["invalid_issue_scope", feasible, []],
+    ["invalid_issue_scope", feasible, [142, 142]],
+    ["conflict_coverage", { ...feasible, conflicts: [] }, [142]],
+    ["conflict_coverage", { ...feasible, conflicts: [{ issueNumber: 143, domains: [] }] }, [142]],
+    ["conflict_coverage", { ...feasible, conflicts: [...feasible.conflicts, ...feasible.conflicts] }, [142]],
+    ["dependency_scope", { ...feasible, dependencies: [{ prerequisiteIssueNumber: 143, dependentIssueNumber: 142, kind: "blocks" }] }, [142]],
+  ])("identifies %s without model text and preserves nested attribution", async (reason, result, scope) => {
+    const error = await withinSupervisedStage("model_analysis", () => Promise.resolve(
+      withinSupervisedStageSync("feasibility_validation", () => validateFeasibilityForRun(result, scope)),
+    )).catch((value: unknown) => value);
+    const diagnostic = supervisedFailureDiagnostic(error);
+    expect(diagnostic).toEqual({ version: "supervised-runtime-diagnostic/v1", event: "supervised_dispatch_failed", stage: "feasibility_validation", category: "feasibility_rejected", feasibilityReason: reason });
+    expect(JSON.stringify(diagnostic)).not.toContain("private-sentinel");
+  });
+
+  it("distinguishes artifact failures, schema failures, and unknown runtime errors", async () => {
+    const artifact = await withinSupervisedStage("model_analysis", () => withinSupervisedStage("model_artifact", () => Promise.reject(new Error("private-sentinel")))).catch((value: unknown) => value);
+    expect(supervisedFailureDiagnostic(artifact)).toMatchObject({ stage: "model_artifact", category: "unexpected" });
+    for (const [action, category] of [
+      [() => validateFeasibilityForRun({ private: "private-sentinel" }, [142]), "invalid_input"],
+      [() => { throw Object.assign(new Error("private-sentinel"), { reason: "conflict_coverage" }); }, "unexpected"],
+    ] as const) {
+      const failure = await withinSupervisedStage("feasibility_validation", () => Promise.resolve(action())).catch((value: unknown) => value);
+      expect(supervisedFailureDiagnostic(failure)).toEqual({ version: "supervised-runtime-diagnostic/v1", event: "supervised_dispatch_failed", stage: "feasibility_validation", category });
+    }
+    expect(withinSupervisedStageSync("feasibility_validation", () => validateFeasibilityForRun(feasible, [142]))).toEqual(feasible);
+  });
+
+  it("rejects unknown rejection reasons and attribution outside feasibility validation", () => {
+    for (const value of [
+      { stage: "model_analysis", category: "feasibility_rejected", feasibilityReason: "conflict_coverage" },
+      { stage: "feasibility_validation", category: "unexpected", feasibilityReason: "conflict_coverage" },
+      { stage: "feasibility_validation", category: "feasibility_rejected" },
+      { stage: "feasibility_validation", category: "feasibility_rejected", feasibilityReason: "private-sentinel" },
+    ]) expect(SupervisedFailureDiagnosticSchema.safeParse({ version: "supervised-runtime-diagnostic/v1", event: "supervised_dispatch_failed", ...value }).success).toBe(false);
+  });
+
   it("maps only known provider codes at the active static stage", async () => {
     const githubFailure = await withinSupervisedStage("canonical_read", () =>
       Promise.reject(new GitHubReadError("authorization", "provider-controlled text")),

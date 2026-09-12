@@ -3,6 +3,8 @@ import { generateKeyPairSync } from "node:crypto";
 import { stdout } from "node:process";
 
 import { GitHubAppReadAdapter } from "../dist/providers/v1/index.js";
+import { validateFeasibilityForRun } from "../dist/domain/sprint-delivery/v1/feasibility-authorization.js";
+import { withinSupervisedStageSync } from "../dist/runtime/v1/supervised-diagnostics.js";
 import { createSupervisedGitHubReadTransport, instrumentSupervisedCanonicalReads, supervisedFailureDiagnostic } from "../dist/runtime/v1/index.js";
 
 const repository = "todd-brunia/ai-consulting-client-portal";
@@ -63,3 +65,16 @@ assert.deepEqual(JSON.parse(checkpointSerialized), {
 assert.doesNotMatch(checkpointSerialized, /sk-fake|network|prompt injection/);
 
 stdout.write("compiled supervised diagnostic boundary passed\n");
+
+let feasibilityFailure;
+try {
+  withinSupervisedStageSync("feasibility_validation", () => validateFeasibilityForRun({
+    feasible: true, dependencies: [], conflicts: [], risk: { categories: ["ordinary"], confidence: "high", rationale: "private-sentinel" },
+    unresolvedDecisions: [], evidenceUris: [], provenance: { model: "stub", modelVersion: "v1", policyVersion: "v1", artifactSha256: "b".repeat(64), usage: { inputTokens: 0, outputTokens: 0 } },
+  }, [142]));
+} catch (error) { feasibilityFailure = error; }
+assert.deepEqual(supervisedFailureDiagnostic(feasibilityFailure), {
+  version: "supervised-runtime-diagnostic/v1", event: "supervised_dispatch_failed",
+  stage: "feasibility_validation", category: "feasibility_rejected", feasibilityReason: "conflict_coverage",
+});
+stdout.write("compiled feasibility rejection boundary passed\n");

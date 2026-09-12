@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FeasibilityRejectionReasonSchema, FeasibilityValidationError } from "../../domain/sprint-delivery/v1/feasibility-authorization.js";
 
 import { githubReadValidationFailure, githubRepositoryReadCheckpointFailure, GitHubReadError, OpenAiAnalysisError } from "../../providers/v1/index.js";
 
@@ -8,6 +9,8 @@ export const SupervisedFailureStageSchema = z.enum([
   "canonical_read",
   "database",
   "model_analysis",
+  "model_artifact",
+  "feasibility_validation",
   "policy",
   "execution_gate",
   "unexpected",
@@ -15,6 +18,7 @@ export const SupervisedFailureStageSchema = z.enum([
 export type SupervisedFailureStage = z.infer<typeof SupervisedFailureStageSchema>;
 
 export const SupervisedFailureCategorySchema = z.enum([
+  "feasibility_rejected",
   "invalid_input",
   "authentication",
   "authorization",
@@ -68,7 +72,12 @@ export const SupervisedFailureDiagnosticSchema = z.object({
   field: SupervisedRepositoryConfigurationFieldSchema.optional(),
   reason: SupervisedValidationReasonSchema.optional(),
   checkpoint: SupervisedRepositoryReadCheckpointSchema.optional(),
+  feasibilityReason: FeasibilityRejectionReasonSchema.optional(),
 }).strict().superRefine((value, context) => {
+  if ((value.feasibilityReason || value.category === "feasibility_rejected") &&
+      (value.stage !== "feasibility_validation" || value.category !== "feasibility_rejected" || !value.feasibilityReason)) {
+    context.addIssue({ code: "custom", path: ["feasibilityReason"], message: "feasibility rejection requires its validation stage and reason" });
+  }
   if (value.operation && value.stage !== "canonical_read") {
     context.addIssue({ code: "custom", path: ["operation"], message: "operation is limited to canonical-read failures" });
   }
@@ -97,7 +106,15 @@ function categoryFor(error: unknown): SupervisedFailureCategory {
 }
 
 export function supervisedFailure(stage: SupervisedFailureStage, error: unknown): SupervisedDiagnosticError {
+  if (stage === "feasibility_validation" && error instanceof FeasibilityValidationError) {
+    const reason = FeasibilityRejectionReasonSchema.safeParse(error.reason);
+    if (reason.success) return new SupervisedFeasibilityDiagnosticError(reason.data);
+  }
   return error instanceof SupervisedDiagnosticError ? error : new SupervisedDiagnosticError(stage, categoryFor(error));
+}
+
+class SupervisedFeasibilityDiagnosticError extends SupervisedDiagnosticError {
+  constructor(readonly feasibilityReason: z.infer<typeof FeasibilityRejectionReasonSchema>) { super("feasibility_validation", "feasibility_rejected"); }
 }
 
 export async function withinSupervisedStage<T>(stage: SupervisedFailureStage, operation: () => Promise<T>): Promise<T> {
@@ -125,6 +142,7 @@ export function supervisedFailureDiagnostic(error: unknown): SupervisedFailureDi
     event: "supervised_dispatch_failed",
     stage: normalized.stage,
     category: normalized.category,
+    ...(normalized instanceof SupervisedFeasibilityDiagnosticError ? { feasibilityReason: normalized.feasibilityReason } : {}),
     ...(normalized.stage === "canonical_read" && normalized.operation ? { operation: normalized.operation } : {}),
     ...(normalized.stage === "canonical_read" && normalized.category === "invalid_input" && normalized.operation === "repository_configuration" && normalized.field ? { field: normalized.field } : {}),
     ...(normalized.stage === "canonical_read" && normalized.category === "invalid_input" && normalized.operation === "repository_configuration" && normalized.field && normalized.reason ? { reason: normalized.reason } : {}),

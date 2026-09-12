@@ -21,7 +21,7 @@ const adapter = {
   risk: { humanApprovalCategories: ["security"], humanApprovalLabels: ["approved-for-build"], humanApprovalPathPatterns: [".github/**"] },
 } satisfies RepositoryAdapterConfigV1;
 
-function fixture(executionEnabled = true) {
+function fixture(executionEnabled = true, missingCoverage = false) {
   let run: PersistedSprintRun | undefined;
   let creates = 0;
   let workflowCalls = 0;
@@ -52,7 +52,7 @@ function fixture(executionEnabled = true) {
   const operator = new SupervisedDispatchOperator({ executionEnabled, adapter }, {
     repository: persistence as never,
     githubRead: githubRead as never,
-    modelAnalysis: { analyzeFeasibility: () => Promise.resolve({ feasible: true, dependencies: [], conflicts: [{ issueNumber, domains: [] }], risk: { categories: ["ordinary"] as const, confidence: "high" as const, rationale: "fixture" }, unresolvedDecisions: [], evidenceUris: [], provenance: { model: "stub", modelVersion: "v1", policyVersion: "v1", artifactSha256: "d".repeat(64), usage: { inputTokens: 0, outputTokens: 0 } } }) } as never,
+    modelAnalysis: { analyzeFeasibility: () => Promise.resolve({ feasible: true, dependencies: [], conflicts: missingCoverage ? [] : [{ issueNumber, domains: [] }], risk: { categories: ["ordinary"] as const, confidence: "high" as const, rationale: "fixture" }, unresolvedDecisions: [], evidenceUris: [], provenance: { model: "stub", modelVersion: "v1", policyVersion: "v1", artifactSha256: "d".repeat(64), usage: { inputTokens: 0, outputTokens: 0 } } }) } as never,
     canonicalControl: { getDefaultBranchHead: () => Promise.resolve({ sha: branchSha, evidenceUri: "github://refs/main" }), assertWorkflowAtRef: () => Promise.resolve({ evidenceUri: "github://workflow/implementation.yml" }) },
     workflow: { execute: (request) => { workflowCalls += 1; if (!run || request.runId !== run.id) throw new Error("wrong durable run"); run = { ...run, workItems: [{ ...run.workItems[0]!, state: "dispatch_queued", revision: 4 }] }; return Promise.resolve({ workflowVersion: "sprint-delivery/v1", providerContractVersion: "providers/v1", runId: request.runId, threadId: request.threadId, status: "bindings_collected", bindingFingerprints: { [run.workItems[0]!.id]: "e".repeat(64) }, authorizedIssueNumbers: [issueNumber], waitingIssueNumbers: [], scheduledIssueNumbers: [issueNumber], dispatchOutboxIds: { [String(issueNumber)]: "00000000-0000-4000-8000-000000000999" } }); } },
     dispatchWorker: { drainExact: (actionId: string) => { claimed.push(actionId); return Promise.resolve([{ id: actionId, outcome: "completed" as const }]); } },
@@ -61,6 +61,11 @@ function fixture(executionEnabled = true) {
 }
 
 describe("supervised dispatch operator", () => {
+  it("attributes rejected feasibility without reaching persistence or dispatch", async () => {
+    const state = fixture(false, true);
+    await expect(state.operator.run({ version: "supervised-dispatch-command/v1", mode: "preflight", repository: repositoryName, issueNumber, occurredAt: "2026-08-31T21:40:00Z" })).rejects.toMatchObject({ stage: "feasibility_validation", category: "feasibility_rejected", feasibilityReason: "conflict_coverage" });
+    expect(state.counts()).toEqual({ creates: 0, workflowCalls: 0, claimed: [], nodeResults: 0 });
+  });
   it("produces a stable, redacted, externally read-only preflight", async () => {
     const state = fixture();
     const first = await state.operator.run({ version: "supervised-dispatch-command/v1", mode: "preflight", repository: repositoryName, issueNumber, occurredAt: "2026-08-31T21:40:00Z" });

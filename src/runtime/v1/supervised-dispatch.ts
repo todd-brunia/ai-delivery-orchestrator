@@ -197,7 +197,7 @@ export class SupervisedDispatchOperator {
       planFingerprints: { [String(issueNumber)]: binding.plan.bodySha256 },
       defaultBranchSha,
     }));
-    const analysis = withinSupervisedStageSync("model_analysis", () => validateFeasibilityForRun(rawAnalysis, [issueNumber]));
+    const analysis = withinSupervisedStageSync("feasibility_validation", () => validateFeasibilityForRun(rawAnalysis, [issueNumber]));
     const authorization = await withinSupervisedStage("policy", () => authorizeLiveBuild({ github: this.dependencies.githubRead, repository: this.adapter.repository, issueNumber, plan: binding.plan, analysis }));
     const stableEvidence = {
       repository: this.adapter.repository,

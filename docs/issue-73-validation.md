@@ -326,6 +326,29 @@ diagnostics distinguishing artifact acquisition, response handling, and feasibil
 validation without weakening those checks; another live attempt needs separate
 authorization after that evidence is reviewed.
 
+With owner approval, local diagnostics now distinguish `model_artifact` acquisition
+from provider `model_analysis` and post-response `feasibility_validation`.
+Existing narrower canonical-read and secret-access attribution is preserved.
+Feasibility validation emits category `feasibility_rejected` with one allowlisted
+`feasibilityReason`: `infeasible`, `unresolved_decisions`, `invalid_issue_scope`,
+`conflict_coverage`, or `dependency_scope`. Schema failures remain `invalid_input`;
+unrecognized exceptions remain `unexpected`. No provider body, model rationale,
+decision text, artifact contents, or arbitrary exception message is included.
+The diagnostic schema rejects unknown reasons and reason/stage mismatches.
+These are additions to the diagnostic contract; observers must use the matching
+candidate schema rather than the revision-14 schema.
+
+The checks and authorization policy are unchanged. Offline operator regression
+coverage proves a missing-conflict rejection occurs before persistence, workflow
+execution, or dispatch. Compiled regression coverage exercises the same typed
+domain-to-runtime error boundary. This work does not identify the prior live
+failure retrospectively, publish another image, or authorize a cloud retry.
+
+Local diagnostic validation passed: lint, typecheck, 239 unit tests, six observer
+tests, 43 PostgreSQL integration tests, build, compiled checks, Docker build,
+and whitespace validation. No AWS resource or live model API was accessed during
+this diagnostic implementation.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).

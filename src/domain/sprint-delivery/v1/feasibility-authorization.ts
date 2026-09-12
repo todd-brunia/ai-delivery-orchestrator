@@ -15,14 +15,20 @@ export const HumanBuildApprovalSchema = z.object({
 }).strict();
 export type HumanBuildApproval = z.infer<typeof HumanBuildApprovalSchema>;
 
+export const FeasibilityRejectionReasonSchema = z.enum(["infeasible", "unresolved_decisions", "invalid_issue_scope", "conflict_coverage", "dependency_scope"]);
+export class FeasibilityValidationError extends Error {
+  constructor(readonly reason: z.infer<typeof FeasibilityRejectionReasonSchema>, message: string) { super(message); }
+}
+
 export function validateFeasibilityForRun(raw: unknown, issueNumbers: readonly number[]): FeasibilityResult {
   const result = FeasibilityResultSchema.parse(raw);
   const scope = new Set(issueNumbers);
-  if (!result.feasible || result.unresolvedDecisions.length > 0) throw new Error("feasibility analysis did not authorize workflow progress");
-  if (new Set(issueNumbers).size !== issueNumbers.length || issueNumbers.length === 0) throw new Error("run issue scope is invalid");
+  if (!result.feasible) throw new FeasibilityValidationError("infeasible", "feasibility analysis did not authorize workflow progress");
+  if (result.unresolvedDecisions.length > 0) throw new FeasibilityValidationError("unresolved_decisions", "feasibility analysis did not authorize workflow progress");
+  if (new Set(issueNumbers).size !== issueNumbers.length || issueNumbers.length === 0) throw new FeasibilityValidationError("invalid_issue_scope", "run issue scope is invalid");
   const conflicts = result.conflicts.map(({ issueNumber }) => issueNumber);
-  if (conflicts.length !== issueNumbers.length || new Set(conflicts).size !== conflicts.length || conflicts.some((issue) => !scope.has(issue))) throw new Error("conflict analysis must cover every workflow issue exactly once");
-  if (result.dependencies.some((edge) => !scope.has(edge.prerequisiteIssueNumber) || !scope.has(edge.dependentIssueNumber))) throw new Error("feasibility dependencies must remain within the immutable issue scope");
+  if (conflicts.length !== issueNumbers.length || new Set(conflicts).size !== conflicts.length || conflicts.some((issue) => !scope.has(issue))) throw new FeasibilityValidationError("conflict_coverage", "conflict analysis must cover every workflow issue exactly once");
+  if (result.dependencies.some((edge) => !scope.has(edge.prerequisiteIssueNumber) || !scope.has(edge.dependentIssueNumber))) throw new FeasibilityValidationError("dependency_scope", "feasibility dependencies must remain within the immutable issue scope");
   return result;
 }
 

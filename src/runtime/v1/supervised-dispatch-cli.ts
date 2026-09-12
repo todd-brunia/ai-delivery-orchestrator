@@ -86,10 +86,11 @@ async function main(): Promise<void> {
       timeoutMilliseconds: 10_000, tokenTtlSeconds: 600,
       requiredPermissions: { actions: "read", contents: "read", issues: "read", metadata: "read", pull_requests: "read" },
     }, githubKeyReference, exactSecrets, githubHttp));
+    const artifacts = new CanonicalGitHubArtifactSource(canonicalGitHub);
     const analysis = new OpenAiAnalysisAdapter({
       version: "openai-analysis/v1", projectId: environment.OPENAI_PROJECT_ID,
       credentialReference: openAiKeyReference, timeoutMilliseconds: 30_000, maxRetries: 1, maxOutputTokens: 4_096,
-    }, exactSecrets, new CanonicalGitHubArtifactSource(canonicalGitHub), openAiHttp);
+    }, exactSecrets, { load: (request) => withinSupervisedStage("model_artifact", () => artifacts.load(request)) }, openAiHttp);
     return { secrets: exactSecrets, githubRead: canonicalGitHub, modelAnalysis: analysis };
   });
   const certificate = await loadSupervisedTlsCertificate();
