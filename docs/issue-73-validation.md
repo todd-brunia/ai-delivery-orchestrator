@@ -260,6 +260,25 @@ preflight with the same issue and 180-second deadline. Do not update a service,
 apply migrations, publish another image/PR, enable callbacks, or dispatch.
 This published main image does not yet include the feature-branch #73 processor.
 
+With owner approval, candidate supervised revision 13 was registered using that
+digest. Configurable fields match revision 12 except the image; ECS additionally
+reported the generated `docker-remote-api.1.21` capability. No service was updated.
+One disabled preflight ran as `b80ab09c1e09426c90c1bbcefe1ad63b`, using a
+180-second deadline. It stopped with exit code 1 at `model_analysis / invalid_response`,
+after passing the earlier repository-read failure. No execute-mode work or callback
+processing was enabled.
+
+Offline reproduction identified a definite pre-existing OpenAI adapter defect:
+it sends raw HTTP but requires top-level `output_text`, an SDK convenience field.
+A synthetic completed REST response with valid structured text in
+`output[].content[]` is rejected with `invalid_response`. Existing unit fixtures
+use the same incorrect top-level shape, hiding this failure. The live diagnostic
+does not establish whether this was its only cause; raw model output was not
+retrieved or logged. See the official
+[text-generation response format](https://developers.openai.com/api/docs/guides/text).
+Repairing the model adapter is a prerequisite scope extension to #73's callback
+work, to be reviewed before implementation or another live preflight attempt.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).
