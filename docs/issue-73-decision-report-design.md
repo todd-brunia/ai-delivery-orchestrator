@@ -1,6 +1,6 @@
 # Issue #73: supervised feasibility decision report
 
-Status: proposed local design, not implemented or approved for live execution.
+Status: implemented locally with owner authorization; not approved for live execution.
 
 ## Problem and boundary
 
@@ -134,11 +134,59 @@ automatically into public issues or PR comments.
 - Run repository-required lint, typecheck, tests, build, Docker build, compiled
   diagnostic checks, and local PostgreSQL integration tests after implementation.
 
+## Implemented operator usage and limits
+
+The supervised CLI explicitly opts into the new provider method. Other callers
+retain their legacy feasibility/review schemas. The model envelope is revalidated
+against the current canonical repository, issue, plan comment/hash, and default
+SHA before reporting. The normalized result also uses the actual input hash, so
+the existing preflight digest no longer relies on a model-written artifact hash
+on this new path. No other feasibility fields or authorization gates are changed.
+
+Each document is limited to 100,000 UTF-8 bytes and 256 nonblank paragraphs; the
+serialized input including the manifest is limited to 500,000 UTF-8 bytes.
+Issue reads now reject oversized bodies instead of silently truncating them;
+this conservative bound applies to existing canonical issue readers as well.
+Blank lines delimit paragraphs; CRLF, LF, and CR line endings are counted without
+changing the bytes used for hashing. IDs are `I0001`/`P0001` onward for the single
+supervised issue. Reports contain at most 16 decisions, four references per
+decision, 64 referenced ranges, and 32,768 UTF-8 bytes. Empty documents have no
+segments. Empty references are allowed but provide no source location.
+
+The task emits `supervised_decision_report` JSON only for a nonempty unresolved
+list, followed by the existing failure diagnostic. A missing/invalid envelope
+or reporting failure stops the task; there is no legacy fallback or decision
+suppression. Task identity is available from the ECS task/log stream, not from
+model output. The report hash provides deterministic integrity, not a signature
+or evidence that the model's assertions are true.
+
+After an authorized live test, save only the report JSON (not a raw log export)
+to an operator-controlled local file and inspect one reference:
+
+```sh
+npm run build
+node scripts/review-supervised-decision.mjs /path/to/report.json P0002
+```
+
+This helper makes one fixed GitHub GET using existing `gh` authentication,
+rechecks the original body hash and line ranges, and prints only the canonical
+GitHub URL and verified line range. It never prints the source text. Errors are
+static; edited/missing documents fail closed. Do not commit report files or use
+the helper to post anything publicly. Tests inject the GET reader and make no
+live calls. The helper is local-only and is not copied into the runtime image.
+
+The implementation follows the strict, required-field schema requirements in
+the official [Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs).
+Schema tests check these properties; runtime validation additionally checks
+evidence membership and canonical provenance. Existing models and tool-free,
+non-stored request settings remain unchanged.
+
 ## Handoff
 
-This is a design-only change. Review the category vocabulary and bounded evidence
-approach before implementation. Do not infer the unresolved decisions from the
-last task, remove any approval boundary, or edit the fixture to seek a favorable
-model result. A subsequent implementation can remain on the existing #73 branch;
-image publication and one live preflight require fresh explicit authorization.
-Keep the single final orchestrator PR and leave issue #74 out of scope.
+Do not infer the unresolved decisions from the last task, remove any approval
+boundary, or edit the fixture to seek a favorable model result. This report can
+describe only a new response, not recover the previous decision text. A valid
+`unclassified` response remains blocked and may still require direct human
+review of the bound source. Image publication and one live preflight require
+fresh explicit authorization. Keep the single final orchestrator PR and leave
+issue #74 out of scope.

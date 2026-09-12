@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { RepositoryAdapterConfigV1 } from "../src/domain/sprint-delivery/v1/index.js";
 import type { PersistedSprintRun, WorkflowNodeResult } from "../src/persistence/index.js";
 import { SupervisedDispatchOperator } from "../src/runtime/v1/index.js";
+import type { SupervisedAnalysisEnvelope, SupervisedAnalysisPort } from "../src/providers/v1/supervised-analysis.js";
+import type { SupervisedDecisionReport } from "../src/runtime/v1/supervised-decision-report.js";
 
 const repositoryName = "todd-brunia/ai-consulting-client-portal";
 const issueNumber = 142;
@@ -21,7 +23,7 @@ const adapter = {
   risk: { humanApprovalCategories: ["security"], humanApprovalLabels: ["approved-for-build"], humanApprovalPathPatterns: [".github/**"] },
 } satisfies RepositoryAdapterConfigV1;
 
-function fixture(executionEnabled = true, missingCoverage = false) {
+function fixture(executionEnabled = true, missingCoverage = false, reporting?: { supervisedAnalysis: SupervisedAnalysisPort; reportDecision: (report: SupervisedDecisionReport) => void }) {
   let run: PersistedSprintRun | undefined;
   let creates = 0;
   let workflowCalls = 0;
@@ -50,6 +52,7 @@ function fixture(executionEnabled = true, missingCoverage = false) {
     },
   };
   const operator = new SupervisedDispatchOperator({ executionEnabled, adapter }, {
+    ...reporting,
     repository: persistence as never,
     githubRead: githubRead as never,
     modelAnalysis: { analyzeFeasibility: () => Promise.resolve({ feasible: true, dependencies: [], conflicts: missingCoverage ? [] : [{ issueNumber, domains: [] }], risk: { categories: ["ordinary"] as const, confidence: "high" as const, rationale: "fixture" }, unresolvedDecisions: [], evidenceUris: [], provenance: { model: "stub", modelVersion: "v1", policyVersion: "v1", artifactSha256: "d".repeat(64), usage: { inputTokens: 0, outputTokens: 0 } } }) } as never,
@@ -61,6 +64,26 @@ function fixture(executionEnabled = true, missingCoverage = false) {
 }
 
 describe("supervised dispatch operator", () => {
+  it("does not fall back to legacy analysis when an enabled supervised provider omits its envelope", async () => {
+    const state = fixture(false, false, { supervisedAnalysis: { analyzeSupervisedFeasibility: () => Promise.resolve(undefined as never) }, reportDecision: () => { throw new Error("unexpected report"); } });
+    await expect(state.operator.run({ version: "supervised-dispatch-command/v1", mode: "preflight", repository: repositoryName, issueNumber, occurredAt: "2026-08-31T21:40:00Z" })).rejects.toMatchObject({ stage: "feasibility_validation", category: "unexpected" });
+    expect(state.counts()).toEqual({ creates: 0, workflowCalls: 0, claimed: [], nodeResults: 0 });
+  });
+  it.each([false, true])("cannot dispatch after decision reporting (sink failure: %s)", async (sinkFailure) => {
+    const reports: SupervisedDecisionReport[] = [];
+    const envelope: SupervisedAnalysisEnvelope = { version: "supervised-analysis-envelope/v1",
+      result: { feasible: true, dependencies: [], conflicts: [{ issueNumber, domains: [] }], risk: { categories: ["ordinary"], confidence: "high", rationale: "private-sentinel" }, unresolvedDecisions: ["unclassified"], evidenceUris: [], provenance: { model: "stub", modelVersion: "v1", policyVersion: "v1", artifactSha256: "d".repeat(64), usage: { inputTokens: 0, outputTokens: 0 } } },
+      decisions: [{ code: "unclassified", evidenceIds: [] }], manifest: [],
+      provenance: { repository: repositoryName, issueNumber, planCommentId: "5484908830", planSha256: planSha, issueBodySha256: "c".repeat(64), defaultBranchSha: branchSha, inputArtifactSha256: "d".repeat(64) },
+    };
+    const state = fixture(false, false, { supervisedAnalysis: { analyzeSupervisedFeasibility: () => Promise.resolve(envelope) }, reportDecision: report => { if (sinkFailure) throw new Error("private-sentinel"); reports.push(report); } });
+    const failure = await state.operator.run({ version: "supervised-dispatch-command/v1", mode: "preflight", repository: repositoryName, issueNumber, occurredAt: "2026-08-31T21:40:00Z" }).catch((error: unknown) => error);
+    expect(failure).toMatchObject({ stage: "feasibility_validation", category: sinkFailure ? "unexpected" : "feasibility_rejected" });
+    expect(reports).toHaveLength(sinkFailure ? 0 : 1);
+    expect(JSON.stringify(reports)).not.toContain("private-sentinel");
+    expect(String(failure)).not.toContain("private-sentinel");
+    expect(state.counts()).toEqual({ creates: 0, workflowCalls: 0, claimed: [], nodeResults: 0 });
+  });
   it("attributes rejected feasibility without reaching persistence or dispatch", async () => {
     const state = fixture(false, true);
     await expect(state.operator.run({ version: "supervised-dispatch-command/v1", mode: "preflight", repository: repositoryName, issueNumber, occurredAt: "2026-08-31T21:40:00Z" })).rejects.toMatchObject({ stage: "feasibility_validation", category: "feasibility_rejected", feasibilityReason: "conflict_coverage" });

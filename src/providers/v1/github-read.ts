@@ -185,7 +185,8 @@ export class GitHubAppReadAdapter implements GitHubReadPort, CallbackReadPort {
 
   async getIssue(repository: string, number: number): Promise<CanonicalIssue> {
     this.assertRepository(repository); const item = await this.get(`/repos/${repository}/issues/${number}`) as Record<string, unknown>;
-    const body = typeof item.body === "string" ? item.body.slice(0, 100_000) : "";
+    const body = typeof item.body === "string" ? item.body : "";
+    if (Buffer.byteLength(body, "utf8") > 100_000) throw new GitHubReadError("response_bounds", "issue content exceeds bounds");
     return CanonicalIssueSchema.parse({ version: "providers/v1", repository, number, nodeId: item.node_id, title: item.title, body, state: item.state, labels: Array.isArray(item.labels) ? item.labels.map((label) => typeof label === "string" ? label : (label as { name?: unknown }).name).filter((label): label is string => typeof label === "string").slice(0, 100) : [], updatedAt: iso(item.updated_at) });
   }
 

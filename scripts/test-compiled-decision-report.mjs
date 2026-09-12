@@ -1,0 +1,35 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import process from "node:process";
+import { contentHash, prepareSupervisedArtifact, normalizeSupervisedAnalysis } from "../dist/providers/v1/supervised-analysis.js";
+import { createSupervisedDecisionReport } from "../dist/runtime/v1/supervised-decision-report.js";
+import { reviewDecision } from "./review-supervised-decision.mjs";
+
+const repository = "todd-brunia/ai-consulting-client-portal";
+const plan = "<!-- codex-implementation-plan -->\n\nprivate-sentinel";
+const planSha256 = contentHash(plan);
+const defaultBranchSha = "a".repeat(40);
+const bytes = JSON.stringify({ version: "model-artifact/v1", kind: "issue_bundle", repository, defaultBranchSha, issues: [{ number: 142, title: "fixture", body: "fixture", labels: [], updatedAt: "2026-09-12T16:00:00Z", plan: { commentId: "5646729081", bodySha256: planSha256, body: plan, updatedAt: "2026-09-12T16:00:00Z" } }] });
+const prepared = prepareSupervisedArtifact({ kind: "issue_bundle", bytes, sha256: contentHash(bytes) }, { version: "providers/v1", repository, issueNumbers: [142], planFingerprints: { "142": planSha256 }, defaultBranchSha });
+const envelope = normalizeSupervisedAnalysis({ version: "supervised-analysis/v2", feasible: true, dependencies: [], conflicts: [{ issueNumber: 142, domains: [] }], risk: { categories: ["ordinary"], confidence: "high", rationale: "private-sentinel" }, unresolvedDecisions: [{ code: "fixture_publishing_path", evidenceIds: ["P0002"] }], evidenceUris: [], provenance: { model: "stub", modelVersion: "v1", policyVersion: "v1", artifactSha256: "f".repeat(64), usage: { inputTokens: 0, outputTokens: 0 } } }, prepared);
+const report = createSupervisedDecisionReport(envelope, { repository, issueNumber: 142, planCommentId: "5646729081", planSha256, defaultBranchSha, observedAt: "2026-09-12T16:00:00Z", executionEnabled: false });
+assert.ok(report);
+assert.doesNotMatch(JSON.stringify(report), /private-sentinel/);
+let reads = 0;
+const location = reviewDecision(report, "P0002", route => {
+  reads += 1;
+  assert.equal(route, `repos/${repository}/issues/comments/5646729081`);
+  return plan;
+});
+assert.equal(reads, 1);
+assert.equal(location.startLine, 3);
+assert.equal(location.endLine, 3);
+assert.equal(location.sourceHashVerified, true);
+assert.doesNotMatch(JSON.stringify(location), /private-sentinel/);
+assert.throws(() => reviewDecision(report, "P0002", () => plan + "changed"), /changed/);
+assert.throws(() => reviewDecision(report, "P0003", () => { throw new Error("unexpected read"); }), /unknown evidence/);
+const invalid = spawnSync(process.execPath, ["scripts/review-supervised-decision.mjs"], { encoding: "utf8", timeout: 5000 });
+assert.equal(invalid.status, 1);
+assert.equal(invalid.stdout, "");
+assert.match(invalid.stderr, /No source text displayed/);
+process.stdout.write("Compiled decision report and read-only review boundary passed.\n");

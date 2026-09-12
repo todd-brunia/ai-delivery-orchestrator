@@ -19,6 +19,8 @@ import {
 } from "../../workflows/index.js";
 import type { LiveDispatchWorker } from "./live-dispatch-worker.js";
 import { withinSupervisedStage, withinSupervisedStageSync } from "./supervised-diagnostics.js";
+import type { SupervisedAnalysisPort } from "../../providers/v1/supervised-analysis.js";
+import { createSupervisedDecisionReport, type SupervisedDecisionReport } from "./supervised-decision-report.js";
 
 const shaSchema = z.string().regex(/^[a-f0-9]{40}$/);
 const fingerprintSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -92,6 +94,8 @@ export interface SupervisedDispatchOperatorConfig {
 }
 
 interface OperatorDependencies {
+  readonly supervisedAnalysis?: SupervisedAnalysisPort;
+  readonly reportDecision?: (report: SupervisedDecisionReport) => void;
   readonly repository: SprintRunRepository;
   readonly githubRead: GitHubReadPort;
   readonly modelAnalysis: ModelAnalysisPort;
@@ -190,13 +194,25 @@ export class SupervisedDispatchOperator {
       defaultBranchSha,
       observedAt: occurredAt,
     }));
-    const rawAnalysis = await withinSupervisedStage("model_analysis", () => this.dependencies.modelAnalysis.analyzeFeasibility({
-      version: "providers/v1",
+    const analysisRequest = {
+      version: "providers/v1" as const,
       repository: this.adapter.repository,
       issueNumbers: [issueNumber],
       planFingerprints: { [String(issueNumber)]: binding.plan.bodySha256 },
       defaultBranchSha,
-    }));
+    };
+    const envelope = this.dependencies.supervisedAnalysis
+      ? await withinSupervisedStage("model_analysis", () => this.dependencies.supervisedAnalysis!.analyzeSupervisedFeasibility(analysisRequest))
+      : undefined;
+    const rawAnalysis = this.dependencies.supervisedAnalysis ? envelope?.result : await withinSupervisedStage("model_analysis", () => this.dependencies.modelAnalysis.analyzeFeasibility(analysisRequest));
+    if (this.dependencies.supervisedAnalysis) withinSupervisedStageSync("feasibility_validation", () => {
+      if (!envelope) throw new Error("supervised analysis envelope is unavailable");
+      const report = createSupervisedDecisionReport(envelope, { repository: this.adapter.repository, issueNumber, planCommentId: binding.plan.commentId, planSha256: binding.plan.bodySha256, defaultBranchSha, observedAt: occurredAt, executionEnabled: this.config.executionEnabled });
+      if (report) {
+        try { if (!this.dependencies.reportDecision) throw new Error(); this.dependencies.reportDecision(report); }
+        catch { throw new Error("supervised decision reporting failed"); }
+      }
+    });
     const analysis = withinSupervisedStageSync("feasibility_validation", () => validateFeasibilityForRun(rawAnalysis, [issueNumber]));
     const authorization = await withinSupervisedStage("policy", () => authorizeLiveBuild({ github: this.dependencies.githubRead, repository: this.adapter.repository, issueNumber, plan: binding.plan, analysis }));
     const stableEvidence = {

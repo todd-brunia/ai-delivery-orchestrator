@@ -25,6 +25,16 @@ function adapter(transport: FixtureTransport): GitHubAppReadAdapter {
 }
 
 describe("GitHub App canonical read adapter", () => {
+  it("rejects oversized issue text instead of silently truncating evidence", async () => {
+    const transport = new FixtureTransport({
+      "POST https://api.github.com/app/installations/152627422/access_tokens": { status: 201, body: { token: "installation-token", expires_at: "2026-08-25T13:00:00.000Z" } },
+      [`GET https://api.github.com/repos/${repository}/issues/69`]: { status: 200, body: { body: "private-sentinel" + "✓".repeat(34_000) } },
+    });
+    const client = new GitHubAppReadAdapter({ ...config, maxResponseBytes: 500_000 }, "ai-delivery-orchestrator/pilot/github-app-reviewer-private-key", { load: () => Promise.resolve(privateKey) }, transport, () => new Date("2026-08-25T12:00:00.000Z"));
+    const failure = await client.getIssue(repository, 69).catch((error: unknown) => error);
+    expect(failure).toMatchObject({ code: "response_bounds" });
+    expect(String(failure)).not.toContain("private-sentinel");
+  });
   it("returns exact plan content only through the explicit content port", async () => {
     const body = "<!-- codex-implementation-plan -->\r\nprivate-sentinel ✓\n";
     const transport = new FixtureTransport({

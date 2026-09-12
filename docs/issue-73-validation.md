@@ -456,6 +456,34 @@ It is not implemented and cannot reconstruct prior decision text. This turn
 changed documentation only: whitespace validation passed; runtime tests were not
 rerun. No live model/AWS call, image publication, or PR was performed.
 
+The owner then authorized local implementation. The supervised CLI now explicitly
+uses `supervised-analysis/v2`, leaving legacy feasibility/review wire contracts
+unchanged. Exact input text is indexed by bounded paragraph IDs; response decisions
+are restricted to nine fixed categories and references from that manifest. A
+runtime envelope carries actual input provenance, which replaces model-written
+artifact hashes on this supervised path. The report rechecks canonical binding,
+uses fixed prompts, and emits no model-written rationale, decision prose, source
+text, or URLs. Unknown/malformed output, a missing envelope, report failure, or
+remaining decisions still stops progress without a legacy fallback or model retry.
+
+`scripts/review-supervised-decision.mjs` provides local, read-only hash verification
+and source line-range lookup using existing GitHub access. It is not in the task
+image, prints no source text, and rejects edited evidence. Reports require no new
+storage, API, permissions, or service wiring. Issue reads now reject oversized
+bodies rather than silently truncate evidence. The design document contains exact
+bounds, usage, compatibility notes, and the official Structured Outputs reference.
+
+Implementation validation passed: lint, typecheck, 270 unit tests, six observer
+tests, 43 PostgreSQL integration tests, build, compiled diagnostic/report/review
+checks, Docker build, and whitespace validation. Synthetic tests cover safe report
+serialization, provenance spoofing, injection text, schema/evidence bounds,
+refusals/incomplete output, hash drift, unchanged domain gates, and zero
+persistence/dispatch calls on report rejection or sink failure. No live model/AWS
+access, image publication, or PR occurred during this implementation. Revision 16
+does not contain this code. A newly published immutable candidate and one bounded
+disabled preflight require separate owner authorization; this implementation
+cannot recover prior decision text or establish #73's live acceptance.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).

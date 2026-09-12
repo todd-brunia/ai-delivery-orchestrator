@@ -115,6 +115,8 @@ async function main(): Promise<void> {
       if (environment.SUPERVISED_DISPATCH_ENABLED !== "true") control.drain(0);
       return new SupervisedDispatchOperator({ executionEnabled: environment.SUPERVISED_DISPATCH_ENABLED === "true", adapter }, {
         repository, githubRead, modelAnalysis, canonicalControl: githubRead,
+        supervisedAnalysis: modelAnalysis,
+        reportDecision: report => { process.stdout.write(`${JSON.stringify(report)}\n`); },
         workflow: createLiveBindingWorkflowRuntime(repository, { githubRead, modelAnalysis }),
         dispatchWorker: new LiveDispatchWorker(control, consumer),
       });
