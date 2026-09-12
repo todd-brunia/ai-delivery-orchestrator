@@ -241,6 +241,25 @@ The next distinct checkpoint is the existing disabled supervised preflight,
 which includes an OpenAI feasibility request. That model-assisted task requires
 separate owner authorization and must not use execute mode or dispatch work.
 
+The owner authorized one disabled model-assisted preflight. Task
+`54fcfb876ff1496d9745eb4de6d95209` used supervised revision 12 with explicit
+`SUPERVISED_DISPATCH_ENABLED=false`, `mode: preflight`, issue 142, and a
+180-second process deadline. It stopped with exit code 1 before model analysis:
+`canonical_read / invalid_input / repository_configuration / allow_squash_merge / missing`.
+No dispatch occurred. The deployed image predates the already-merged #270 fix
+(`953eadb`) that removed that field from the supervised read contract. Image
+freshness should have been checked before this preflight attempt.
+
+Read-only ECR inspection found the already-published main image for commit
+`102af4d2c5a48e04710a43144dabe2a6f3cccf9a`, digest
+`sha256:ed04a955ea0e495938cad1f63d472bc7de0ba808cf51c7f249d1edf11fe7ac7d`.
+Proposed next checkpoint, pending owner approval: register a candidate copy of
+supervised revision 12 changing only the image to that immutable digest, preserve
+all roles, secrets, resource limits, logs and network, and run one disabled
+preflight with the same issue and 180-second deadline. Do not update a service,
+apply migrations, publish another image/PR, enable callbacks, or dispatch.
+This published main image does not yet include the feature-branch #73 processor.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).
