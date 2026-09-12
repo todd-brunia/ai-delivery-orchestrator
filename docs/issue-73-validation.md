@@ -371,6 +371,32 @@ enablement, service update, or new PR was performed. Another live invocation
 requires owner authorization; revision 15 can be reused without another image
 publication if its exact evidence and scope are rechecked.
 
+The owner authorized one retry on existing revision 15. Pre-launch read-only
+checks confirmed unchanged fixture plan, default SHA, installation permissions,
+and required-check success; the task definition and ECR digest were reverified.
+No image was rebuilt/published and no task revision was registered. Task
+`d8bfed83e5ec48f2bae1262e3f1bb759` ran with dispatch disabled and the same
+180-second execution deadline, starting at 2026-09-12T15:50:04.341Z and stopping
+at 15:50:42.150Z with exit code 1. The expected image digest was observed.
+
+The diagnostic was `feasibility_validation / feasibility_rejected`, reason
+`unresolved_decisions`. This proves this invocation passed canonical acquisition
+and provider response/schema validation, then stopped at the domain feasibility
+gate. It does not establish the specific decision text, which was not retrieved
+or logged. No further invocation, dispatch, callback enablement, migration,
+service update, or PR was performed. Worker service counts remained zero.
+
+Read-only inspection found a concrete model-input gap: `CanonicalGitHubArtifactSource`
+includes the issue body and marked-plan metadata (comment ID, hash, timestamp),
+but not the marked plan text. Portal #142's consolidated plan contains scope and
+completed-prerequisite details absent from its original issue body. The missing
+plan content may contribute to unresolved decisions, but this is not established
+as the live cause. Proposed next local work: include bounded, exact hash-verified
+canonical plan text as untrusted model input, with drift/redaction regression
+coverage and unchanged feasibility/authorization gates. Review that change
+before any further live model attempt; do not retry the same input blindly or
+treat future operational approvals as already granted.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).
