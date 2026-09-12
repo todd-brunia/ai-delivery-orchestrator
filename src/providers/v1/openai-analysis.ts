@@ -15,6 +15,7 @@ import {
 import { z } from "zod";
 import type { ModelAnalysisPort } from "./ports.js";
 import { normalizeSupervisedAnalysis, prepareSupervisedArtifact, SupervisedAnalysisWireSchema, type SupervisedAnalysisEnvelope } from "./supervised-analysis.js";
+import type { CheckpointEvidence } from "../../domain/sprint-delivery/v1/checkpoint-evidence.js";
 
 export class OpenAiAnalysisError extends Error {
   constructor(readonly code: "authentication" | "authorization" | "rate_limited" | "timeout" | "transport" | "invalid_response" | "model_mismatch" | "artifact_mismatch", message: string) { super(message); }
@@ -91,11 +92,11 @@ export class OpenAiAnalysisAdapter implements ModelAnalysisPort {
   }
 
   /** Explicit opt-in; legacy analysis and review callers keep their wire schemas. */
-  async analyzeSupervisedFeasibility(raw: FeasibilityRequest): Promise<SupervisedAnalysisEnvelope> {
+  async analyzeSupervisedFeasibility(raw: FeasibilityRequest, checkpoint?: CheckpointEvidence): Promise<SupervisedAnalysisEnvelope> {
     const request = FeasibilityRequestSchema.parse(raw);
     const artifact = await this.artifacts.load(request);
     let prepared: ReturnType<typeof prepareSupervisedArtifact>;
-    try { prepared = prepareSupervisedArtifact(artifact, request); }
+    try { prepared = prepareSupervisedArtifact(artifact, request, checkpoint); }
     catch { throw new OpenAiAnalysisError("artifact_mismatch", "supervised artifact validation failed"); }
     const response = await this.execute("feasibility", request, { artifact: prepared.artifact, schema: SupervisedAnalysisWireSchema });
     try { return normalizeSupervisedAnalysis(response, prepared); }

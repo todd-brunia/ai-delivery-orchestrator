@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { FeasibilityRequestSchema, FeasibilityResultSchema, ModelArtifactSchema, type FeasibilityRequest, type FeasibilityResult, type ModelArtifact } from "./contracts.js";
 import { RepositoryNameSchema } from "../../domain/sprint-delivery/v1/contracts.js";
+import { CheckpointEvidenceSchema, type CheckpointEvidence } from "../../domain/sprint-delivery/v1/checkpoint-evidence.js";
 
 export const DecisionCodeSchema = z.enum(["scope_boundary", "acceptance_evidence", "dependency_readiness", "fixture_publishing_path", "checkpoint_consumption", "operational_authorization", "runtime_readiness", "conflicting_evidence", "unclassified"]);
 export const decisionPrompts: Readonly<Record<z.infer<typeof DecisionCodeSchema>, string>> = Object.freeze({
@@ -36,7 +37,7 @@ export interface SupervisedAnalysisEnvelope {
   readonly provenance: z.infer<typeof SupervisedInputProvenanceSchema>;
   readonly manifest: readonly EvidenceSegment[];
 }
-export interface SupervisedAnalysisPort { analyzeSupervisedFeasibility(request: FeasibilityRequest): Promise<SupervisedAnalysisEnvelope>; }
+export interface SupervisedAnalysisPort { analyzeSupervisedFeasibility(request: FeasibilityRequest, checkpoint?: CheckpointEvidence): Promise<SupervisedAnalysisEnvelope>; }
 export const contentHash = (value: string): string => createHash("sha256").update(value, "utf8").digest("hex");
 
 /** Line ranges refer to the original text. Nothing is truncated or normalized for hashing. */
@@ -64,7 +65,7 @@ const bundleSchema = z.object({
   }).strict()).length(1),
 }).strict();
 
-export function prepareSupervisedArtifact(raw: ModelArtifact, rawRequest: FeasibilityRequest): { artifact: ModelArtifact; provenance: z.infer<typeof SupervisedInputProvenanceSchema>; manifest: EvidenceSegment[] } {
+export function prepareSupervisedArtifact(raw: ModelArtifact, rawRequest: FeasibilityRequest, checkpoint?: CheckpointEvidence): { artifact: ModelArtifact; provenance: z.infer<typeof SupervisedInputProvenanceSchema>; manifest: EvidenceSegment[] } {
   try {
     const request = FeasibilityRequestSchema.parse(rawRequest);
     const artifact = ModelArtifactSchema.parse(raw);
@@ -73,7 +74,9 @@ export function prepareSupervisedArtifact(raw: ModelArtifact, rawRequest: Feasib
     const issue = bundle.issues[0]!;
     if (bundle.repository !== request.repository || bundle.defaultBranchSha !== request.defaultBranchSha || issue.number !== request.issueNumbers[0] || issue.plan.bodySha256 !== request.planFingerprints[String(issue.number)] || contentHash(issue.plan.body) !== issue.plan.bodySha256 || !issue.plan.body.includes("<!-- codex-implementation-plan -->")) throw new Error();
     const manifest = [...evidenceSegments(issue.body, "issue"), ...evidenceSegments(issue.plan.body, "plan")];
-    const bytes = JSON.stringify({ ...bundle, evidenceManifest: { version: "supervised-evidence/v1", segments: manifest } });
+    const packet = checkpoint === undefined ? undefined : CheckpointEvidenceSchema.parse(checkpoint);
+    if (packet && (packet.facts.repository !== request.repository || packet.facts.issueNumber !== issue.number || packet.facts.planCommentId !== issue.plan.commentId || packet.facts.planSha256 !== issue.plan.bodySha256 || packet.facts.defaultBranchSha !== request.defaultBranchSha || packet.facts.issueUpdatedAt !== issue.updatedAt || packet.facts.planUpdatedAt !== issue.plan.updatedAt)) throw new Error();
+    const bytes = JSON.stringify({ ...bundle, evidenceManifest: { version: "supervised-evidence/v1", segments: manifest }, ...(packet ? { checkpointEvidence: packet } : {}) });
     if (Buffer.byteLength(bytes, "utf8") > 500_000) throw new Error();
     const inputArtifactSha256 = contentHash(bytes);
     const provenance = SupervisedInputProvenanceSchema.parse({ repository: bundle.repository, issueNumber: issue.number, planCommentId: issue.plan.commentId, planSha256: issue.plan.bodySha256, issueBodySha256: contentHash(issue.body), defaultBranchSha: bundle.defaultBranchSha, inputArtifactSha256 });

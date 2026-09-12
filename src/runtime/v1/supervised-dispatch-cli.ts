@@ -1,5 +1,6 @@
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { Pool } from "pg";
+import { PostgresCheckpointReceiptReader } from "../../persistence/checkpoint-receipts.js";
 import { z } from "zod";
 
 import { RepositoryAdapterConfigV1Schema } from "../../domain/sprint-delivery/v1/index.js";
@@ -94,7 +95,7 @@ async function main(): Promise<void> {
     return { secrets: exactSecrets, githubRead: canonicalGitHub, modelAnalysis: analysis };
   });
   const certificate = await loadSupervisedTlsCertificate();
-  const pool = withinSupervisedStageSync("configuration", () => new Pool({ host: environment.PGHOST, port: environment.PGPORT, database: environment.PGDATABASE, user: environment.PGUSER, password: environment.PGPASSWORD, ssl: { ca: certificate, rejectUnauthorized: true }, max: 2 }));
+  const pool = withinSupervisedStageSync("configuration", () => new Pool({ host: environment.PGHOST, port: environment.PGPORT, database: environment.PGDATABASE, user: environment.PGUSER, password: environment.PGPASSWORD, ssl: { ca: certificate, rejectUnauthorized: true }, max: 2, connectionTimeoutMillis: 10_000 }));
   try {
     const operator = withinSupervisedStageSync("configuration", () => {
       const repository = new PostgresSprintRunRepository(pool);
@@ -116,6 +117,7 @@ async function main(): Promise<void> {
       return new SupervisedDispatchOperator({ executionEnabled: environment.SUPERVISED_DISPATCH_ENABLED === "true", adapter }, {
         repository, githubRead, modelAnalysis, canonicalControl: githubRead,
         supervisedAnalysis: modelAnalysis,
+        checkpoint: { receipts: new PostgresCheckpointReceiptReader(pool), now: () => new Date() },
         reportDecision: report => { process.stdout.write(`${JSON.stringify(report)}\n`); },
         workflow: createLiveBindingWorkflowRuntime(repository, { githubRead, modelAnalysis }),
         dispatchWorker: new LiveDispatchWorker(control, consumer),

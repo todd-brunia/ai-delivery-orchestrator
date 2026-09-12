@@ -5,6 +5,7 @@ import type { PersistedSprintRun, WorkflowNodeResult } from "../src/persistence/
 import { SupervisedDispatchOperator } from "../src/runtime/v1/index.js";
 import type { SupervisedAnalysisEnvelope, SupervisedAnalysisPort } from "../src/providers/v1/supervised-analysis.js";
 import type { SupervisedDecisionReport } from "../src/runtime/v1/supervised-decision-report.js";
+import { checkpointDigest, type CheckpointReceiptPort } from "../src/domain/sprint-delivery/v1/checkpoint-evidence.js";
 
 const repositoryName = "todd-brunia/ai-consulting-client-portal";
 const issueNumber = 142;
@@ -23,7 +24,7 @@ const adapter = {
   risk: { humanApprovalCategories: ["security"], humanApprovalLabels: ["approved-for-build"], humanApprovalPathPatterns: [".github/**"] },
 } satisfies RepositoryAdapterConfigV1;
 
-function fixture(executionEnabled = true, missingCoverage = false, reporting?: { supervisedAnalysis: SupervisedAnalysisPort; reportDecision: (report: SupervisedDecisionReport) => void }) {
+function fixture(executionEnabled = true, missingCoverage = false, reporting?: { supervisedAnalysis: SupervisedAnalysisPort; reportDecision: (report: SupervisedDecisionReport) => void; checkpoint?: { receipts: CheckpointReceiptPort; now: () => Date } }) {
   let run: PersistedSprintRun | undefined;
   let creates = 0;
   let workflowCalls = 0;
@@ -34,7 +35,7 @@ function fixture(executionEnabled = true, missingCoverage = false, reporting?: {
     getMarkedPlan: () => Promise.resolve({ issueNumber, commentId: "5484908830", bodySha256: planSha, createdAt: "2026-08-31T21:31:51Z", updatedAt: "2026-08-31T21:31:51Z", evidence: { uri: "github://issues/142/comments/5484908830", observedAt: "2026-08-31T21:33:00Z" } }),
     getRepositoryConfiguration: () => Promise.resolve({ repository: repositoryName, repositoryId: "1308170964", defaultBranch: "main", visibility: "public" as const, archive: false, configurationSha256: "c".repeat(64), evidence: { uri: "github://repositories/1308170964/configuration", observedAt: "2026-08-31T21:33:00Z" } }),
     getInstallation: () => Promise.resolve({ appId: "123", installationId: "456", accountLogin: "todd-brunia", repositoryId: "1308170964", repository: repositoryName, permissions: { actions: "write", issues: "write" }, evidence: { uri: "github://installations/456", observedAt: "2026-08-31T21:33:00Z" } }),
-    getHumanBuildApprovals: () => Promise.resolve([{ issueNumber, label: "approved-for-build" as const, actorLogin: "todd-brunia", actorType: "User" as const, occurredAt: "2026-08-31T21:32:16Z", evidence: { uri: "github://issues/142/events/1", observedAt: "2026-08-31T21:33:00Z" } }]),
+    getHumanBuildApprovals: () => Promise.resolve([{ issueNumber, label: "approved-for-build" as const, actorLogin: "todd-brunia", actorType: "User" as const, occurredAt: "2026-08-31T21:32:16Z", evidence: { uri: `github://issues/${repositoryName}/142/events/1`, observedAt: reporting?.checkpoint?.now().toISOString() ?? "2026-08-31T21:33:00Z" } }]),
   };
   const persistence = {
     getRun: () => Promise.resolve(run),
@@ -64,6 +65,47 @@ function fixture(executionEnabled = true, missingCoverage = false, reporting?: {
 }
 
 describe("supervised dispatch operator", () => {
+  it("rechecks fresh receipts and reuses the approved snapshot without granting extra execution", async () => {
+    let time = "2026-08-31T21:40:00Z";
+    let consumed = false;
+    let calls = 0;
+    const state = fixture(true, false, { reportDecision: () => {}, checkpoint: { now: () => new Date(time), receipts: { observe: () => Promise.resolve({ repository: repositoryName, issueNumber, observedAt: time, status: consumed ? "records_present" : "clear_at_observation", counts: { work_items: consumed ? "1" : "0", bindings: "0", dispatch_attempts: "0", accepted_dispatches: "0", outbox_intents: "0", mutation_receipts: "0" } }) } }, supervisedAnalysis: { analyzeSupervisedFeasibility: (_request, packet) => {
+      calls += 1;
+      expect(packet?.futureGates.workflowDispatch).toBe("not_authorized");
+      const hash = checkpointDigest(packet);
+      return Promise.resolve({ version: "supervised-analysis-envelope/v1", decisions: [], manifest: [],
+        provenance: { repository: repositoryName, issueNumber, planCommentId: "5484908830", planSha256: planSha, issueBodySha256: "c".repeat(64), defaultBranchSha: branchSha, inputArtifactSha256: hash },
+        result: { feasible: true, dependencies: [], conflicts: [{ issueNumber, domains: [] }], risk: { categories: ["ordinary"], confidence: "high", rationale: "fixture" }, unresolvedDecisions: [], evidenceUris: [], provenance: { model: "stub", modelVersion: "v1", policyVersion: "v1", artifactSha256: hash, usage: { inputTokens: 0, outputTokens: 0 } } },
+      });
+    } } });
+    const base = { version: "supervised-dispatch-command/v1", repository: repositoryName, issueNumber };
+    const checked = await state.operator.run({ ...base, mode: "preflight", occurredAt: time });
+    const command = { ...base, mode: "execute", occurredAt: "2026-08-31T21:42:00Z", checkpointEvidence: checked.preflight.checkpointEvidence, authorization: { id: "owner-checkpoint-142", preflightDigest: checked.preflight.digest, authorizedAt: "2026-08-31T21:41:00Z", expiresAt: "2026-08-31T21:45:00Z" } };
+    await expect(state.operator.run({ ...command, checkpointEvidence: undefined })).rejects.toMatchObject({ stage: "execution_gate" });
+    time = command.occurredAt;
+    const result = await state.operator.run(command);
+    expect(result.preflight.digest).toBe(checked.preflight.digest);
+    expect(result).toMatchObject({ mode: "execute", dispatchOutcome: "completed" });
+    consumed = true;
+    await expect(state.operator.run(command)).rejects.toMatchObject({ stage: "policy" });
+    expect(calls).toBe(2);
+    expect(state.counts().creates).toBe(1);
+    expect(state.counts().claimed).toHaveLength(1);
+  });
+  it.each(["present", "unavailable"])("blocks %s checkpoint receipts before model access or mutations", async mode => {
+    let calls = 0;
+    const state = fixture(false, false, { supervisedAnalysis: { analyzeSupervisedFeasibility: () => { calls += 1; throw new Error("unexpected model access"); } }, reportDecision: () => {}, checkpoint: {
+      now: () => new Date("2026-08-31T21:40:00Z"), receipts: { observe: () => {
+        if (mode === "unavailable") throw new Error("private-sentinel");
+        return Promise.resolve({ repository: repositoryName, issueNumber, observedAt: "2026-08-31T21:40:00Z", status: "records_present", counts: { work_items: "1", bindings: "0", dispatch_attempts: "0", accepted_dispatches: "0", outbox_intents: "0", mutation_receipts: "0" } });
+      } },
+    } });
+    const error = await state.operator.run({ version: "supervised-dispatch-command/v1", mode: "preflight", repository: repositoryName, issueNumber, occurredAt: "2026-08-31T21:40:00Z" }).catch((value: unknown) => value);
+    expect(error).toMatchObject({ stage: mode === "present" ? "policy" : "database" });
+    expect(String(error)).not.toContain("private-sentinel");
+    expect(calls).toBe(0);
+    expect(state.counts()).toEqual({ creates: 0, workflowCalls: 0, claimed: [], nodeResults: 0 });
+  });
   it("does not fall back to legacy analysis when an enabled supervised provider omits its envelope", async () => {
     const state = fixture(false, false, { supervisedAnalysis: { analyzeSupervisedFeasibility: () => Promise.resolve(undefined as never) }, reportDecision: () => { throw new Error("unexpected report"); } });
     await expect(state.operator.run({ version: "supervised-dispatch-command/v1", mode: "preflight", repository: repositoryName, issueNumber, occurredAt: "2026-08-31T21:40:00Z" })).rejects.toMatchObject({ stage: "feasibility_validation", category: "unexpected" });

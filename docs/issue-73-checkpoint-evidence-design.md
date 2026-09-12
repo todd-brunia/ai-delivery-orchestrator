@@ -1,7 +1,8 @@
 # Issue #73: checkpoint evidence packet
 
-Status: local proposal following the owner's publishing-route choice; not
-implemented and not authorization for another live invocation.
+Status: implemented locally following the owner's approval, with local unit and
+PostgreSQL validation. Not deployed and not authorization for a live invocation.
+See `issue-73-pause-handoff.md` before resuming.
 
 ## Decision already made
 
@@ -32,8 +33,10 @@ gates. A favorable assessment cannot authorize execution or complete #73.
 Use a strict runtime-built packet, passed alongside the supervised analysis
 request and included in the exact hashed input artifact. It contains:
 
-- Checkpoint identifier `implementation_dispatch_observation`, actual invocation
-  mode, and `executionEnabled: false` for the disabled test path.
+- Checkpoint identifier `implementation_dispatch_observation`,
+  `assessmentMode: preflight`, and `assessmentExecutionEnabled: false` describing
+  the original read-only assessment. The outer runtime result separately records
+  its actual execution flag; these descriptive fields never authorize execution.
 - Canonical repository/issue identity, plan ID/hash, default SHA, workflow path,
   adapter/configuration fingerprint, and installation identity/permission digest.
 - Fresh attributable plan approval, independently selected using the existing
@@ -99,5 +102,28 @@ The runtime still has no local-operator publishing credential.
    integration tests. Keep one feature branch and one final orchestrator PR.
 
 Review the concrete implementation and its freshness bound before publishing a
-candidate or proposing another bounded live test. This proposal does not approve
+candidate or proposing another bounded live test. This implementation does not approve
 AWS execution, database writes/migrations, dispatch, fixture publication, or #74.
+
+## Implemented freshness and handoff
+
+The CLI opts into this packet; legacy injected callers retain their previous
+contract. The runtime acquires canonical facts, human approval events, and a
+repeatable-read, read-only PostgreSQL snapshot. Connection and statement timeouts
+are ten seconds. Only exact repository/issue lineage counts leave the reader;
+schema, access, partial-read, and parsing failures cannot become zero counts.
+
+Evidence expires five minutes after acquisition, with receipt age also bounded
+to five minutes. Time comes from the runtime clock, not the command timestamp.
+Validation runs before model access and again after feasibility/approval checks.
+The full plan remains in the model artifact and the packet changes its input hash.
+
+Execute commands must carry the returned `checkpointEvidence` snapshot when this
+feature is enabled. Execute independently rereads canonical facts, approval, and
+receipt counts, compares them with the snapshot, and reuses original timestamps
+only while fresh. This keeps the approved input digest reproducible without
+trusting a caller's old observation. Any changed binding, approval, nonzero count,
+or expiration blocks; a consumed checkpoint requires recovery review, not an
+automatic replay of its old execute command. Existing authorization and exact
+durable outbox claims remain mandatory. A clear count is not a transaction lock
+or a cross-authorization exactly-once guarantee.

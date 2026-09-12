@@ -21,6 +21,7 @@ import type { LiveDispatchWorker } from "./live-dispatch-worker.js";
 import { withinSupervisedStage, withinSupervisedStageSync } from "./supervised-diagnostics.js";
 import type { SupervisedAnalysisPort } from "../../providers/v1/supervised-analysis.js";
 import { createSupervisedDecisionReport, type SupervisedDecisionReport } from "./supervised-decision-report.js";
+import { buildCheckpointEvidence, CheckpointEvidenceSchema, checkpointDigest, revalidateCheckpointSnapshot, validateCheckpointEvidence, type CheckpointEvidence, type CheckpointReceiptPort } from "../../domain/sprint-delivery/v1/checkpoint-evidence.js";
 
 const shaSchema = z.string().regex(/^[a-f0-9]{40}$/);
 const fingerprintSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -36,6 +37,7 @@ export const SupervisedDispatchCommandSchema = z.discriminatedUnion("mode", [
   z.object({
     version: z.literal("supervised-dispatch-command/v1"),
     mode: z.literal("execute"),
+    checkpointEvidence: CheckpointEvidenceSchema.optional(),
     repository: RepositoryNameSchema,
     issueNumber: z.number().int().positive(),
     occurredAt: z.iso.datetime({ offset: true }),
@@ -66,6 +68,7 @@ export const SupervisedPreflightResultSchema = z.object({
   workflow: z.string().regex(/^[A-Za-z0-9_.-]+\.ya?ml$/),
   authorized: z.boolean(),
   executionEnabled: z.boolean(),
+  checkpointEvidence: CheckpointEvidenceSchema.optional(),
   blockers: z.array(z.literal("human_approval_required")).max(1),
 }).strict();
 export type SupervisedPreflightResult = z.infer<typeof SupervisedPreflightResultSchema>;
@@ -94,6 +97,7 @@ export interface SupervisedDispatchOperatorConfig {
 }
 
 interface OperatorDependencies {
+  readonly checkpoint?: { readonly receipts: CheckpointReceiptPort; readonly now: () => Date };
   readonly supervisedAnalysis?: SupervisedAnalysisPort;
   readonly reportDecision?: (report: SupervisedDecisionReport) => void;
   readonly repository: SprintRunRepository;
@@ -129,7 +133,10 @@ export class SupervisedDispatchOperator {
   async run(raw: unknown): Promise<SupervisedDispatchResult> {
     const command = withinSupervisedStageSync("configuration", () => SupervisedDispatchCommandSchema.parse(raw));
     withinSupervisedStageSync("policy", () => this.assertAudience(command.repository));
-    const preflight = await this.preflight(command.issueNumber, command.occurredAt);
+    withinSupervisedStageSync("execution_gate", () => {
+      if (this.dependencies.checkpoint && command.mode === "execute" && !command.checkpointEvidence) throw new Error("checkpoint snapshot is required for execution");
+    });
+    const preflight = await this.preflight(command.issueNumber, command.occurredAt, command.mode === "execute" ? command.checkpointEvidence : undefined);
     if (command.mode === "preflight") return { mode: "preflight", preflight };
     withinSupervisedStageSync("execution_gate", () => this.assertAuthorization(command, preflight));
 
@@ -179,7 +186,7 @@ export class SupervisedDispatchOperator {
     };
   }
 
-  private async preflight(issueNumber: number, occurredAt: string): Promise<SupervisedPreflightResult> {
+  private async preflight(issueNumber: number, occurredAt: string, snapshot?: CheckpointEvidence): Promise<SupervisedPreflightResult> {
     const branch = await withinSupervisedStage("canonical_read", () => this.dependencies.canonicalControl.getDefaultBranchHead(this.adapter.repository, this.adapter.defaultBranch));
     const defaultBranchSha = withinSupervisedStageSync("canonical_read", () => shaSchema.parse(branch.sha));
     await withinSupervisedStage("canonical_read", () => this.dependencies.canonicalControl.assertWorkflowAtRef(this.adapter.repository, this.adapter.workflows.implementation, defaultBranchSha));
@@ -192,8 +199,23 @@ export class SupervisedDispatchOperator {
       workItemId: previewWorkItemId,
       issueNumber,
       defaultBranchSha,
-      observedAt: occurredAt,
+      observedAt: this.dependencies.checkpoint?.now().toISOString() ?? occurredAt,
     }));
+    let checkpointEvidence: CheckpointEvidence | undefined;
+    if (this.dependencies.checkpoint) {
+      const control = this.dependencies.checkpoint;
+      if (!this.dependencies.supervisedAnalysis) throw new Error("checkpoint analysis provider is required");
+      const approvals = await withinSupervisedStage("canonical_read", () => this.dependencies.githubRead.getHumanBuildApprovals(this.adapter.repository, issueNumber));
+      const receipts = await withinSupervisedStage("database", () => control.receipts.observe(this.adapter.repository, issueNumber));
+      checkpointEvidence = withinSupervisedStageSync("policy", () => {
+        const fresh = buildCheckpointEvidence({ repository: this.adapter.repository, repositoryId: binding.repositoryConfiguration.repositoryId, issueNumber, issueNodeId: binding.issue.nodeId, issueUpdatedAt: binding.issue.updatedAt,
+          planCommentId: binding.plan.commentId, planSha256: binding.plan.bodySha256, planUpdatedAt: binding.plan.updatedAt, defaultBranchSha, workflow: this.adapter.workflows.implementation,
+          adapterFingerprint: binding.adapterFingerprint, configurationFingerprint: binding.repositoryConfiguration.configurationSha256, installationId: binding.installation.installationId, appId: binding.installation.appId,
+          permissionsFingerprint: checkpointDigest(Object.fromEntries(Object.entries(binding.installation.permissions).sort(([a], [b]) => a.localeCompare(b)))),
+        }, approvals, receipts, control.now());
+        return snapshot ? revalidateCheckpointSnapshot(snapshot, fresh, control.now()) : fresh;
+      });
+    }
     const analysisRequest = {
       version: "providers/v1" as const,
       repository: this.adapter.repository,
@@ -202,7 +224,7 @@ export class SupervisedDispatchOperator {
       defaultBranchSha,
     };
     const envelope = this.dependencies.supervisedAnalysis
-      ? await withinSupervisedStage("model_analysis", () => this.dependencies.supervisedAnalysis!.analyzeSupervisedFeasibility(analysisRequest))
+      ? await withinSupervisedStage("model_analysis", () => this.dependencies.supervisedAnalysis!.analyzeSupervisedFeasibility(analysisRequest, checkpointEvidence))
       : undefined;
     const rawAnalysis = this.dependencies.supervisedAnalysis ? envelope?.result : await withinSupervisedStage("model_analysis", () => this.dependencies.modelAnalysis.analyzeFeasibility(analysisRequest));
     if (this.dependencies.supervisedAnalysis) withinSupervisedStageSync("feasibility_validation", () => {
@@ -215,6 +237,7 @@ export class SupervisedDispatchOperator {
     });
     const analysis = withinSupervisedStageSync("feasibility_validation", () => validateFeasibilityForRun(rawAnalysis, [issueNumber]));
     const authorization = await withinSupervisedStage("policy", () => authorizeLiveBuild({ github: this.dependencies.githubRead, repository: this.adapter.repository, issueNumber, plan: binding.plan, analysis }));
+    if (checkpointEvidence && this.dependencies.checkpoint) withinSupervisedStageSync("policy", () => validateCheckpointEvidence(checkpointEvidence, checkpointEvidence.facts, this.dependencies.checkpoint!.now()));
     const stableEvidence = {
       repository: this.adapter.repository,
       repositoryId: binding.repositoryConfiguration.repositoryId,
@@ -254,6 +277,7 @@ export class SupervisedDispatchOperator {
       workflow: this.adapter.workflows.implementation,
       authorized: authorization.authorized,
       executionEnabled: this.config.executionEnabled,
+      ...(checkpointEvidence ? { checkpointEvidence } : {}),
       blockers,
     });
   }
