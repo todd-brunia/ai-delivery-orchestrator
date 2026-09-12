@@ -132,17 +132,20 @@ it needs a reviewed deployment design and must not be confused with #74's
 scheduled reconciliation. A long-running supervised public-network task is not
 authorized by the prior one-off checkpoint.
 
-The portal's `.github/workflows/implementation.yml` currently validates dispatch
-inputs only. It has no correlation `run-name`, does not create a branch/PR, and
-its workflow-runs endpoint returned no runs. #72 being closed therefore does not
-supply the prerequisite live fixture evidence. Changing that target workflow
-requires an approved target-repository plan amendment. The owner has authorized
-preparing the fixture extension interactively, but portal #142's current frozen
-plan explicitly excludes tracked-file changes and source/ref/PR creation. It is
-the dedicated fixture; portal #74 is substantive inquiry-persistence work and
-must not be used instead. The portal implementation skill requires the amended
-scope to be recorded and approved before edits. Local synthetic observations do
-not prove this live checkpoint.
+Portal PR #143 merged on 2026-09-12 at
+`7b46cc3478dcbbd4d2157dc1ea44d273750e796f`, following human reapproval of the
+marked #142 amendment. Its CI Gate passed. The implementation workflow now has
+the exact correlation `run-name`; its six inputs and read-only permissions are
+unchanged, and it still does not create a branch/PR. The workflow-runs endpoint
+returned zero runs after the merge, so #72 being closed does not supply the
+prerequisite live fixture evidence.
+
+Portal #142 was closed immediately after the merge and must be reopened with
+owner authorization before it can serve as the open issue-bound fixture. Its
+`approved-for-build` label remains present. Refresh canonical issue, approval,
+default-SHA and checkpoint evidence before proposing any live dispatch. Portal
+#74 is substantive inquiry-persistence work and must not be substituted. Local
+synthetic observations do not prove this live checkpoint.
 
 ## Following the supervised test in the AWS console
 
