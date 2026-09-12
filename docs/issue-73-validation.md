@@ -209,6 +209,25 @@ Launching that task still requires explicit owner approval. Any nonzero counts
 require further inspection before considering a new dispatch; zero counts alone
 do not prove all other dispatch prerequisites.
 
+The owner authorized that one-off inspection on 2026-09-12. ECS accepted exactly
+one task, ID `284d3f0d07414f7987b449e03b35885d`, using supervised revision 12 and
+client token `issue73-fixture142-readonly-20260912-a`. The reviewed command SHA-256
+was `e9d7f4b55b769958735ceea3ebeeac0092795bd5ca984cdf821e4a5b6e295816`.
+The existing service was not updated. The log stream is
+`supervised-dispatch/supervised-dispatch/284d3f0d07414f7987b449e03b35885d`
+in `/ai-delivery-orchestrator/pilot/worker`. Provisioning is not evidence of a
+successful database inspection; record the terminal result before proceeding.
+
+That task stopped with exit code 1. Its only application record was
+`{"event":"fixture_database_inspection","status":"unavailable"}`; no counts
+were returned. The observed deployed image digest was
+`sha256:a9c7df43f38d99d591525f33a9fdcec59fd0862f2322298e6ed07f5ff1d4b7ba`.
+The cause is not established because the command omitted stage diagnostics.
+Do not infer missing records, a successful connection, or dispatch eligibility.
+A revised diagnostic is prepared with closed stage/error categories and checks
+for the exact required table names; another launch needs fresh owner approval.
+No automatic retry, callback claim, migration, or service change was performed.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).
