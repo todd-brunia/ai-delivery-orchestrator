@@ -484,6 +484,51 @@ does not contain this code. A newly published immutable candidate and one bounde
 disabled preflight require separate owner authorization; this implementation
 cannot recover prior decision text or establish #73's live acceptance.
 
+The owner authorized publication and one disabled preflight for commit
+`af8ab3a5442d4b4ef00485fd03df969dcb7f799c`. Immutable image digest:
+`sha256:ae61c94781fcee65aa78d70c56294dc661157f9603b2a1f1e7c23287547edea7`.
+Supervised revision 17 was registered and verified equal to revision 16 in
+configurable fields except image. Pre-launch reads confirmed unchanged fixture
+plan/default SHA/permissions and required CI success. Task
+`df149cc33543476ea00ec5d88f41e35a` used the existing roles/network, dispatch disabled,
+and a 180-second execution deadline. ECS confirmed the image, start at
+2026-09-12T16:19:09.417Z, and stop at 16:19:52.100Z with exit code 1.
+
+The new report was emitted successfully. Its integrity hash is
+`b4f79c7a99285b398ea273d1eecfbf64d75e6ef4fed2fe30e200a0be2c20ef48`;
+the runtime-computed input artifact hash is
+`1c109408df670b4a8af6e09be77b9ff132705ce4ce89e65a06af6b274c3f0518`.
+It contained five model-reported categories: acceptance evidence, checkpoint
+consumption, dependency readiness, fixture publishing path, and operational
+authorization. The terminal diagnostic was `feasibility_validation /
+feasibility_rejected / infeasible`. Do not treat this as the same result as the
+previous invocation's unresolved-decisions rejection or as an authoritative
+finding that all five prerequisites are absent.
+
+The local read-only review helper verified all eight referenced plan segments
+against the report's exact body hash. Several references identify headings or
+future stop gates rather than detailed supporting evidence. The report exposes
+questions for review, not proof of missing approval. No raw model prose or source
+was printed by the helper. No additional preflight was launched. Worker service
+desired/running/pending remained zero; no dispatch, migration, callback enablement,
+service update, or PR occurred.
+
+### Resolution packet before another live attempt
+
+| Reported concern | Established evidence and remaining action |
+| --- | --- |
+| Acceptance evidence | The plan defines separate dispatch and callback checkpoints. Make the evaluated checkpoint explicit; do not imply later callback acceptance has occurred. |
+| Checkpoint consumption | The earlier approved DB inspection observed zero retained records across six tables. It is historical, not a permanent eligibility guarantee; revalidate before dispatch and bind the observation to the checkpoint. |
+| Dependency readiness | Fresh canonical reads confirm the current approved plan/default SHA and successful required CI. The model input contains issue/plan content, not a complete independently verified operational-evidence packet. |
+| Fixture publishing path | Recommend the existing local operator GitHub identity for the later exact disposable branch/PR, subject to separate approval. Keep the runtime source/ref mutation prohibition unchanged. This route choice has not yet been approved. |
+| Operational authorization | Current approval covers this disabled preflight only. Dispatch, fixture publication, migrations, and callback enablement remain distinct future gates; do not mark them granted. |
+
+Do not retry unchanged input or suppress model rejection. Review the publishing
+route choice and the design of a checkpoint-scoped, independently verified
+operational-evidence packet before another model invocation. Do not insert stale
+facts or conversational approval into trusted runtime evidence without an explicit
+binding/validation contract. #73 live acceptance remains incomplete.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).
