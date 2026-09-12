@@ -27,6 +27,7 @@ import {
   type GitHubReadConfigV1,
 } from "./contracts.js";
 import type { GitHubReadPort } from "./ports.js";
+import { CallbackPullRequestSchema, CallbackWorkflowSchema, type CallbackPullRequest, type CallbackReadPort, type CallbackWorkflow } from "./callback-reads.js";
 
 const planMarker = "<!-- codex-implementation-plan -->";
 
@@ -98,7 +99,7 @@ function githubPath(config: GitHubReadConfigV1, path: string): string {
 }
 
 /** A narrow GitHub App reader. It deliberately exposes no generic REST client or mutation method. */
-export class GitHubAppReadAdapter implements GitHubReadPort {
+export class GitHubAppReadAdapter implements GitHubReadPort, CallbackReadPort {
   private token: { value: string; expiresAt: number } | undefined;
 
   constructor(
@@ -214,8 +215,8 @@ export class GitHubAppReadAdapter implements GitHubReadPort {
 
   async getChecks(repository: string, headSha: string): Promise<readonly CanonicalCheck[]> {
     this.assertRepository(repository); const response = await this.get(`/repos/${repository}/commits/${headSha}/check-runs?per_page=${this.config.maxItems}`) as { check_runs?: unknown };
-    if (!Array.isArray(response.check_runs) || response.check_runs.length >= this.config.maxItems) throw new GitHubReadError("response_bounds", "GitHub check list is incomplete");
-    return response.check_runs.map((check) => { const item = check as Record<string, unknown>; return CanonicalCheckSchema.parse({ name: item.name, status: item.status, conclusion: item.conclusion ?? undefined, headSha, evidence: { uri: `github://checks/${repository}/${headSha}/${String(item.id)}`, observedAt: this.now().toISOString() } }); });
+    if (!Array.isArray(response.check_runs) || response.check_runs.length >= this.config.maxItems || !("total_count" in response) || response.total_count !== response.check_runs.length) throw new GitHubReadError("response_bounds", "GitHub check list is incomplete");
+    return response.check_runs.map((check) => { const item = check as Record<string, unknown>; if (item.head_sha !== headSha) throw new GitHubReadError("invalid_response", "check head mismatch"); return CanonicalCheckSchema.parse({ name: item.name, status: item.status, conclusion: item.conclusion ?? undefined, headSha: item.head_sha, evidence: { uri: `github://checks/${repository}/${headSha}/${String(item.id)}`, observedAt: this.now().toISOString() } }); });
   }
 
   async getExactDiff(repository: string, baseSha: string, headSha: string): Promise<CanonicalDiff> {
@@ -290,6 +291,7 @@ export class GitHubAppReadAdapter implements GitHubReadPort {
     const jwt = await this.appJwt();
     const response = await this.transport.request({ method: "GET", url: githubPath(this.config, `/app/installations/${this.config.installationId}`), headers: this.headers(jwt), timeoutMilliseconds: this.config.timeoutMilliseconds });
     const item = this.parse(response) as Record<string, unknown>; const account = item.account as Record<string, unknown> | undefined;
+    if (item.suspended_at !== null && item.suspended_at !== undefined) throw new GitHubReadError("authorization", "GitHub installation is suspended");
     const permissions = item.permissions as Record<string, unknown> | undefined;
     const selected = await this.get(`/installation/repositories?per_page=${this.config.maxItems}`) as Record<string, unknown>;
     const repositories = selected.repositories;
@@ -298,9 +300,47 @@ export class GitHubAppReadAdapter implements GitHubReadPort {
       return String(value.id) === this.config.repositoryId && value.full_name === repository;
     })) throw new GitHubReadError("authorization", "GitHub installation does not select configured repository");
     const observedPermissions: Record<string, string> = Object.fromEntries(Object.entries(permissions ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
-    const satisfies = (required: string, observed: string | undefined) => observed === required || (required === "read" && observed === "write");
+    const satisfies = (required: string | undefined, observed: string | undefined) => required === undefined || observed === required || (required === "read" && observed === "write");
     if (String(item.app_id) !== this.config.appId || account?.login !== this.config.installationAccount || Object.entries(this.config.requiredPermissions).some(([name, level]) => !satisfies(level, observedPermissions[name]))) throw new GitHubReadError("authorization", "GitHub installation identity or permissions drifted");
     return CanonicalInstallationSchema.parse({ appId: this.config.appId, installationId: String(item.id), accountLogin: account?.login, repositoryId: this.config.repositoryId, repository, permissions: observedPermissions, evidence: this.evidence(`github://installations/${this.config.installationId}`) });
+  }
+
+  async getCallbackWorkflow(repository: string, runId: string): Promise<CallbackWorkflow> {
+    this.assertRepository(repository);
+    if (!/^[1-9][0-9]{0,19}$/.test(runId)) throw new GitHubReadError("invalid_response", "invalid workflow identity");
+    const item = await this.get(`/repos/${repository}/actions/runs/${runId}`) as Record<string, unknown>;
+    const repo = item.repository as Record<string, unknown> | undefined;
+    return CallbackWorkflowSchema.parse({ id: String(item.id), workflowId: String(item.workflow_id), attempt: item.run_attempt, path: item.path, repositoryId: String(repo?.id), headSha: item.head_sha, marker: item.display_title, event: item.event, status: item.status, conclusion: item.conclusion });
+  }
+
+  async getCallbackPullRequest(repository: string, number: number): Promise<CallbackPullRequest> {
+    this.assertRepository(repository);
+    if (!Number.isSafeInteger(number) || number < 1) throw new GitHubReadError("invalid_response", "invalid pull request identity");
+    return this.callbackPullRequest(await this.get(`/repos/${repository}/pulls/${number}`));
+  }
+
+  private callbackPullRequest(raw: unknown): CallbackPullRequest {
+    const item = raw as Record<string, unknown>;
+    const head = item.head as { ref?: unknown; sha?: unknown; repo?: { id?: unknown } } | undefined;
+    const base = item.base as typeof head;
+    const markers = typeof item.body === "string" ? item.body.match(/orchestrator:[a-f0-9-]{36}:[a-f0-9-]{36}:[a-f0-9]{64}/g) : [];
+    if (markers?.length !== 1) throw new GitHubReadError("invalid_response", "pull request correlation is ambiguous or absent");
+    return CallbackPullRequestSchema.parse({ number: item.number, nodeId: item.node_id, repositoryId: String(base?.repo?.id), headRepositoryId: String(head?.repo?.id), branch: head?.ref, baseBranch: base?.ref, baseSha: base?.sha, headSha: head?.sha, open: item.state === "open" && !item.merged_at, marker: markers[0] });
+  }
+
+  async findCallbackPullRequests(repository: string, branch: string): Promise<readonly CallbackPullRequest[]> {
+    this.assertRepository(repository);
+    if (!/^[A-Za-z0-9._/-]{1,255}$/.test(branch)) throw new GitHubReadError("invalid_response", "invalid callback branch");
+    const values = await this.list(`/repos/${repository}/pulls?state=all&head=${encodeURIComponent(`${repository.split("/")[0]}:${branch}`)}&per_page=100`);
+    return values.map((value) => this.callbackPullRequest(value));
+  }
+
+  async getCallbackCheckPullRequests(repository: string, kind: "check_run" | "check_suite", id: number): Promise<{ readonly pullRequestNumbers: readonly number[]; readonly headSha: string }> {
+    this.assertRepository(repository);
+    if (!Number.isSafeInteger(id) || id < 1 || !["check_run", "check_suite"].includes(kind)) throw new GitHubReadError("invalid_response", "invalid check identity");
+    const item = await this.get(`/repos/${repository}/${kind === "check_run" ? "check-runs" : "check-suites"}/${id}`) as Record<string, unknown>;
+    if (item.id !== id || !Array.isArray(item.pull_requests) || item.pull_requests.length > 100) throw new GitHubReadError("response_bounds", "invalid check correlation");
+    return { pullRequestNumbers: item.pull_requests.map((value) => z.number().int().positive().parse((value as Record<string, unknown>).number)), headSha: z.string().regex(/^[a-f0-9]{40}$/).parse(item.head_sha) };
   }
 
   /** Narrow canonical control used by the supervised operator; it cannot select another repository or path. */

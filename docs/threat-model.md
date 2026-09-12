@@ -1,5 +1,21 @@
 # Autonomous Delivery Threat Model
 
+## Callback canonical-state boundary
+
+The callback pipeline uses webhook fields only to find a candidate. An item lease
+precedes canonical reads; the atomic commit checks both observed revisions,
+run control, delivery/item expiry, and external-object uniqueness. Duplicate
+semantic observations retain per-delivery evidence and cannot repeat transition
+or projection work. Missing required checks remain pending. Head/plan/workflow
+drift blocks continuation, while an old-head check is ignored. Callback errors
+cross the durable boundary only as closed categories, never exception text.
+
+The queue/projection process and canonical-reader process use separate existing
+IAM roles and communicate through PostgreSQL. Neither has a model generation or
+GitHub mutation port. A marker must match durable dispatch evidence, repository,
+issue, workflow, branch, and head; text that merely resembles a marker cannot
+authorize work. See [the validation and rollout boundary](issue-73-validation.md).
+
 ## Supervised dispatch authority
 
 Operator input is not an authority source. The supervised command accepts only an allowlisted repository identity, one issue number, bounded correlation evidence, and time. Repository adapter configuration, workflow, ref, provider selection, credentials, App/installation identity, permissions, and operation come from trusted composition plus canonical reads. The preflight digest excludes raw issue/plan text and changing observation timestamps while binding immutable identities and fingerprints. Execution is disabled by default, short-lived, single-item, durably recorded, and restricted to claiming the exact generated outbox row. Reusing an authorization with drift, selecting another repository, or placing instructions in issue/model/webhook content fails closed.

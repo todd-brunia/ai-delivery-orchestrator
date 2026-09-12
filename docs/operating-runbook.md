@@ -1,5 +1,30 @@
 # Local Operating Runbook
 
+## Callback processing
+
+Use [the #73 validation plan](issue-73-validation.md) for local acceptance,
+disabled-by-default runtime modes, exact-delivery cloud tests, and the remaining
+live fixture gate. Inspect `github_callback_notifications` for dead-letter and
+reconciliation requests and `github_callback_results.projected_at` for unpublished
+operator evidence. These are durable requests, not automatic replay authority.
+
+Stop new callback tasks on correlation or authority drift. Installation drift
+creates a persistent `github_callback_repository_blocks` row; it is not removed
+by an `unsuspend` or installation-created callback. Preserve this row and the
+inbox/correlations until reviewed canonical reconciliation authorizes recovery.
+Do not delete durable callback evidence or reset attempt counts to retry work.
+
+Read-only callback diagnostics (run in the selected environment's database):
+
+```sql
+SELECT status, count(*) FROM orchestrator.github_webhook_inbox GROUP BY status;
+SELECT delivery_id, work_item_id, kind, reason_class, recorded_at
+FROM orchestrator.github_callback_notifications ORDER BY recorded_at DESC LIMIT 100;
+SELECT delivery_id, work_item_id, disposition, reason_class, recorded_at
+FROM orchestrator.github_callback_results
+WHERE projected_at IS NULL ORDER BY recorded_at LIMIT 100;
+```
+
 ## Supervised single-item dispatch
 
 The `supervised-dispatch-command/v1` runtime boundary is a two-phase operator control. It is disabled by default (`SUPERVISED_DISPATCH_ENABLED=false`) and must be composed only with the allowlisted repository adapter, canonical GitHub readers, role-specific providers, PostgreSQL repository, existing live workflow, and `LiveDispatchWorker`. Enabling the flag alone supplies none of those dependencies and grants no authority.

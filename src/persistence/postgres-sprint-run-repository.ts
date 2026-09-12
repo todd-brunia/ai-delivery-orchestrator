@@ -68,6 +68,9 @@ function zArray(value: unknown): ReturnType<typeof ConflictDomainSchema.parse>[]
 }
 
 export class PostgresSprintRunRepository implements SprintRunRepository {
+  async releaseCallbackLease(workItemId: string, ownerId: string): Promise<void> {
+    await this.pool.query("DELETE FROM orchestrator.leases WHERE aggregate_type='work_item' AND aggregate_id=$1 AND owner_id=$2", [workItemId, ownerId]);
+  }
   constructor(private readonly pool: Pool) {}
 
   async createRun(

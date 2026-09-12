@@ -27,6 +27,7 @@ export const GitHubReadConfigV1Schema = z.object({
     issues: z.literal("read"),
     metadata: z.literal("read"),
     pull_requests: z.literal("read"),
+    checks: z.literal("read").optional(),
   }).strict(),
 }).strict();
 export type GitHubReadConfigV1 = z.infer<typeof GitHubReadConfigV1Schema>;

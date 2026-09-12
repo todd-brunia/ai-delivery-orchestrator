@@ -11,7 +11,7 @@ const inbox = new PostgresWebhookInbox(pool);
 const event = (deliveryId = randomUUID()): NormalizedGitHubEvent => ({ version: GITHUB_WEBHOOK_VERSION, deliveryId, eventName: "issues", action: "labeled", hookId: 123, installationId: 42, repository: "todd-brunia/ai-consulting-client-portal", senderLogin: "octocat", issueNumber: 81, payloadSha256: "a".repeat(64), receivedAt: "2026-08-01T12:00:00.000Z" });
 
 beforeAll(async () => migrate(pool));
-beforeEach(async () => pool.query("TRUNCATE orchestrator.github_callback_results, orchestrator.github_webhook_inbox"));
+beforeEach(async () => pool.query("TRUNCATE orchestrator.github_callback_results, orchestrator.github_webhook_inbox CASCADE"));
 afterAll(async () => pool.end());
 
 describe("PostgresWebhookInbox", () => {

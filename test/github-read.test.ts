@@ -30,7 +30,7 @@ describe("GitHub App canonical read adapter", () => {
       "POST https://api.github.com/app/installations/152627422/access_tokens": { status: 201, body: { token: "installation-token", expires_at: "2026-08-25T13:00:00.000Z" } },
       [`GET https://api.github.com/repos/${repository}/issues/69`]: { status: 200, body: { node_id: "I_69", title: "Read", body: "untrusted", state: "open", labels: [{ name: "approved-for-build" }], updated_at: "2026-08-25T11:00:00Z" } },
       [`GET https://api.github.com/repos/${repository}/issues/69/comments?per_page=10`]: { status: 200, body: [{ id: 99, body: "<!-- codex-implementation-plan -->\nplan", created_at: "2026-08-25T10:00:00Z", updated_at: "2026-08-25T10:00:00Z" }] },
-      [`GET https://api.github.com/repos/${repository}/commits/${sha}/check-runs?per_page=10`]: { status: 200, body: { check_runs: [{ id: 4, name: "CI Gate", status: "completed", conclusion: "success" }] } },
+      [`GET https://api.github.com/repos/${repository}/commits/${sha}/check-runs?per_page=10`]: { status: 200, body: { total_count: 1, check_runs: [{ id: 4, head_sha: sha, name: "CI Gate", status: "completed", conclusion: "success" }] } },
     });
     const client = adapter(transport);
     await expect(client.getIssue(repository, 69)).resolves.toMatchObject({ number: 69, labels: ["approved-for-build"] });

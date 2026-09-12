@@ -3,6 +3,12 @@
 For an editable, learning-oriented map of the components and interactions,
 see [Architecture diagram](./architecture-diagram.md).
 
+Callback implementation and the split ingress/processor runtime are described in
+[the #73 validation plan](issue-73-validation.md). PostgreSQL is the durable
+boundary between the existing worker identity (queues/projections) and supervised
+identity (canonical GitHub reads). Both modes are explicitly enabled; neither
+contains a model provider or GitHub publishing executor.
+
 ## Direction
 
 The orchestrator separates durable domain policy from runtime and provider

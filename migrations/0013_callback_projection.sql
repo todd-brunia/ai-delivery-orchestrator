@@ -1,0 +1,2 @@
+ALTER TABLE orchestrator.github_callback_results ADD COLUMN projected_at timestamptz;
+CREATE INDEX github_callback_results_unprojected_idx ON orchestrator.github_callback_results(recorded_at,delivery_id) WHERE projected_at IS NULL;

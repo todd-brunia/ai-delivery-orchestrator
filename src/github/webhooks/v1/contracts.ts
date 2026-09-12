@@ -11,7 +11,7 @@ export const GITHUB_WEBHOOK_VERSION = "github-webhook/v1" as const;
 export const GITHUB_CALLBACK_VERSION = "github-callback/v1" as const;
 
 export const GitHubEventNameSchema = z.enum([
-  "issues", "pull_request", "pull_request_review", "check_run", "check_suite",
+  "issues", "issue_comment", "pull_request", "pull_request_review", "check_run", "check_suite",
   "workflow_run", "installation", "installation_repositories",
 ]);
 
@@ -34,6 +34,7 @@ export const NormalizedGitHubEventSchema = z.object({
 }).strict().superRefine((event, context) => {
   const required: Partial<Record<typeof event.eventName, keyof typeof event>> = {
     issues: "issueNumber",
+    issue_comment: "issueNumber",
     pull_request: "pullRequestNumber",
     pull_request_review: "pullRequestNumber",
     check_run: "checkRunId",

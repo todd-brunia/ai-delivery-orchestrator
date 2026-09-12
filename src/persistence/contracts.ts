@@ -133,6 +133,11 @@ export interface CallbackResult {
 export interface CommitCallbackResultRequest extends CallbackResult {
   readonly deliveryLeaseOwner: string;
   readonly workItemLeaseOwner?: string;
+  readonly expectedRevision?: number;
+  readonly expectedRunRevision?: number;
+  readonly correlation?: CallbackCorrelation;
+  readonly artifacts?: readonly { readonly kind: string; readonly id: string; readonly fingerprint: string }[];
+  readonly notification?: "plan_authorization" | "reconciliation";
 }
 
 /** Immutable canonical evidence collected before feasibility or authorization may run. */
