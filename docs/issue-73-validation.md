@@ -397,6 +397,32 @@ coverage and unchanged feasibility/authorization gates. Review that change
 before any further live model attempt; do not retry the same input blindly or
 treat future operational approvals as already granted.
 
+The owner approved the local plan-content repair. A separate
+`MarkedPlanContentPort.getMarkedPlanContent` now returns the exact marked-comment
+body and metadata from one canonical read. Existing `getMarkedPlan` callers and
+persisted binding contracts remain metadata-only. Missing/ambiguous plans and
+incomplete comment reads still fail closed; plan text over 100,000 UTF-8 bytes is
+rejected, never truncated. The artifact builder independently verifies issue
+identity, open state, the requested plan fingerprint, and the SHA-256 of the exact
+body before including it. Entire issue bundles are limited to 500,000 UTF-8 bytes.
+
+The plan is included only as untrusted artifact text, not developer instructions
+or authority. Model permissions, request settings, feasibility gates, and human
+authorization policy are unchanged. Tests cover exact Unicode/line-ending
+preservation, metadata isolation, hash drift, missing markers, ambiguous plans,
+cross-repository access, per-plan/aggregate bounds, sanitized failures, and
+unchanged tool-free/non-stored requests. An offline model-adapter test proves
+drift stops before credential loading or transport invocation. Compiled checks
+exercise the real reader's exact-body hash and metadata-only boundary. No live
+model request, AWS access, image publication, or new PR is part of this repair.
+Its effect on the live unresolved-decisions result remains unverified.
+
+Local plan-content validation passed: lint, typecheck, 247 unit tests, six observer
+tests, 43 PostgreSQL integration tests, build, compiled checks, Docker build,
+and whitespace validation. A future live check requires a newly published
+immutable candidate containing this repair and separate authorization for one
+bounded disabled preflight; revision 15 does not contain it.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).

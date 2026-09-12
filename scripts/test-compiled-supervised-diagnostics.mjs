@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { stdout } from "node:process";
 
 import { GitHubAppReadAdapter } from "../dist/providers/v1/index.js";
@@ -78,3 +78,12 @@ assert.deepEqual(supervisedFailureDiagnostic(feasibilityFailure), {
   stage: "feasibility_validation", category: "feasibility_rejected", feasibilityReason: "conflict_coverage",
 });
 stdout.write("compiled feasibility rejection boundary passed\n");
+
+const planBody = "<!-- codex-implementation-plan -->\r\nprivate-sentinel ✓\n";
+const planReader = adapter([{ id: 142, body: planBody, created_at: "2026-09-02T15:00:00Z", updated_at: "2026-09-02T15:00:00Z" }]);
+const planContent = await planReader.getMarkedPlanContent(repository, 142);
+assert.equal(planContent.body, planBody);
+assert.equal(planContent.plan.bodySha256, createHash("sha256").update(planBody).digest("hex"));
+assert.deepEqual(await planReader.getMarkedPlan(repository, 142), planContent.plan);
+assert.doesNotMatch(JSON.stringify(planContent.plan), /private-sentinel/);
+stdout.write("compiled exact plan content and metadata isolation passed\n");

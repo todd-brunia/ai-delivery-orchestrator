@@ -2,11 +2,11 @@ import { z } from "zod";
 import { CanonicalGitHubArtifactSource } from "./canonical-artifacts.js";
 import { OpenAiAnalysisAdapter, type OpenAiApiKeySource, type OpenAiHttpTransport } from "./openai-analysis.js";
 import { OpenAiAnalysisConfigV1Schema } from "./contracts.js";
-import type { ProviderSet } from "./ports.js";
+import type { ProviderSet, MarkedPlanContentPort } from "./ports.js";
 import { StubGitHubMutationAdapter, StubGitHubReadAdapter, StubModelAnalysisAdapter } from "./stubs.js";
 
 export const EnabledProviderModeSchema = z.enum(["stub", "openai-analysis"]);
-export interface OpenAiAnalysisDependencies { readonly githubRead: ProviderSet["githubRead"]; readonly apiKeys: OpenAiApiKeySource; readonly transport: OpenAiHttpTransport; readonly config: unknown; }
+export interface OpenAiAnalysisDependencies { readonly githubRead: ProviderSet["githubRead"] & MarkedPlanContentPort; readonly apiKeys: OpenAiApiKeySource; readonly transport: OpenAiHttpTransport; readonly config: unknown; }
 export function createProviderSet(mode: unknown, dependencies?: OpenAiAnalysisDependencies): ProviderSet {
   const enabled = EnabledProviderModeSchema.parse(mode);
   if (enabled === "stub") return { githubRead: new StubGitHubReadAdapter(), githubMutation: new StubGitHubMutationAdapter(), modelAnalysis: new StubModelAnalysisAdapter() };

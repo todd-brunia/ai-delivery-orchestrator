@@ -12,6 +12,10 @@ export interface GitHubReadPort {
   getRepositoryConfiguration(repository: string): Promise<CanonicalRepositoryConfiguration>;
   getInstallation(repository: string): Promise<CanonicalInstallation>;
 }
+/** Opt-in source content access; canonical binding records remain metadata-only. */
+export interface MarkedPlanContentPort {
+  getMarkedPlanContent(repository: string, number: number): Promise<{ readonly plan: CanonicalPlan; readonly body: string }>;
+}
 export interface GitHubMutationPort { propose(intent: GitHubMutationIntent): Promise<{ readonly accepted: true; readonly intentId: string }>; }
 export interface ModelAnalysisPort { analyzeFeasibility(request: FeasibilityRequest): Promise<FeasibilityResult>; reviewPullRequest(request: PullRequestReviewRequest): Promise<PullRequestReviewResult>; }
 export interface ProviderSet { readonly githubRead: GitHubReadPort; readonly githubMutation: GitHubMutationPort; readonly modelAnalysis: ModelAnalysisPort; }

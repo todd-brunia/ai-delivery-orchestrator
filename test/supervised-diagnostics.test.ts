@@ -124,6 +124,7 @@ describe("supervised runtime failure diagnostics", () => {
       ["assertWorkflowAtRef", "workflow_at_ref"],
       ["getIssue", "issue"],
       ["getMarkedPlan", "marked_plan"],
+      ["getMarkedPlanContent", "marked_plan"],
       ["getRepositoryConfiguration", "repository_configuration"],
       ["getInstallation", "installation"],
       ["getHumanBuildApprovals", "human_approval"],

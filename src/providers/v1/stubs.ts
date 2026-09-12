@@ -17,6 +17,7 @@ export class StubGitHubReadAdapter implements GitHubReadPort {
   async getHumanBuildApprovals(repository: string, number: number): Promise<readonly CanonicalHumanBuildApproval[]> { await Promise.resolve(); return clone(this.approvals.get(key(repository, number)) ?? []); }
   async getChecks(repository: string, headSha: string): Promise<readonly CanonicalCheck[]> { await Promise.resolve(); const value = this.checks.get(`${repository}@${headSha}`); if (!value) throw new Error("missing stub check fixture"); return clone(value); }
   async getExactDiff(): Promise<never> { await Promise.resolve(); throw new Error("missing stub exact diff fixture"); }
+  async getMarkedPlanContent(): Promise<never> { await Promise.resolve(); throw new Error("missing stub plan content fixture"); }
   async getReviews(): Promise<never> { await Promise.resolve(); throw new Error("missing stub review fixture"); }
   async getWorkflowRuns(): Promise<never> { await Promise.resolve(); throw new Error("missing stub workflow run fixture"); }
   async getRepositoryConfiguration(): Promise<never> { await Promise.resolve(); throw new Error("missing stub repository configuration fixture"); }

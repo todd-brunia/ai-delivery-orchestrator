@@ -1,4 +1,4 @@
-import { generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
@@ -25,6 +25,32 @@ function adapter(transport: FixtureTransport): GitHubAppReadAdapter {
 }
 
 describe("GitHub App canonical read adapter", () => {
+  it("returns exact plan content only through the explicit content port", async () => {
+    const body = "<!-- codex-implementation-plan -->\r\nprivate-sentinel ✓\n";
+    const transport = new FixtureTransport({
+      "POST https://api.github.com/app/installations/152627422/access_tokens": { status: 201, body: { token: "installation-token", expires_at: "2026-08-25T13:00:00.000Z" } },
+      [`GET https://api.github.com/repos/${repository}/issues/69/comments?per_page=10`]: { status: 200, body: [{ id: 99, body, created_at: "2026-08-25T10:00:00Z", updated_at: "2026-08-25T10:00:00Z" }] },
+    });
+    const client = adapter(transport);
+    const content = await client.getMarkedPlanContent(repository, 69);
+    expect(content.body).toBe(body);
+    expect(content.plan.bodySha256).toBe(createHash("sha256").update(body).digest("hex"));
+    const metadata = await client.getMarkedPlan(repository, 69);
+    expect(metadata).toEqual(content.plan);
+    expect(JSON.stringify(metadata)).not.toContain("private-sentinel");
+    await expect(client.getMarkedPlanContent("other/repository", 69)).rejects.toMatchObject({ code: "authorization" });
+  });
+
+  it("rejects oversized plan text without truncating or exposing it", async () => {
+    const transport = new FixtureTransport({
+      "POST https://api.github.com/app/installations/152627422/access_tokens": { status: 201, body: { token: "installation-token", expires_at: "2026-08-25T13:00:00.000Z" } },
+      [`GET https://api.github.com/repos/${repository}/issues/69/comments?per_page=10`]: { status: 200, body: [{ id: 99, body: "<!-- codex-implementation-plan -->private-sentinel" + "✓".repeat(34_000), created_at: "2026-08-25T10:00:00Z", updated_at: "2026-08-25T10:00:00Z" }] },
+    });
+    const client = new GitHubAppReadAdapter({ ...config, maxResponseBytes: 500_000 }, "ai-delivery-orchestrator/pilot/github-app-reviewer-private-key", { load: () => Promise.resolve(privateKey) }, transport, () => new Date("2026-08-25T12:00:00.000Z"));
+    const failure = await client.getMarkedPlanContent(repository, 69).catch((value: unknown) => value);
+    expect(failure).toMatchObject({ code: "response_bounds" });
+    expect(String(failure)).not.toContain("private-sentinel");
+  });
   it("uses a short-lived installation token, bounds results, and returns canonical observations", async () => {
     const transport = new FixtureTransport({
       "POST https://api.github.com/app/installations/152627422/access_tokens": { status: 201, body: { token: "installation-token", expires_at: "2026-08-25T13:00:00.000Z" } },
@@ -49,6 +75,7 @@ describe("GitHub App canonical read adapter", () => {
     const client = adapter(transport);
     await expect(client.getIssue("other/repository", 69)).rejects.toMatchObject({ code: "authorization" } satisfies Partial<GitHubReadError>);
     await expect(client.getMarkedPlan(repository, 69)).rejects.toMatchObject({ code: "invalid_response" } satisfies Partial<GitHubReadError>);
+    await expect(client.getMarkedPlanContent(repository, 69)).rejects.toMatchObject({ code: "invalid_response" } satisfies Partial<GitHubReadError>);
   });
 
   it("normalizes immutable diff, review, workflow, repository, and installation observations", async () => {

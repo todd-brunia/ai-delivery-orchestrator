@@ -195,12 +195,17 @@ export class GitHubAppReadAdapter implements GitHubReadPort, CallbackReadPort {
   }
 
   async getMarkedPlan(repository: string, number: number): Promise<CanonicalPlan> {
+    return (await this.getMarkedPlanContent(repository, number)).plan;
+  }
+
+  async getMarkedPlanContent(repository: string, number: number): Promise<{ plan: CanonicalPlan; body: string }> {
     this.assertRepository(repository); const comments = await this.get(`/repos/${repository}/issues/${number}/comments?per_page=${this.config.maxItems}`);
     if (!Array.isArray(comments) || comments.length >= this.config.maxItems) throw new GitHubReadError("response_bounds", "GitHub plan comments are incomplete");
     const plans = comments.filter((comment): comment is Record<string, unknown> => !!comment && typeof comment === "object" && typeof (comment as Record<string, unknown>).body === "string" && ((comment as Record<string, unknown>).body as string).includes(planMarker));
     if (plans.length !== 1) throw new GitHubReadError("invalid_response", "expected exactly one marked implementation plan");
     const plan = plans[0]!; const body = plan.body as string;
-    return CanonicalPlanSchema.parse({ issueNumber: number, commentId: String(plan.id), bodySha256: digest(body), createdAt: iso(plan.created_at), updatedAt: iso(plan.updated_at), evidence: { uri: `github://issues/${repository}/${number}/comments/${String(plan.id)}`, observedAt: this.now().toISOString(), sha256: digest(body) } });
+    if (Buffer.byteLength(body, "utf8") > 100_000) throw new GitHubReadError("response_bounds", "marked plan exceeds content bound");
+    return { body, plan: CanonicalPlanSchema.parse({ issueNumber: number, commentId: String(plan.id), bodySha256: digest(body), createdAt: iso(plan.created_at), updatedAt: iso(plan.updated_at), evidence: { uri: `github://issues/${repository}/${number}/comments/${String(plan.id)}`, observedAt: this.now().toISOString(), sha256: digest(body) } }) };
   }
 
   async getHumanBuildApprovals(repository: string, number: number): Promise<readonly CanonicalHumanBuildApproval[]> {
