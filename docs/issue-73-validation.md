@@ -448,6 +448,14 @@ logging raw model reasoning, private source, credentials, or provider bodies.
 Do not suppress unresolved decisions, assume they are merely future authorization
 gates, or repeatedly invoke the model hoping for an approving result.
 
+With owner authorization, the local design for a bounded operator report is in
+[issue-73-decision-report-design.md](issue-73-decision-report-design.md).
+It proposes fixed decision codes/templates, manifest-validated source references,
+runtime-computed provenance, and unchanged rejection/authorization behavior.
+It is not implemented and cannot reconstruct prior decision text. This turn
+changed documentation only: whitespace validation passed; runtime tests were not
+rerun. No live model/AWS call, image publication, or PR was performed.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).
