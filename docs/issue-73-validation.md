@@ -185,6 +185,30 @@ scope into one current marked plan and explicitly retire the superseded markers,
 then obtain fresh human approval after that edit. Do not silently select one
 comment, discard inherited constraints, or reuse the previous plan digest.
 
+The owner authorized consolidation, and exactly one active marked plan now
+remains: comment `5646729081`. The two earlier comments retain their prose with
+superseded markers. Fresh human approval was recorded at
+`2026-09-12T15:11:51Z`. Subsequent canonical reads succeeded: issue #142 is open,
+the plan digest is
+`e4bc9e3ebb57834c1426c405d9beb5ff55fa0268e9716bee50b4cd03e8c1f76a`,
+the default SHA remains `7b46cc3478dcbbd4d2157dc1ea44d273750e796f`, the
+implementation workflow exists at that SHA, the installation matches the updated
+ceiling, and its sole `CI Gate` is successful. These are read-only observations,
+not the full model-assisted supervised preflight or dispatch authorization.
+
+Next proposed checkpoint: one read-only Fargate database inspection using the
+existing supervised task revision 12, existing task/execution roles, secret
+references, log group, and supervised network. Override only the command with a
+reviewed 45-second diagnostic; retain `SUPERVISED_DISPATCH_ENABLED=false`.
+The diagnostic counts #142-bound work items, planning bindings, dispatch attempts,
+accepted dispatches, outbox intents, and mutation receipts in a PostgreSQL
+read-only transaction, without reading stored evidence bodies. Its SQL was
+validated against the isolated local test database. No image publication,
+migration, model/GitHub call, callback processing, or service update is included.
+Launching that task still requires explicit owner approval. Any nonzero counts
+require further inspection before considering a new dispatch; zero counts alone
+do not prove all other dispatch prerequisites.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).
