@@ -1,0 +1,50 @@
+# These commands need access to protected Git metadata or external services.
+# All other outside-sandbox commands retain the on-request approval boundary.
+
+prefix_rule(pattern = ["git", "add"], decision = "allow")
+prefix_rule(pattern = ["git", "branch"], decision = "allow")
+prefix_rule(pattern = ["git", "commit"], decision = "allow")
+prefix_rule(pattern = ["git", "diff"], decision = "allow")
+prefix_rule(pattern = ["git", "fetch"], decision = "allow")
+prefix_rule(pattern = ["git", "log"], decision = "allow")
+prefix_rule(pattern = ["git", "merge"], decision = "allow")
+prefix_rule(pattern = ["git", "pull"], decision = "allow")
+prefix_rule(pattern = ["git", "push"], decision = "allow")
+prefix_rule(pattern = ["git", "rebase"], decision = "allow")
+prefix_rule(pattern = ["git", "show"], decision = "allow")
+prefix_rule(pattern = ["git", "status"], decision = "allow")
+prefix_rule(pattern = ["git", "switch"], decision = "allow")
+
+prefix_rule(pattern = ["gh", "issue", "list"], decision = "allow")
+prefix_rule(pattern = ["gh", "issue", "view"], decision = "allow")
+prefix_rule(pattern = ["gh", "issue", "create"], decision = "allow")
+prefix_rule(pattern = ["gh", "issue", "comment"], decision = "allow")
+prefix_rule(pattern = ["gh", "issue", "edit"], decision = "allow")
+prefix_rule(pattern = ["gh", "pr", "list"], decision = "allow")
+prefix_rule(pattern = ["gh", "pr", "view"], decision = "allow")
+prefix_rule(pattern = ["gh", "pr", "diff"], decision = "allow")
+prefix_rule(pattern = ["gh", "pr", "checks"], decision = "allow")
+prefix_rule(pattern = ["gh", "pr", "create"], decision = "allow")
+prefix_rule(pattern = ["gh", "pr", "comment"], decision = "allow")
+prefix_rule(pattern = ["gh", "pr", "edit"], decision = "allow")
+
+prefix_rule(
+    pattern = ["git", "push", "--delete"],
+    decision = "prompt",
+    justification = "Remote branch deletion requires human approval.",
+)
+prefix_rule(
+    pattern = ["git", "push", "origin", "--delete"],
+    decision = "prompt",
+    justification = "Remote branch deletion requires human approval.",
+)
+prefix_rule(
+    pattern = ["git", "reset", "--hard"],
+    decision = "prompt",
+    justification = "Hard reset can discard local work.",
+)
+prefix_rule(
+    pattern = ["git", "clean"],
+    decision = "prompt",
+    justification = "Cleaning can delete untracked files.",
+)

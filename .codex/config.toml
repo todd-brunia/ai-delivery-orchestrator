@@ -1,0 +1,19 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+
+# Normal work stays inside this repository's writable workspace. Keep the
+# remaining approval path for actions that are not explicitly allow-listed.
+approval_policy = "on-request"
+approvals_reviewer = "user"
+sandbox_mode = "workspace-write"
+web_search = "live"
+
+[sandbox_workspace_write]
+network_access = true
+
+# Allow normal development traffic while retaining the proxy's protection
+# against accidental access to private network destinations. localhost is
+# needed for local development servers and integration tests.
+[features.network_proxy]
+enabled = true
+allow_local_binding = false
+domains = { "*" = "allow", "localhost" = "allow" }
