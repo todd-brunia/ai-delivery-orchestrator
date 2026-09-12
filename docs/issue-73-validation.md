@@ -171,6 +171,20 @@ permission has changed. Recheck installation metadata and a narrowed exact-head
 checks read after the owner saves and accepts the update. Do not reuse a prior
 planning binding across this permission change or enable callbacks automatically.
 
+After the owner accepted the installation update on 2026-09-12, App-authenticated
+verification confirmed the exact updated permission ceiling and selected portal
+repository access. A narrowed read token successfully retrieved six checks on
+`7b46cc3478dcbbd4d2157dc1ea44d273750e796f`; its sole `CI Gate` was completed and
+successful. This is permission/canonical-read evidence, not callback processing.
+
+The next canonical fixture read failed closed: #142 has both the original marked
+plan and the newly posted marked amendment, while `getMarkedPlan` requires exactly
+one marked comment. The fixture preparation introduced this mismatch. Preserve
+both historical records; obtain owner authorization to consolidate the approved
+scope into one current marked plan and explicitly retire the superseded markers,
+then obtain fresh human approval after that edit. Do not silently select one
+comment, discard inherited constraints, or reuse the previous plan digest.
+
 ## Following the supervised test in the AWS console
 
 Select account `025540956479` and region **US East (N. Virginia)** (`us-east-1`).
