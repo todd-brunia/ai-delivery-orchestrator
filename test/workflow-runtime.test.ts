@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { MemorySaver } from "@langchain/langgraph";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { transitionSprintRun, transitionWorkItem, WORKFLOW_VERSION } from "../src/domain/sprint-delivery/v1/index.js";
 import type { PersistedPlanningBinding, PersistedSprintRun, SavePlanningBindingRequest, SprintAnalysis, SprintRunRepository } from "../src/persistence/index.js";
@@ -102,11 +102,33 @@ describe("sprint-delivery/v1 dry-run runtime", () => {
     await expect(createSprintDeliveryV1Runtime(repository, providers(), new MemorySaver()).execute({ ...request(repository.run.id), planFingerprints: { "81": "c".repeat(64) } })).rejects.toThrow("canonical marked plan drifted");
   });
 
-  it("collects and persists canonical live bindings before later live workflow nodes", async () => {
+  it.each(["accepted", "rejected", "unresolved", "unavailable"] as const)("preserves the independent full-issue execution assessment (%s)", async (assessment) => {
     const repository = new MemoryRepository();
     const providerSet = providers();
+    const transition = vi.spyOn(repository, "transitionWorkItem");
+    const analyze = vi.spyOn(providerSet.modelAnalysis, "analyzeFeasibility");
+    if (assessment === "rejected" || assessment === "unresolved") {
+      const valid = await providerSet.modelAnalysis.analyzeFeasibility({ version: PROVIDER_CONTRACT_VERSION, repository: repositoryName, issueNumbers: [81], planFingerprints: { "81": hash }, defaultBranchSha: sha });
+      analyze.mockClear();
+      analyze.mockResolvedValue({ ...valid, feasible: assessment === "unresolved", unresolvedDecisions: ["Full-issue readiness remains unresolved"] });
+    }
+    if (assessment === "unavailable") analyze.mockRejectedValue(new Error("assessment unavailable"));
     const github = { getIssue: providerSet.githubRead.getIssue.bind(providerSet.githubRead), getMarkedPlan: providerSet.githubRead.getMarkedPlan.bind(providerSet.githubRead), getHumanBuildApprovals: providerSet.githubRead.getHumanBuildApprovals.bind(providerSet.githubRead), getRepositoryConfiguration: () => Promise.resolve({ repository: repositoryName, repositoryId: "123", defaultBranch: "main", visibility: "private" as const, archive: false, configurationSha256: "c".repeat(64), evidence: { uri: "github://repo/123", observedAt: "2026-08-05T12:00:00Z" } }), getInstallation: () => Promise.resolve({ appId: "456", installationId: "789", accountLogin: "todd-brunia", repositoryId: "123", repository: repositoryName, permissions: { actions: "write", issues: "write" }, evidence: { uri: "github://installation/789", observedAt: "2026-08-05T12:00:00Z" } }) };
     const adapter = { version: 1, repository: repositoryName, defaultBranch: "main", enabled: true, orchestratorAppSlug: "ai-delivery-orchestrator", workflows: { implementation: "implementation.yml", repair: "repair.yml", sync: "sync.yml" }, labels: { needsPlanning: "needs-planning", planReady: "plan-ready", approvedForBuild: "approved-for-build", approvedForAiBuild: "approved-for-ai-build", inProgress: "in-progress", previewReady: "preview-ready", needsDecision: "needs-decision", blocked: "blocked" }, requiredChecks: ["CI"], maxParallelImplementations: 1, risk: { humanApprovalCategories: ["security"], humanApprovalLabels: [], humanApprovalPathPatterns: [] } };
-    await expect(createLiveBindingWorkflowRuntime(repository, { githubRead: github, modelAnalysis: providerSet.modelAnalysis } as never).execute({ workflowVersion: WORKFLOW_VERSION, providerMode: "live", runId: repository.run.id, threadId: "live:fixture", defaultBranchSha: sha, adapter, occurredAt: "2026-08-05T12:00:00Z" })).resolves.toMatchObject({ status: "bindings_collected", authorizedIssueNumbers: [81], waitingIssueNumbers: [], scheduledIssueNumbers: [81] });
+    const execution = createLiveBindingWorkflowRuntime(repository, { githubRead: github, modelAnalysis: providerSet.modelAnalysis } as never).execute({ workflowVersion: WORKFLOW_VERSION, providerMode: "live", runId: repository.run.id, threadId: "live:fixture", defaultBranchSha: sha, adapter, occurredAt: "2026-08-05T12:00:00Z" });
+    if (assessment === "accepted") {
+      await expect(execution).resolves.toMatchObject({ status: "bindings_collected", authorizedIssueNumbers: [81], waitingIssueNumbers: [], scheduledIssueNumbers: [81] });
+    } else {
+      if (assessment === "unavailable") await expect(execution).rejects.toThrow("assessment unavailable");
+      else await expect(execution).rejects.toMatchObject({ reason: assessment === "rejected" ? "infeasible" : "unresolved_decisions" });
+      expect(transition).not.toHaveBeenCalled();
+      expect(repository.analysis).toBeUndefined();
+      expect(repository.run.workItems[0]).toMatchObject({ state: "discovered", revision: 0 });
+    }
+    expect(analyze).toHaveBeenCalledExactlyOnceWith({ version: PROVIDER_CONTRACT_VERSION, repository: repositoryName, issueNumbers: [81], planFingerprints: { "81": hash }, defaultBranchSha: sha });
+    // Even a failed execute has persisted a binding: this is not a read-only
+    // preflight and cannot be replayed as a fresh, unconsumed checkpoint.
+    expect(repository.bindings.size).toBe(1);
+    expect(providerSet.githubMutation.invocations()).toEqual([]);
   });
 });

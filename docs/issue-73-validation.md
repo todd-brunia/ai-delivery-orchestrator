@@ -2,6 +2,23 @@
 
 ## September 13 resumed validation (latest)
 
+### Execution-handoff regression evidence
+
+Local tests now exercise the actual live binding workflow with accepted,
+infeasible, unresolved-decision and unavailable full-issue assessments. All three
+failure cases preserve the discovered work-item state/revision and produce no
+work-item transition or GitHub mutation. The workflow independently requests
+full-issue feasibility from the canonically collected plan fingerprint; the
+scoped supervised preflight does not replace this assessment.
+
+Crucially, the workflow persists a planning binding **before** that assessment.
+A later rejection is therefore a consumed execution attempt, not a read-only
+preflight. The existing supervised operator test's successful stubbed workflow
+does not prove this live handoff. Do not attempt a live execute merely because
+the narrower preflight becomes ready: validate this independent gate and its
+recovery implications first. No assessment policy, runtime authorization, AWS
+resource or live fixture was changed by this regression work.
+
 ### Approved lifecycle implementation and first pilot checks
 
 Checkpoint outcome: both bounded ECS coordination probes exited 0, and the
