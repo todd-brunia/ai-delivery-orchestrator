@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { RepositoryNameSchema } from "./contracts.js";
 import { CanonicalHumanBuildApprovalSchema } from "../../../providers/v1/contracts.js";
+import { RuntimeObservationSchema, type RuntimeObservation } from "./runtime-evidence.js";
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const instant = z.iso.datetime({ offset: true });
@@ -22,7 +23,7 @@ export const CheckpointFactsSchema = z.object({
 }).strict();
 export type CheckpointFacts = z.infer<typeof CheckpointFactsSchema>;
 export const CHECKPOINT_FRESHNESS_MS = 5 * 60_000;
-export const CheckpointEvidenceSchema = z.object({
+const CheckpointEvidenceV1Schema = z.object({
   version: z.literal("supervised-checkpoint-evidence/v1"), checkpoint: z.literal("implementation_dispatch_observation"),
   assessmentMode: z.literal("preflight"), assessmentExecutionEnabled: z.literal(false), observedAt: instant, expiresAt: instant,
   facts: CheckpointFactsSchema,
@@ -32,6 +33,10 @@ export const CheckpointEvidenceSchema = z.object({
   futureGates: z.object({ workflowDispatch: z.literal("not_authorized"), fixturePublication: z.literal("not_authorized"), awsMigrations: z.literal("not_authorized"), callbackEnablement: z.literal("not_authorized") }).strict(),
   acceptanceCriteria: z.tuple([z.literal("accepted_immutable_workflow_receipt"), z.literal("canonical_workflow_ref_attempt_correlation"), z.literal("successful_evidence_only_validation"), z.literal("preserved_sanitized_records")]),
 }).strict();
+export const CheckpointEvidenceSchema = z.discriminatedUnion("version", [
+  CheckpointEvidenceV1Schema,
+  CheckpointEvidenceV1Schema.extend({ version: z.literal("supervised-checkpoint-evidence/v2"), runtime: RuntimeObservationSchema }),
+]);
 export type CheckpointEvidence = z.infer<typeof CheckpointEvidenceSchema>;
 export const checkpointDigest = (value: unknown): string => createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex");
 
@@ -42,6 +47,9 @@ export function validateCheckpointEvidence(raw: unknown, expected: CheckpointFac
     const facts = CheckpointFactsSchema.parse(expected);
     const time = now.getTime();
     const observed = Date.parse(packet.observedAt), expires = Date.parse(packet.expiresAt), receiptTime = Date.parse(packet.receipts.observedAt);
+    if (packet.version === "supervised-checkpoint-evidence/v2" && (packet.runtime.constraints.repository !== facts.repository ||
+        packet.runtime.mode !== "preflight" || packet.runtime.executionEnabled || Date.parse(packet.runtime.observedAt) > observed ||
+        time - Date.parse(packet.runtime.observedAt) >= CHECKPOINT_FRESHNESS_MS)) throw new Error();
     if (!Number.isFinite(time) || checkpointDigest(packet.facts) !== checkpointDigest(facts) || observed > time || time >= expires || expires - observed !== CHECKPOINT_FRESHNESS_MS ||
         receiptTime > observed || observed - receiptTime > CHECKPOINT_FRESHNESS_MS || time - receiptTime > CHECKPOINT_FRESHNESS_MS ||
         Date.parse(facts.planUpdatedAt) > observed || Date.parse(facts.issueUpdatedAt) > observed || Date.parse(packet.approval.occurredAt) < Date.parse(facts.planUpdatedAt) || Date.parse(packet.approval.occurredAt) > observed ||
@@ -52,7 +60,7 @@ export function validateCheckpointEvidence(raw: unknown, expected: CheckpointFac
   } catch { throw new Error("checkpoint evidence is invalid, stale, or blocked"); }
 }
 
-export function buildCheckpointEvidence(rawFacts: CheckpointFacts, rawApprovals: unknown, rawReceipts: unknown, now: Date): CheckpointEvidence {
+export function buildCheckpointEvidence(rawFacts: CheckpointFacts, rawApprovals: unknown, rawReceipts: unknown, now: Date, runtime?: RuntimeObservation): CheckpointEvidence {
   try {
     const facts = CheckpointFactsSchema.parse(rawFacts);
     const approvals = CanonicalHumanBuildApprovalSchema.array().max(1000).parse(rawApprovals);
@@ -60,7 +68,7 @@ export function buildCheckpointEvidence(rawFacts: CheckpointFacts, rawApprovals:
     const current = approvals.filter(value => value.issueNumber === facts.issueNumber && Date.parse(value.occurredAt) >= Date.parse(facts.planUpdatedAt) && Date.parse(value.occurredAt) <= now.getTime())
       .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt) || a.evidence.uri.localeCompare(b.evidence.uri))[0];
     if (!current || Date.parse(current.evidence.observedAt) > now.getTime() || now.getTime() - Date.parse(current.evidence.observedAt) > CHECKPOINT_FRESHNESS_MS) throw new Error();
-    return validateCheckpointEvidence({ version: "supervised-checkpoint-evidence/v1", checkpoint: "implementation_dispatch_observation", assessmentMode: "preflight", assessmentExecutionEnabled: false,
+    return validateCheckpointEvidence({ version: runtime ? "supervised-checkpoint-evidence/v2" : "supervised-checkpoint-evidence/v1", ...(runtime ? { runtime } : {}), checkpoint: "implementation_dispatch_observation", assessmentMode: "preflight", assessmentExecutionEnabled: false,
       observedAt: now.toISOString(), expiresAt: new Date(now.getTime() + CHECKPOINT_FRESHNESS_MS).toISOString(), facts,
       approval: { actorLogin: current.actorLogin, occurredAt: current.occurredAt, evidenceUri: current.evidence.uri }, receipts: rawReceipts,
       publishingRoute: { route: "local_operator", selection: "owner_selected", capability: "not_evaluated", creationAuthorized: false },
@@ -74,6 +82,7 @@ export function buildCheckpointEvidence(rawFacts: CheckpointFacts, rawApprovals:
 export function revalidateCheckpointSnapshot(raw: unknown, fresh: CheckpointEvidence, now: Date): CheckpointEvidence {
   const current = validateCheckpointEvidence(fresh, fresh.facts, now);
   const prior = validateCheckpointEvidence(raw, current.facts, now);
+  if (prior.version !== current.version || (prior.version === "supervised-checkpoint-evidence/v2" && current.version === "supervised-checkpoint-evidence/v2" && checkpointDigest(prior.runtime) !== checkpointDigest(current.runtime))) throw new Error("checkpoint runtime observations changed");
   if (checkpointDigest(prior.approval) !== checkpointDigest(current.approval) || checkpointDigest(prior.receipts.counts) !== checkpointDigest(current.receipts.counts)) throw new Error("checkpoint observations changed");
   return prior;
 }

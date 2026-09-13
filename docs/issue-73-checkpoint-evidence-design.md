@@ -1,5 +1,10 @@
 # Issue #73: checkpoint evidence packet
 
+Latest extension: the owner-approved runtime v2 contract is implemented locally;
+see `issue-73-runtime-evidence-proposal.md` for exact comparison rules, local
+validation and future candidate configuration. The v1 history below remains
+applicable to its canonical/receipt observations and unchanged assessment gates.
+
 Status: implemented locally following the owner's approval, with local unit and
 PostgreSQL validation. Not deployed and not authorization for a live invocation.
 See `issue-73-pause-handoff.md` before resuming.

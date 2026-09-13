@@ -25,10 +25,15 @@ import { SupervisedDispatchCommandSchema, SupervisedDispatchOperator } from "./s
 import { instrumentSupervisedCanonicalReads, supervisedFailureDiagnostic, withinSupervisedStage, withinSupervisedStageSync } from "./supervised-diagnostics.js";
 import { createSupervisedGitHubReadTransport } from "./supervised-http.js";
 import { loadSupervisedTlsCertificate } from "./supervised-tls.js";
+import { createSupervisedRuntimeObserver, installSupervisedDeadline } from "./supervised-runtime-evidence.js";
+import { RuntimeScopeSchema } from "../../domain/sprint-delivery/v1/runtime-evidence.js";
+import { checkpointDigest } from "../../domain/sprint-delivery/v1/checkpoint-evidence.js";
 
 const EnvironmentSchema = z.object({
   SUPERVISED_DISPATCH_ENABLED: z.enum(["true", "false"]).default("false"),
   SUPERVISED_COMMAND_JSON: z.string().min(2).max(16_384),
+  SUPERVISED_RUNTIME_SCOPE_JSON: z.string().min(2).max(2_000),
+  ECS_CONTAINER_METADATA_URI_V4: z.string().min(1).max(200),
   REPOSITORY_ADAPTER_JSON: z.string().min(2).max(32_768),
   GITHUB_REPOSITORY_ID: z.string().regex(/^[1-9][0-9]{0,19}$/),
   GITHUB_APP_ID: z.string().regex(/^[1-9][0-9]{0,19}$/),
@@ -70,13 +75,23 @@ const openAiHttp: OpenAiHttpTransport = { request: async (input) => {
   return { status: response.status, body: response.body };
 } };
 
-async function main(): Promise<void> {
+async function main(deadline: ReturnType<typeof installSupervisedDeadline>): Promise<void> {
   const environment = withinSupervisedStageSync("configuration", () => EnvironmentSchema.parse(process.env));
   const command = withinSupervisedStageSync("configuration", () => SupervisedDispatchCommandSchema.parse(JSON.parse(environment.SUPERVISED_COMMAND_JSON) as unknown));
   const adapter = withinSupervisedStageSync("configuration", () => RepositoryAdapterConfigV1Schema.parse(JSON.parse(environment.REPOSITORY_ADAPTER_JSON) as unknown));
   withinSupervisedStageSync("policy", () => {
     if (command.repository !== adapter.repository) throw new Error("command repository is outside configured adapter");
+    if (command.mode === "preflight" && environment.SUPERVISED_DISPATCH_ENABLED !== "false") throw new Error("preflight must disable execution");
   });
+  const runtime = withinSupervisedStageSync("configuration", () => createSupervisedRuntimeObserver({
+    constraints: { ...RuntimeScopeSchema.parse(JSON.parse(environment.SUPERVISED_RUNTIME_SCOPE_JSON)), repository: "todd-brunia/ai-consulting-client-portal",
+      configurationFingerprint: checkpointDigest({ adapter, repositoryId: environment.GITHUB_REPOSITORY_ID, appId: environment.GITHUB_APP_ID,
+        installationId: environment.GITHUB_INSTALLATION_ID, installationAccount: environment.GITHUB_INSTALLATION_ACCOUNT, projectId: environment.OPENAI_PROJECT_ID,
+        database: { host: environment.PGHOST, port: environment.PGPORT, name: environment.PGDATABASE, user: environment.PGUSER }, region: environment.AWS_REGION,
+      }), stopPolicy: "supervised-process-deadline/v1", maximumDurationMilliseconds: 180_000,
+    }, mode: command.mode, executionEnabled: environment.SUPERVISED_DISPATCH_ENABLED === "true", metadataUri: environment.ECS_CONTAINER_METADATA_URI_V4, deadline,
+  }));
+  await withinSupervisedStage("policy", () => runtime.observe());
   const { secrets, githubRead, modelAnalysis } = withinSupervisedStageSync("configuration", () => {
     const exactSecrets = new ExactSecretSource(new SecretsManagerClient({ region: environment.AWS_REGION }), new Set([githubKeyReference, openAiKeyReference]));
     const canonicalGitHub = instrumentSupervisedCanonicalReads(new GitHubAppReadAdapter({
@@ -118,7 +133,7 @@ async function main(): Promise<void> {
       return new SupervisedDispatchOperator({ executionEnabled: environment.SUPERVISED_DISPATCH_ENABLED === "true", adapter }, {
         repository, githubRead, modelAnalysis, canonicalControl: githubRead,
         supervisedAnalysis: modelAnalysis,
-        checkpoint: { receipts: new PostgresCheckpointReceiptReader(pool), now: () => new Date() },
+        checkpoint: { receipts: new PostgresCheckpointReceiptReader(pool), now: () => new Date(), runtime },
         reportDecision: report => { process.stdout.write(`${JSON.stringify(report)}\n`); },
         workflow: createLiveBindingWorkflowRuntime(repository, { githubRead, modelAnalysis }),
         dispatchWorker: new LiveDispatchWorker(control, consumer),
@@ -131,7 +146,8 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: unknown) => {
+const deadline = installSupervisedDeadline();
+main(deadline).catch((error: unknown) => {
   process.stderr.write(`${JSON.stringify(supervisedFailureDiagnostic(error))}\n`);
   process.exitCode = 1;
-});
+}).finally(() => deadline.close());

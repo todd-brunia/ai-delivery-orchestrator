@@ -25,6 +25,12 @@ describe("protected supervised runtime composition", () => {
     expect(compute).not.toContain('name = "SUPERVISED_COMMAND_JSON"');
     expect(cli).toContain("SUPERVISED_COMMAND_JSON: z.string().min(2).max(16_384)");
     expect(cli).toContain("SupervisedDispatchCommandSchema.parse");
+    expect(cli).toContain("SUPERVISED_RUNTIME_SCOPE_JSON: z.string().min(2).max(2_000)");
+    expect(cli).toContain("RuntimeScopeSchema.parse");
+    expect(cli).toContain("const deadline = installSupervisedDeadline()");
+    expect(cli).toContain("finally(() => deadline.close())");
+    expect(cli).toContain("now: () => new Date(), runtime");
+    expect(cli.indexOf('await withinSupervisedStage("policy", () => runtime.observe())')).toBeLessThan(cli.indexOf("new Pool("));
   });
 
   it("keeps trusted setup and PostgreSQL certificate validation inside the configuration boundary", () => {

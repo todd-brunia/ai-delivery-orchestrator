@@ -2,6 +2,31 @@
 
 ## September 13 resumed validation (latest)
 
+### Approved runtime evidence: local implementation
+
+The owner approved the runtime-evidence proposal and requested local-first
+implementation/testing. Checkpoint v2 now records pinned ECS identity, validated
+configuration, disabled preflight mode and the installed process deadline.
+The production CLI requires the runtime observer; missing metadata or scope
+cannot silently fall back to a v1 packet. It rejects changed task definition,
+image/configuration, stale observations and expired authorization before writes.
+Cross-task execution rechecks the same constraints while retaining the original
+preflight snapshot and digest. Both feasibility gates remain unchanged.
+
+All work and tests for this implementation were local: unit/observer suites,
+45 PostgreSQL integration cases against the verified repository-owned disposable
+container, lint/typecheck/build, compiled fixtures and Docker validation. No AWS
+task, image, Lambda, migration, fixture, IAM or model invocation was changed or
+launched. The richer packet has not yet been assessed by a live model and does
+not resolve the previous rejection by itself. The final local suite passed 378
+unit tests plus seven observer tests; all 45 PostgreSQL integration tests also
+passed. Dependency audit found zero vulnerabilities, and both history-aware and
+staged-diff secret scans found no leaks.
+
+See [implemented contract and candidate requirements](issue-73-runtime-evidence-proposal.md#implemented-contract-and-operating-boundary).
+In particular, retain external candidate watchdogs: the observed process-local
+timer is not an OS-level watchdog or proof of other runtime stop controls.
+
 ### Execution-handoff regression evidence
 
 The checkpoint-enabled read-only preflight now checks the existing full-issue

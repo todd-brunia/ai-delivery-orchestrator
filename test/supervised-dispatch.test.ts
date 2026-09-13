@@ -6,6 +6,8 @@ import { SupervisedDispatchOperator } from "../src/runtime/v1/index.js";
 import type { SupervisedAnalysisEnvelope, SupervisedAnalysisPort } from "../src/providers/v1/supervised-analysis.js";
 import type { SupervisedDecisionReport } from "../src/runtime/v1/supervised-decision-report.js";
 import { checkpointDigest, type CheckpointReceiptPort } from "../src/domain/sprint-delivery/v1/checkpoint-evidence.js";
+import type { RuntimeObservationPort } from "../src/domain/sprint-delivery/v1/runtime-evidence.js";
+import { runtimeEvidence } from "./fixtures/runtime-evidence.js";
 
 const repositoryName = "todd-brunia/ai-consulting-client-portal";
 const issueNumber = 142;
@@ -24,7 +26,7 @@ const adapter = {
   risk: { humanApprovalCategories: ["security"], humanApprovalLabels: ["approved-for-build"], humanApprovalPathPatterns: [".github/**"] },
 } satisfies RepositoryAdapterConfigV1;
 
-function fixture(executionEnabled = true, missingCoverage = false, reporting?: { supervisedAnalysis: SupervisedAnalysisPort; reportDecision: (report: SupervisedDecisionReport) => void; checkpoint?: { receipts: CheckpointReceiptPort; now: () => Date } }) {
+function fixture(executionEnabled = true, missingCoverage = false, reporting?: { supervisedAnalysis: SupervisedAnalysisPort; reportDecision: (report: SupervisedDecisionReport) => void; checkpoint?: { receipts: CheckpointReceiptPort; now: () => Date; runtime?: RuntimeObservationPort } }) {
   let run: PersistedSprintRun | undefined;
   let creates = 0;
   let workflowCalls = 0;
@@ -66,6 +68,60 @@ function fixture(executionEnabled = true, missingCoverage = false, reporting?: {
 }
 
 describe("supervised dispatch operator", () => {
+  it.each(["ready", "image", "configuration", "missing_v2", "missing_preflight_observation", "expired_authorization", "disabled_execute", "deadline_lost", "deadline_lost_at_commit"] as const)("enforces the observed v2 runtime handoff before persistence (%s)", async scenario => {
+    let time = "2026-08-31T21:40:00.000Z";
+    let executionObservations = 0;
+    const calls: string[] = [];
+    const setup = (execute: boolean) => fixture(execute && scenario !== "disabled_execute", false, {
+      reportDecision: () => {}, checkpoint: {
+        now: () => new Date(time), receipts: { observe: () => Promise.resolve({ repository: repositoryName, issueNumber, observedAt: time, status: "clear_at_observation", counts: { work_items: "0", bindings: "0", dispatch_attempts: "0", accepted_dispatches: "0", outbox_intents: "0", mutation_receipts: "0" } }) },
+        runtime: { observe: () => {
+          if (!execute && scenario === "missing_preflight_observation") return Promise.resolve(undefined as never);
+          if (execute) executionObservations += 1;
+          if (execute && (scenario === "deadline_lost" || (scenario === "deadline_lost_at_commit" && executionObservations === 2))) return Promise.reject(new Error("private-sentinel"));
+          const value = runtimeEvidence(time, execute);
+          if (execute && scenario === "image") value.constraints.imageDigest = `sha256:${"f".repeat(64)}`;
+          if (execute && scenario === "configuration") value.constraints.configurationFingerprint = "f".repeat(64);
+          return Promise.resolve(value);
+        } },
+      },
+      supervisedAnalysis: { analyzeSupervisedFeasibility: (_request, packet) => {
+        const hash = checkpointDigest(packet);
+        calls.push(hash);
+        return Promise.resolve({ version: "supervised-analysis-envelope/v1", decisions: [], manifest: [],
+          provenance: { repository: repositoryName, issueNumber, planCommentId: "5484908830", planSha256: planSha, issueBodySha256: "c".repeat(64), defaultBranchSha: branchSha, inputArtifactSha256: hash },
+          result: { feasible: true, dependencies: [], conflicts: [{ issueNumber, domains: [] }], risk: { categories: ["ordinary"], confidence: "high", rationale: "fixture" }, unresolvedDecisions: [], evidenceUris: [], provenance: { model: "stub", modelVersion: "v1", policyVersion: "v1", artifactSha256: hash, usage: { inputTokens: 0, outputTokens: 0 } } },
+        });
+      } },
+    });
+    const source = setup(false);
+    const base = { version: "supervised-dispatch-command/v1", repository: repositoryName, issueNumber };
+    const preflight = source.operator.run({ ...base, mode: "preflight", occurredAt: time });
+    if (scenario === "missing_preflight_observation") {
+      await expect(preflight).rejects.toMatchObject({ stage: "policy" });
+      expect(calls).toEqual([]);
+      expect(source.counts()).toEqual({ creates: 0, workflowCalls: 0, claimed: [], nodeResults: 0 });
+      return;
+    }
+    const checked = await preflight;
+    expect(checked.preflight).toMatchObject({ ready: true, executionEnabled: false, checkpointEvidence: { version: "supervised-checkpoint-evidence/v2", runtime: { executionEnabled: false } } });
+    expect(source.counts()).toEqual({ creates: 0, workflowCalls: 0, claimed: [], nodeResults: 0 });
+    time = "2026-08-31T21:42:00.000Z";
+    const target = setup(true);
+    const execution = target.operator.run({ ...base, mode: "execute", occurredAt: "2026-08-31T21:41:00.000Z", checkpointEvidence: scenario === "missing_v2" ? undefined : checked.preflight.checkpointEvidence,
+      authorization: { id: "owner-runtime-checkpoint", preflightDigest: checked.preflight.digest, authorizedAt: "2026-08-31T21:40:30Z", expiresAt: scenario === "expired_authorization" ? "2026-08-31T21:41:30Z" : "2026-08-31T21:45:00Z" },
+    });
+    if (scenario === "ready") {
+      await expect(execution).resolves.toMatchObject({ dispatchOutcome: "completed", preflight: { digest: checked.preflight.digest, checkpointEvidence: checked.preflight.checkpointEvidence } });
+      expect(calls).toEqual([calls[0], calls[0]]);
+      expect(target.counts().claimed).toHaveLength(1);
+    } else {
+      const error = await execution.catch((value: unknown) => value);
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).not.toContain("private-sentinel");
+      expect(target.counts()).toEqual({ creates: 0, workflowCalls: 0, claimed: [], nodeResults: 0 });
+    }
+  });
   it.each(["accepted", "infeasible", "unresolved", "unavailable", "artifact_drift"] as const)("rechecks checkpoint receipts and full-issue readiness before writes (%s)", async (fullIssueResult) => {
     let time = "2026-08-31T21:40:00Z";
     let consumed = false;

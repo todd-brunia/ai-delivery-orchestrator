@@ -1,6 +1,8 @@
 # Issue #73: runtime evidence decision
 
-Status: proposal for owner review; not implementation or live-test authorization.
+Status: owner approved local design and implementation on September 13, with an
+explicit preference for local testing. Implemented locally; not deployed. This
+approval does not authorize the later dispatch/migration/callback stop gates.
 
 ## Verified reason for this proposal
 
@@ -64,3 +66,53 @@ contract before implementation, rather than weakening an exact snapshot check.
 No new live assessment, dispatch, migration, fixture publication or callback
 enablement is authorized by this proposal. A richer packet may still be rejected;
 it must improve factual evidence, not guarantee a favorable answer.
+
+## Implemented contract and operating boundary
+
+Checkpoint `v2` requires strict `supervised-runtime-evidence/v1`; existing injected
+`v1` callers remain compatible, but the production CLI requires the new runtime
+observer and will not accept a `v1` execute snapshot. Runtime facts are included
+in the existing hashed model artifact and independently in the preflight digest.
+The OpenAI Docs review informed keeping evidence separate from code-owned
+instructions: neither the full plan nor the assessment instructions/model was
+changed. See [official prompt guidance](https://developers.openai.com/api/docs/guides/prompt-engineering).
+
+The CLI installs a 180-second process-exit timer before initialization and keeps
+it active through shutdown. Observations fail once it is closed or expired.
+This is a process-local timer, not proof of an account-wide emergency stop or
+an OS-level watchdog that can preempt a blocked JavaScript event loop. Existing
+external candidate watchdogs remain useful and must not be removed on the
+strength of this record.
+
+Production identity comes only from the fixed link-local v4 `/task` endpoint,
+with a five-second timeout and 64 KiB body limit. Redirects, proxy routing, DNS,
+credentials, tag reads and arbitrary destinations are excluded. The adapter
+checks the exact pilot cluster/task-definition revision, account, single named
+running Fargate container, ECR image URI and manifest digest. AWS's additive
+metadata fields are stripped; unknown versioned evidence fields are rejected.
+The response is never logged. See [AWS metadata paths](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-metadata-endpoint-v4-fargate.html)
+and [response fields](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-metadata-endpoint-v4-response.html).
+
+The protected task must supply `SUPERVISED_RUNTIME_SCOPE_JSON` containing exactly
+`clusterArn`, `taskDefinitionArn`, and `imageDigest`, pinned to the reviewed
+candidate. ECS supplies `ECS_CONTAINER_METADATA_URI_V4`. The CLI computes its
+configuration fingerprint from parsed adapter, GitHub identity, project and
+database connection identity—not passwords, keys, arbitrary environment fields
+or caller-provided fingerprints. Existing deployed tasks lacking this scope
+cannot run the new CLI without a reviewed candidate configuration.
+
+Preflight requires execution disabled. Execute independently observes its own
+active task, checks the same constraints and stop policy, and then reuses the
+original disabled preflight observation for the approved digest. The original
+task may have stopped; it is never represented as the executing task. Fresh
+current observations are at most five seconds old; the original snapshot still
+expires within five minutes. Identity is reobserved immediately before writes,
+and authorization expiry uses the runtime clock, not a caller's old command
+timestamp. Changed image, task revision, configuration or stop policy needs a
+new preflight and authorization. Neither a new task ID nor a model's favorable
+answer renews authorization or clears a consumed receipt.
+
+Local fixtures cover both sides of this handoff, metadata failures/bounds,
+deadline loss before commit, expired approval, missing v2 evidence, preserved
+input hashing, and disabled preflight with zero persistence/dispatch calls.
+These tests do not prove live ECS metadata compatibility or model acceptance.
