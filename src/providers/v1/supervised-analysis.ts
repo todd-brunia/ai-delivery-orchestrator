@@ -5,7 +5,13 @@ import { RepositoryNameSchema } from "../../domain/sprint-delivery/v1/contracts.
 import { CheckpointEvidenceSchema, type CheckpointEvidence } from "../../domain/sprint-delivery/v1/checkpoint-evidence.js";
 import { CHECKPOINT_ASSESSMENT_INSTRUCTIONS, CHECKPOINT_ASSESSMENT_POLICY_VERSION } from "./supervised-checkpoint-prompt.js";
 
-export const DecisionCodeSchema = z.enum(["scope_boundary", "acceptance_evidence", "dependency_readiness", "fixture_publishing_path", "checkpoint_consumption", "operational_authorization", "runtime_readiness", "conflicting_evidence", "unclassified"]);
+export const DecisionCodeSchema = z.enum([
+  "scope_boundary", "acceptance_evidence", "dependency_readiness", "fixture_publishing_path", "checkpoint_consumption", "operational_authorization", "runtime_readiness", "conflicting_evidence", "unclassified",
+  "acceptance_workflow_correlation", "acceptance_validation_definition", "acceptance_record_retention",
+  "receipt_records_present", "receipt_observation_freshness", "receipt_concurrent_dispatch",
+  "runtime_task_identity", "runtime_stop_enforcement", "runtime_handoff_freshness",
+  "runtime_database_schema", "runtime_callback_prerequisite", "runtime_unobserved_controls",
+]);
 export const decisionPrompts: Readonly<Record<z.infer<typeof DecisionCodeSchema>, string>> = Object.freeze({
   scope_boundary: "Clarify the intended change and explicit exclusions.",
   acceptance_evidence: "Specify the evidence needed to accept this checkpoint.",
@@ -16,10 +22,22 @@ export const decisionPrompts: Readonly<Record<z.infer<typeof DecisionCodeSchema>
   runtime_readiness: "Verify the exact runtime, migration, or callback prerequisites.",
   conflicting_evidence: "Reconcile conflicting issue and plan statements.",
   unclassified: "Review the bound issue and plan; this report cannot identify the decision precisely.",
+  acceptance_workflow_correlation: "Specify how the accepted workflow run, ref and attempt will be correlated.",
+  acceptance_validation_definition: "Specify which evidence-only validation must succeed and how success will be observed.",
+  acceptance_record_retention: "Specify which sanitized acceptance records must be retained and where.",
+  receipt_records_present: "Review existing issue-bound records before considering another dispatch.",
+  receipt_observation_freshness: "Verify the receipt observation's scope, completeness and freshness.",
+  receipt_concurrent_dispatch: "Verify how concurrent dispatch attempts are excluded or deduplicated beyond a zero-count snapshot.",
+  runtime_task_identity: "Verify the exact task, image, definition and configuration identity.",
+  runtime_stop_enforcement: "Verify the required deadline enforcement and its behavior if the application stalls.",
+  runtime_handoff_freshness: "Verify freshness and identity constraints across the preflight-to-execution handoff.",
+  runtime_database_schema: "Verify the database schema required by this checkpoint without assuming future migrations.",
+  runtime_callback_prerequisite: "Determine whether callback processing is required now or belongs to a separately gated step.",
+  runtime_unobserved_controls: "Identify required runtime controls not established by the supplied task-local observation.",
 });
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const idSchema = z.string().regex(/^[IP][0-9]{4}$/);
-export const SupervisedDecisionSchema = z.object({ code: DecisionCodeSchema.describe("An unresolved question for human review, not an authorization or an instruction to perform an action."), evidenceIds: z.array(idSchema).max(4).describe("References from the supplied evidenceManifest only; use an empty array if no supplied segment applies.") }).strict();
+export const SupervisedDecisionSchema = z.object({ code: DecisionCodeSchema.describe("Select the most specific supported unresolved prerequisite. Use broad categories only when no specific category applies, and unclassified when unknown. A category is a model-reported concern for human review, never proof of a defect or authorization. Do not invent a concern to fill this array."), evidenceIds: z.array(idSchema).max(4).describe("References from the supplied evidenceManifest only; use an empty array if no supplied segment applies.") }).strict();
 export const SupervisedAnalysisWireSchema = FeasibilityResultSchema.extend({
   version: z.literal("supervised-analysis/v2"),
   unresolvedDecisions: z.array(SupervisedDecisionSchema).max(16),

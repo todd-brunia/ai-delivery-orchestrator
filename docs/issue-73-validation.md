@@ -2,6 +2,26 @@
 
 ## September 13 resumed validation (latest)
 
+### Local specific decision categories
+
+The supervised decision enum now includes twelve specific acceptance, receipt,
+and runtime concerns, with fixed operator review prompts. Examples distinguish
+receipt freshness from concurrent-dispatch protection, and task identity from
+stop enforcement or unobserved controls. Existing codes and report structure
+are retained; unknown codes still fail closed. The schema description requests
+the most specific applicable category without requiring a favorable result or
+inventing a concern. This changes the requested decision vocabulary, not models,
+checkpoint policy, evidence facts, credentials or execution authorization.
+
+Offline adapter-to-report tests cover every supported code, including empty
+source references, redaction and rejection even when `feasible` is true but an
+unresolved decision remains. Lint, typecheck, full unit/observer tests, build,
+compiled fixtures, Docker build, diff validation and diff secret scan passed.
+The Docker build required normal daemon access outside the filesystem sandbox.
+No live model call or AWS deployment was made for this vocabulary change. It
+provides more specific reporting options but does not retrospectively classify
+the revision 22 rejection or prove that a model will select a specific code.
+
 ### Revision 22 preflight: valid result, feasibility rejected
 
 After commit `16be4d2`, all 45 local PostgreSQL integration tests and the offline

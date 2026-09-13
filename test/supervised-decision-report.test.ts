@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { OpenAiAnalysisAdapter } from "../src/providers/v1/openai-analysis.js";
-import { contentHash, evidenceSegments, normalizeSupervisedAnalysis, prepareSupervisedArtifact, SupervisedAnalysisWireSchema } from "../src/providers/v1/supervised-analysis.js";
+import { contentHash, DecisionCodeSchema, decisionPrompts, evidenceSegments, normalizeSupervisedAnalysis, prepareSupervisedArtifact, SupervisedAnalysisWireSchema } from "../src/providers/v1/supervised-analysis.js";
 import { createSupervisedDecisionReport, locateDecisionEvidence, SupervisedDecisionReportSchema } from "../src/runtime/v1/supervised-decision-report.js";
 import { validateFeasibilityForRun } from "../src/domain/sprint-delivery/v1/feasibility-authorization.js";
 
@@ -32,6 +32,17 @@ function fixture(response: unknown = wire, input = artifact, rest: Record<string
 }
 
 describe("bounded supervised decision reports", () => {
+  it.each(DecisionCodeSchema.options)("preserves %s through the adapter and report without granting authority", async code => {
+    const state = fixture({ ...wire, unresolvedDecisions: [{ code, evidenceIds: [] }] });
+    const envelope = await state.adapter.analyzeSupervisedFeasibility(request);
+    const report = createSupervisedDecisionReport(envelope, expected)!;
+    expect(report.decisions).toEqual([{ code, evidenceIds: [], reviewPrompt: decisionPrompts[code] }]);
+    expect(report.authority).toBe("model_reported_not_verified");
+    expect(report.evidence).toEqual([]);
+    expect(JSON.stringify(report)).not.toContain("private-sentinel");
+    expect(() => validateFeasibilityForRun(envelope.result, [142])).toThrow();
+    expect(state.calls).toHaveLength(1);
+  });
   it("runs the real adapter offline, binds actual input provenance, and leaves rejection intact", async () => {
     const state = fixture();
     const envelope = await state.adapter.analyzeSupervisedFeasibility(request);
