@@ -10,7 +10,7 @@ const policy = { version: "github-mutation-policy/v1", repository, repositoryId:
 function github(): GitHubReadPort {
   const fixture: Pick<GitHubReadPort, "getInstallation" | "getRepositoryConfiguration" | "getIssue" | "getMarkedPlan"> = {
     getInstallation: async () => { await Promise.resolve(); return { appId: "4545788", installationId: "152627422", accountLogin: "todd-brunia", repositoryId: "1308170964", repository, permissions: { actions: "read" }, evidence: { uri: "github://installation", observedAt: now } }; },
-    getRepositoryConfiguration: async () => { await Promise.resolve(); return { repository, repositoryId: "1308170964", defaultBranch: "main", visibility: "public" as const, allowSquashMerge: true, archive: false, configurationSha256: hash, evidence: { uri: "github://repository", observedAt: now, sha256: hash } }; },
+    getRepositoryConfiguration: async () => { await Promise.resolve(); return { repository, repositoryId: "1308170964", defaultBranch: "main", visibility: "public" as const, archive: false, configurationSha256: hash, evidence: { uri: "github://repository", observedAt: now, sha256: hash } }; },
     getIssue: async () => { await Promise.resolve(); return { version: "providers/v1" as const, repository, number: 69, nodeId: "I_69", title: "Issue", body: "body", state: "open" as const, labels: ["implementation-proposed"], updatedAt: now }; },
     getMarkedPlan: async () => { await Promise.resolve(); return { issueNumber: 69, commentId: "69", bodySha256: hash, createdAt: now, updatedAt: now, evidence: { uri: "github://plan", observedAt: now, sha256: hash } }; },
   };
