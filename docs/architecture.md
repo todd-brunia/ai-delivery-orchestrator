@@ -1,5 +1,8 @@
 # Architecture
 
+For an editable, learning-oriented map of the components and interactions,
+see [Architecture diagram](./architecture-diagram.md).
+
 ## Direction
 
 The orchestrator separates durable domain policy from runtime and provider
