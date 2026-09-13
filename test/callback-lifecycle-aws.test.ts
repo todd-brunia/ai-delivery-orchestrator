@@ -5,10 +5,10 @@ import { CallbackLaunchConfigurationSchema, callbackConfigurationHash, DynamoCal
 import { initialCallbackLifecycle, type CallbackSlot } from "../src/runtime/v1/callback-lifecycle.js";
 
 const configuration = CallbackLaunchConfigurationSchema.parse({ version: "callback-launch/v1",
-  cluster: "arn:aws:ecs:us-east-1:025540956479:cluster/ai-delivery-orchestrator-pilot-worker",
+  cluster: "arn:aws:ecs:us-east-1:123456789012:cluster/ai-delivery-orchestrator-pilot-worker",
   repository: "todd-brunia/ai-consulting-client-portal", runtimeConfigurationVersion: "runtime-v1",
-  ingress: { taskDefinition: "arn:aws:ecs:us-east-1:025540956479:task-definition/ai-delivery-orchestrator-pilot-callback-ingress:1", subnets: ["subnet-12345678"], securityGroup: "sg-12345678" },
-  processor: { taskDefinition: "arn:aws:ecs:us-east-1:025540956479:task-definition/ai-delivery-orchestrator-pilot-callback-processor:1", subnets: ["subnet-87654321"], securityGroup: "sg-87654321" },
+  ingress: { taskDefinition: "arn:aws:ecs:us-east-1:123456789012:task-definition/ai-delivery-orchestrator-pilot-callback-ingress:1", subnets: ["subnet-12345678"], securityGroup: "sg-12345678" },
+  processor: { taskDefinition: "arn:aws:ecs:us-east-1:123456789012:task-definition/ai-delivery-orchestrator-pilot-callback-processor:1", subnets: ["subnet-87654321"], securityGroup: "sg-87654321" },
 });
 const taskArn = configuration.cluster.replace(":cluster/", ":task/") + "/" + "c".repeat(32);
 const slot: CallbackSlot = { token: "a".repeat(64), generation: 1, wake: 2, reservedAt: 1000, deadline: 181000, taskArn: null, finished: false };

@@ -47,7 +47,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Audit dependencies
         run: npm audit --audit-level=high
@@ -72,6 +72,9 @@ jobs:
 
       - name: Build container
         run: npm run docker:build
+
+      - name: Test native Lambda invocation offline
+        run: npm run test:lambda-container
 
   terraform:
     name: terraform

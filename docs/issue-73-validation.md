@@ -2,6 +2,63 @@
 
 ## September 13 resumed validation (latest)
 
+### Approved lifecycle implementation and first pilot checks
+
+The owner explicitly approved the scoped lifecycle inventory and, subsequently,
+one private-worker TCP 443 egress rule to the existing DynamoDB gateway prefix
+list. Commit `571b940` implements the conditional lifecycle, bounded ingress and
+processor fences, exact launch configuration, dedicated roles and disabled
+schedule. Image tag `issue73-571b940` has digest
+`sha256:0678e126caddabee0d078d63c0f065bc1692e27d8e4fbf8d3c6d4f673f9ba008`.
+
+Reviewed Terraform applies added seven IAM resources, eight pilot resources,
+and then one exact-revision launch policy. All three plans had zero changes or
+deletions to existing resources. The ingress and processor task definitions are
+both revision 1. Launch authority names only these revisions, the existing pilot
+cluster, and their exact worker/processor/execution roles. The processor has no
+OpenAI secret or SQS consumer permission. The controller has no provider or
+database permission. The new egress rule is `sgr-01652d147a7829941`, from
+`sg-0195296e5bc0ea25c` to DynamoDB prefix list `pl-02cd2c6b` on TCP 443.
+
+The lifecycle coordination record is initialized **disabled and draining** with
+configuration fingerprint
+`3c5c75800ed8a63e2f92f371ec6c797bae50d6ea0168465f913ce37066822bc7`.
+No wake has authorized real callback processing. Manual diagnostic command
+overrides exercised only coordination reads/conditional writes, without SQS
+claims, database connections or provider calls:
+
+- Private ingress task `2d8d2242755b4dc6892f966c613efc76` logged
+  `callback_coordination_smoke/passed`, stopped at 13:03:55 UTC, exit 0.
+- Processor task `3b75a63ecebe4769ab0fe4ae27cc8aff` logged the same passing result,
+  including an expected denial outside the lifecycle partition, and stopped at
+  13:03:55 UTC, exit 0.
+- Worker service desired/running/pending counts remained zero. The one-minute
+  EventBridge rule remains disabled. No endpoint, NAT, secret, quota, database
+  migration or fixture mutation was added by these checks.
+- The disabled Lambda invocation exposed a packaging defect: RIC 4.0.2's
+  `rapid-client.node` was absent because the Docker image suppressed install
+  scripts. Invocation `e55c1581-d6a5-4912-b814-20861254c765` failed during native
+  runtime initialization, before the application handler. The fix builds only
+  the reviewed AWS runtime's addon in an isolated build stage; its compilers do
+  not enter the final image. A loopback-only, credential-free Runtime API fixture
+  now successfully exercises the actual native runtime and disabled handler
+  locally, with external networking disabled; the same test is wired into CI.
+
+At the lifecycle checkpoint, lint/typecheck/unit/build/compiled/Docker checks,
+45 local PostgreSQL tests, production dependency audit (zero vulnerabilities),
+Terraform validation/formatting and history secret scan passed. A successful
+image build did **not** detect the missing native runtime; the additional
+container invocation check now passes; the corrected live Lambda smoke remains
+necessary before calling the controller ready.
+This is not accepted callback rollout evidence. The #72 issue-bound fixture and
+named staged callback gates remain outstanding; #74 stays out of scope.
+
+Console evidence in us-east-1: ECS pilot-worker cluster's stopped tasks; worker
+log group streams `callback-ingress/worker/<task-id>` and
+`callback-processor/worker/<task-id>`; Lambda function and EventBridge rule
+`ai-delivery-orchestrator-pilot-callback-controller`; its dedicated log group
+`/ai-delivery-orchestrator/pilot/callback-controller`.
+
 ### Diagnostic continuation
 
 Commit `ddf1e8d` adds local, fixed-category response attribution. Only reasons

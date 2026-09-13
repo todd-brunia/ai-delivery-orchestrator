@@ -4,7 +4,7 @@ import { callbackTaskMayWork, finishCallbackTask, initialCallbackLifecycle, setC
   type CallbackSlot, type CallbackTaskLauncher } from "../src/runtime/v1/callback-lifecycle.js";
 
 const configuration = "a".repeat(64);
-const taskArn = "arn:aws:ecs:us-east-1:025540956479:task/ai-delivery-orchestrator-pilot-worker/" + "b".repeat(32);
+const taskArn = "arn:aws:ecs:us-east-1:123456789012:task/ai-delivery-orchestrator-pilot-worker/" + "b".repeat(32);
 class Store implements CallbackLifecycleStore {
   value: CallbackLifecycleState | undefined = initialCallbackLifecycle(configuration);
   read() { return Promise.resolve(structuredClone(this.value)); }

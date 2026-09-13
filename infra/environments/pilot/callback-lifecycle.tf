@@ -13,6 +13,16 @@ variable "callback_lifecycle_enabled" {
   type        = bool
   default     = false
 }
+variable "callback_controller_image_digest" {
+  description = "Optional separately reviewed controller image; preserves pinned ECS revisions during Lambda-only fixes."
+  type        = string
+  default     = null
+  nullable    = true
+  validation {
+    condition     = var.callback_controller_image_digest == null || can(regex("^sha256:[0-9a-f]{64}$", var.callback_controller_image_digest))
+    error_message = "Use an immutable SHA-256 controller image digest."
+  }
+}
 variable "callback_delivery_ids" {
   description = "Exact owner-approved pilot webhook delivery IDs; no repository-wide automatic claims."
   type        = list(string)
@@ -110,10 +120,14 @@ resource "aws_lambda_function" "callback_controller" {
   count         = local.callback_provisioned ? 1 : 0
   function_name = "${local.name}-callback-controller"
   package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.worker.repository_url}@${var.callback_image_digest}"
+  image_uri     = "${aws_ecr_repository.worker.repository_url}@${coalesce(var.callback_controller_image_digest, var.callback_image_digest)}"
   role          = "arn:aws:iam::${var.aws_account_id}:role/${local.name}-callback-controller"
   timeout       = 50
   memory_size   = 256
+  logging_config {
+    log_format = "Text"
+    log_group  = aws_cloudwatch_log_group.callback_controller[0].name
+  }
   image_config {
     entry_point = ["node_modules/.bin/aws-lambda-ric"]
     command     = ["dist/runtime/v1/callback-lifecycle-handler.handler"]
