@@ -90,7 +90,7 @@ export async function runCallbackRuntime(environment: NodeJS.ProcessEnv = proces
       databaseUser = credentials.username; databasePassword = credentials.password;
     } finally { databaseSecrets.destroy(); }
   }
-  const pool = new Pool({ host: config.PGHOST, port: config.PGPORT, database: config.PGDATABASE, user: databaseUser, password: databasePassword, ssl: { ca: certificate, rejectUnauthorized: true }, max: 3, statement_timeout: 15_000, connectionTimeoutMillis: 10_000 });
+  const pool = new Pool({ host: config.PGHOST, port: config.PGPORT, database: config.PGDATABASE, user: databaseUser, password: databasePassword, ssl: { ca: certificate, rejectUnauthorized: true }, max: 3, statement_timeout: 15_000, connectionTimeoutMillis: 45_000 });
   const inbox = new PostgresWebhookInbox(pool, adapter.repository, [...config.CALLBACK_EVENT_FAMILIES, "installation", "installation_repositories"], config.CALLBACK_DELIVERY_IDS);
   const control = new RuntimeGenerationControl();
   const stop = () => { control.drain(control.generation); };

@@ -95,7 +95,8 @@ async function main(): Promise<void> {
     return { secrets: exactSecrets, githubRead: canonicalGitHub, modelAnalysis: analysis };
   });
   const certificate = await loadSupervisedTlsCertificate();
-  const pool = withinSupervisedStageSync("configuration", () => new Pool({ host: environment.PGHOST, port: environment.PGPORT, database: environment.PGDATABASE, user: environment.PGUSER, password: environment.PGPASSWORD, ssl: { ca: certificate, rejectUnauthorized: true }, max: 2, connectionTimeoutMillis: 10_000 }));
+  // Auto-paused Aurora can take 30+ seconds to resume. SQL remains separately bounded.
+  const pool = withinSupervisedStageSync("configuration", () => new Pool({ host: environment.PGHOST, port: environment.PGPORT, database: environment.PGDATABASE, user: environment.PGUSER, password: environment.PGPASSWORD, ssl: { ca: certificate, rejectUnauthorized: true }, max: 2, connectionTimeoutMillis: 45_000 }));
   try {
     const operator = withinSupervisedStageSync("configuration", () => {
       const repository = new PostgresSprintRunRepository(pool);

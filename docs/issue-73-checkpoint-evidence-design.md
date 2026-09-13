@@ -109,8 +109,9 @@ AWS execution, database writes/migrations, dispatch, fixture publication, or #74
 
 The CLI opts into this packet; legacy injected callers retain their previous
 contract. The runtime acquires canonical facts, human approval events, and a
-repeatable-read, read-only PostgreSQL snapshot. Connection and statement timeouts
-are ten seconds. Only exact repository/issue lineage counts leave the reader;
+repeatable-read, read-only PostgreSQL snapshot. Connection establishment is bounded
+to 45 seconds to accommodate Aurora auto-resume; statements remain bounded to
+ten seconds. Only exact repository/issue lineage counts leave the reader;
 schema, access, partial-read, and parsing failures cannot become zero counts.
 
 Evidence expires five minutes after acquisition, with receipt age also bounded
