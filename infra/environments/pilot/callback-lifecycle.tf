@@ -130,7 +130,7 @@ resource "aws_lambda_function" "callback_controller" {
   }
   image_config {
     entry_point = ["node_modules/.bin/aws-lambda-ric"]
-    command     = ["dist/runtime/v1/callback-lifecycle-handler.handler"]
+    command     = ["/app/dist/runtime/v1/callback-lifecycle-handler.handler"]
   }
   environment {
     variables = {

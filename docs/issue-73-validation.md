@@ -4,6 +4,12 @@
 
 ### Approved lifecycle implementation and first pilot checks
 
+Checkpoint outcome: both bounded ECS coordination probes exited 0, and the
+corrected live controller invocation returned HTTP 200 with no function error
+and `{"status":"disabled"}`. No running tasks remain and the schedule is disabled.
+This proves packaging and the tested coordination paths, not automatic callback
+processing or completion of #73.
+
 The owner explicitly approved the scoped lifecycle inventory and, subsequently,
 one private-worker TCP 443 egress rule to the existing DynamoDB gateway prefix
 list. Commit `571b940` implements the conditional lifecycle, bounded ingress and
@@ -43,15 +49,34 @@ claims, database connections or provider calls:
   not enter the final image. A loopback-only, credential-free Runtime API fixture
   now successfully exercises the actual native runtime and disabled handler
   locally, with external networking disabled; the same test is wired into CI.
+  A second live invocation exposed relative handler resolution under Lambda's
+  default task root. An absolute `/app/dist/...` handler path fixes this, and the
+  offline fixture now deliberately uses `/var/task` as its task root.
+
+The controller-only packaging correction uses commit `c3a0abb`, image tag
+`issue73-c3a0abb`, digest
+`sha256:56268e399a0d1d7e62f1ff6df3cdc6bf578f93532bb8722a2efbc6d7577777ad`.
+Two reviewed controller-only in-place updates corrected the image and handler
+path, with no replacements or permission changes. ECS task revisions remain 1
+on the original lifecycle image, preserving the exact launch policy. The final
+Lambda smoke succeeded; its disabled branch sends no queue, database or provider
+request. The lifecycle record still has unacknowledged initial work; it has not
+been marked empty by these smoke probes.
 
 At the lifecycle checkpoint, lint/typecheck/unit/build/compiled/Docker checks,
 45 local PostgreSQL tests, production dependency audit (zero vulnerabilities),
 Terraform validation/formatting and history secret scan passed. A successful
 image build did **not** detect the missing native runtime; the additional
-container invocation check now passes; the corrected live Lambda smoke remains
-necessary before calling the controller ready.
+container invocation check and corrected live disabled Lambda smoke now pass.
 This is not accepted callback rollout evidence. The #72 issue-bound fixture and
 named staged callback gates remain outstanding; #74 stays out of scope.
+
+Remaining critical path: resolve the supervised #72 checkpoint's rejected
+assessment and validate its execute handoff; obtain a real accepted issue-bound
+dispatch; run the separately gated migrations and staged workflow/PR/check/review
+callback fixture; prove automatic wake, crash recovery and return to zero under
+that workload; then finish acceptance review and open the single draft PR. Do
+not interpret the current smoke results as satisfying those gates.
 
 Console evidence in us-east-1: ECS pilot-worker cluster's stopped tasks; worker
 log group streams `callback-ingress/worker/<task-id>` and

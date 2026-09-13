@@ -3,10 +3,14 @@
 Status: owner approved implementation and pilot testing, September 13, 2026,
 in the working session. Approval is limited to the inventory and safeguards below;
 it does not authorize production deployment or bypass the fixture prerequisites.
-Implementation is in progress. The reviewed IAM bootstrap was applied on
-September 13: three callback roles and four inline policies created, with zero
-existing resources changed or destroyed. Task-launch authority is not attached
-until both exact task-definition revisions exist and their second plan is reviewed.
+Implementation is in progress. On September 13, reviewed additive plans created
+three callback roles, five scoped policies, two task definitions, the disabled
+controller/schedule/logging resources and the approved DynamoDB egress rule.
+Launch authority is pinned to ingress revision 1 and processor revision 1. Two
+controller-only updates fixed native runtime packaging and handler resolution;
+no resources were deleted or replaced. Coordination smoke tests and a disabled
+Lambda invocation pass. Real callback rollout remains gated; see the validation
+ledger for exact evidence and remaining work.
 
 ## Additional network prerequisite — owner approved
 

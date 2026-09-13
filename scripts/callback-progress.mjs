@@ -10,7 +10,7 @@ const taskArnSchema = (account) => z.string().regex(new RegExp(`^arn:aws:ecs:${r
 const count = z.number().int().nonnegative();
 const status = z.enum(["PROVISIONING", "PENDING", "ACTIVATING", "RUNNING", "DEACTIVATING", "STOPPING", "DEPROVISIONING", "STOPPED", "DELETED"]);
 const taskSchema = (account) => z.object({
-  taskArn: taskArnSchema(account), taskDefinitionArn: z.string().regex(new RegExp(`^arn:aws:ecs:${region}:${account}:task-definition/ai-delivery-orchestrator-pilot-(worker|supervised-dispatch):[0-9]+$`)),
+  taskArn: taskArnSchema(account), taskDefinitionArn: z.string().regex(new RegExp(`^arn:aws:ecs:${region}:${account}:task-definition/ai-delivery-orchestrator-pilot-(worker|supervised-dispatch|callback-ingress|callback-processor):[0-9]+$`)),
   lastStatus: status, desiredStatus: status,
   containers: z.array(z.object({
     name: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/), lastStatus: status,

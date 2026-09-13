@@ -33,7 +33,7 @@ const server = createServer(async (request, response) => {
 server.listen(0, '127.0.0.1'); await once(server, 'listening');
 const child = spawn(process.execPath, ['node_modules/aws-lambda-ric/index.mjs'], {
   env: { PATH: process.env.PATH, AWS_LAMBDA_RUNTIME_API: '127.0.0.1:' + server.address().port,
-    _HANDLER: 'dist/runtime/v1/callback-lifecycle-handler.handler', LAMBDA_TASK_ROOT: '/app',
+    _HANDLER: '/app/dist/runtime/v1/callback-lifecycle-handler.handler', LAMBDA_TASK_ROOT: '/var/task',
     AWS_LAMBDA_FUNCTION_NAME: 'fixture', AWS_LAMBDA_FUNCTION_VERSION: '$LATEST', AWS_LAMBDA_FUNCTION_MEMORY_SIZE: '256',
     AWS_LAMBDA_LOG_GROUP_NAME: 'fixture', AWS_LAMBDA_LOG_STREAM_NAME: 'fixture',
     CALLBACK_LIFECYCLE_ENABLED: 'false', CALLBACK_LAUNCH_CONFIGURATION_JSON: '{}',

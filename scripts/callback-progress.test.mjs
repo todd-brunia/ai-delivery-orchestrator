@@ -41,6 +41,16 @@ test("wrong account stops before resource reads", () => {
   assert.throws(() => collectCallbackProgress([], reader(calls, { "sts get-caller-identity": { Account: "000000000000" } })));
   assert.equal(calls.length, 1);
 });
+test("observes only the two reviewed callback task families", () => {
+  for (const family of ["callback-ingress", "callback-processor", "unreviewed-callback"]) {
+    const response = { tasks: [{ taskArn: arn,
+      taskDefinitionArn: `arn:aws:ecs:us-east-1:123456789012:task-definition/ai-delivery-orchestrator-pilot-${family}:1`,
+      lastStatus: "STOPPED", desiredStatus: "STOPPED", containers: [{ name: "worker", lastStatus: "STOPPED", exitCode: 0 }] }], failures: [] };
+    const observe = () => collectCallbackProgress([arn], reader([], { "ecs describe-tasks": response }));
+    if (family === "unreviewed-callback") assert.throws(observe);
+    else assert.equal(observe().tasks[0].containers[0].exitCode, 0);
+  }
+});
 test("out-of-scope task arguments are rejected before AWS calls", () => {
   const calls = [];
   for (const invalid of ["--debug", arn.replace("us-east-1", "us-west-2"), arn.replace(cluster, "other"), arn.replace("123456789012", "000000000000")]) {

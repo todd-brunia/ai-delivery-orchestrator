@@ -12,5 +12,7 @@ describe("deployable Lambda image", () => {
     const runtimeStage = dockerfile.split("AS runtime")[1]!;
     expect(runtimeStage).not.toMatch(/apt-get|g\+\+|cmake|npm rebuild/);
     expect(runtimeStage).toContain("USER node");
+    const lifecycle = readFileSync("infra/environments/pilot/callback-lifecycle.tf", "utf8");
+    expect(lifecycle).toContain('command     = ["/app/dist/runtime/v1/callback-lifecycle-handler.handler"]');
   });
 });

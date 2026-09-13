@@ -4,6 +4,16 @@ Historical pause snapshot: work resumed September 13 under the owner's AWS-test
 authorization. Read the **September 13 resumed validation** section at the start
 of `issue-73-validation.md` for current candidates, results, and remaining gates.
 
+September 13 lifecycle checkpoint: scoped callback resources are now provisioned,
+but scheduling and durable lifecycle enablement remain disabled. Both diagnostic
+ECS tasks exited 0 and the corrected controller returns `disabled`; no running
+tasks remain. Native Lambda packaging and absolute handler resolution are fixed.
+No callback claims, #72 fixture dispatch, or database migration occurred in this
+checkpoint. Keep the callback task digest `0678e126...` and controller digest
+`56268e39...` distinct when planning; exact values and prerequisites are in the
+current validation ledger. Do not apply default opt-in Terraform values over
+these provisioned resources, because that would propose their deletion.
+
 ## Stopping point
 
 The approved local checkpoint-evidence implementation is complete on
