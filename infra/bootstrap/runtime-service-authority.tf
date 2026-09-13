@@ -4,6 +4,11 @@ locals {
 
 data "aws_iam_policy_document" "github_plan_runtime_services" {
   statement {
+    sid       = "InspectPilotCallbackControllerSchedule"
+    actions   = ["events:DescribeRule", "events:ListTargetsByRule", "events:ListTagsForResource"]
+    resources = ["arn:aws:events:${var.aws_region}:${var.aws_account_id}:rule/${local.pilot_name}-callback-controller"]
+  }
+  statement {
     sid = "InspectPilotRuntimeServices"
     actions = [
       "apigateway:GET", "application-autoscaling:DescribeScalableTargets", "application-autoscaling:ListTagsForResource", "cloudwatch:GetDashboard",
@@ -154,6 +159,13 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     sid       = "ManagePilotDashboard"
     actions   = ["cloudwatch:DeleteDashboards", "cloudwatch:GetDashboard", "cloudwatch:PutDashboard"]
     resources = ["arn:aws:cloudwatch::${var.aws_account_id}:dashboard/${local.pilot_name}"]
+  }
+  statement {
+    sid = "ManagePilotCallbackControllerSchedule"
+    actions = [
+      "events:DeleteRule", "events:DescribeRule", "events:ListTagsForResource", "events:ListTargetsByRule", "events:RemoveTargets",
+    ]
+    resources = ["arn:aws:events:${var.aws_region}:${var.aws_account_id}:rule/${local.pilot_name}-callback-controller"]
   }
 }
 

@@ -268,12 +268,18 @@ describe("Terraform foundation policy", () => {
       "ai-delivery-orchestrator-pilot-supervised-dispatch-execution",
     ];
     for (const roleName of supervisedRoleNames) expect(bootstrapVariables).toContain(`"${roleName}"`);
+    const callbackRoleNames = [
+      "ai-delivery-orchestrator-pilot-callback-controller",
+      "ai-delivery-orchestrator-pilot-callback-execution",
+      "ai-delivery-orchestrator-pilot-callback-processor",
+    ];
+    for (const roleName of callbackRoleNames) expect(bootstrapVariables).toContain(`"${roleName}"`);
     expect(bootstrapVariables).not.toContain("ai-delivery-orchestrator-pilot-human-operator");
     expect(bootstrap).toContain('sid = "InspectPilotRuntimeRoles"');
     expect(bootstrap).toContain('sid = "ManagePilotRuntimeRoles"');
     expect(bootstrap).toContain('"iam:CreateRole"');
     expect(bootstrap).toContain('"iam:PutRolePolicy"');
-    expect(bootstrap.match(/"iam:ListAttachedRolePolicies"/g)).toHaveLength(3);
+    expect(bootstrap.match(/"iam:ListAttachedRolePolicies"/g)).toHaveLength(5);
     expect(bootstrap).toContain('sid       = "PassPilotRuntimeRoles"');
     expect(bootstrap).toContain('variable = "iam:PassedToService"');
     expect(bootstrap).toContain('["ecs-tasks.amazonaws.com", "lambda.amazonaws.com"]');
@@ -283,6 +289,14 @@ describe("Terraform foundation policy", () => {
     expect(bootstrap).toContain('sid       = "PassSupervisedDispatchRolesToEcs"');
     expect(bootstrap).toMatch(/sid\s*= "PassSupervisedDispatchRolesToEcs"[\s\S]*?actions\s*= \["iam:PassRole"\][\s\S]*?resources = local\.supervised_dispatch_role_arns[\s\S]*?values\s*= \["ecs-tasks\.amazonaws\.com"\]/);
     expect(bootstrap).not.toMatch(/sid\s*= "PassSupervisedDispatchRolesToEcs"[\s\S]*?lambda\.amazonaws\.com/);
+    expect(bootstrap).toMatch(/sid\s*= "InspectPilotCallbackRoles"[\s\S]*?"iam:GetRole"[\s\S]*?resources = local\.callback_runtime_role_arns/);
+    expect(bootstrap).toMatch(/sid\s*= "InspectPilotCallbackControllerSchedule"[\s\S]*?"events:ListTagsForResource"[\s\S]*?callback-controller/);
+    const callbackRemoval = bootstrap.match(/sid\s*= "RemovePilotCallbackRoles"[\s\S]*?\n\s{2}}\n/)?.[0] ?? "";
+    expect(callbackRemoval).toContain('"iam:DeleteRole"');
+    expect(callbackRemoval).toContain('"iam:DeleteRolePolicy"');
+    expect(callbackRemoval).toContain("resources = local.callback_runtime_role_arns");
+    expect(callbackRemoval).not.toContain('"iam:CreateRole"');
+    expect(callbackRemoval).not.toContain('"iam:PassRole"');
     expect(bootstrapVariables).toMatch(/all_pilot_runtime_role_arns\s*= concat\(local\.pilot_runtime_role_arns, local\.supervised_dispatch_role_arns\)/);
     expect(bootstrap).not.toContain('"iam:*"');
     expect(bootstrap).not.toMatch(/role\/ai-delivery-orchestrator-pilot-\*/);
