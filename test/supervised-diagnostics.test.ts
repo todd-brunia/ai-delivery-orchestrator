@@ -12,6 +12,13 @@ import {
 } from "../src/runtime/v1/index.js";
 
 describe("supervised runtime failure diagnostics", () => {
+  it("rejects unknown response reasons and attribution outside invalid model analysis", () => {
+    for (const value of [
+      { stage: "database", category: "invalid_response", modelResponseReason: "output_limit" },
+      { stage: "model_analysis", category: "unexpected", modelResponseReason: "output_limit" },
+      { stage: "model_analysis", category: "invalid_response", modelResponseReason: "private-sentinel" },
+    ]) expect(SupervisedFailureDiagnosticSchema.safeParse({ version: "supervised-runtime-diagnostic/v1", event: "supervised_dispatch_failed", ...value }).success).toBe(false);
+  });
   const feasible = { feasible: true, dependencies: [], conflicts: [{ issueNumber: 142, domains: [] }], risk: { categories: ["ordinary"], confidence: "high", rationale: "private-sentinel" }, unresolvedDecisions: [], evidenceUris: [], provenance: { model: "stub", modelVersion: "v1", policyVersion: "v1", artifactSha256: "b".repeat(64), usage: { inputTokens: 0, outputTokens: 0 } } };
 
   it.each([

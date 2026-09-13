@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import { OpenAiAnalysisAdapter } from "../src/providers/v1/index.js";
+import { openAiResponseFailureReason, OpenAiAnalysisError } from "../src/providers/v1/openai-analysis.js";
+import { supervisedFailureDiagnostic, withinSupervisedStage } from "../src/runtime/v1/supervised-diagnostics.js";
 
 const repository = "todd-brunia/ai-consulting-client-portal";
 const sha = "a".repeat(40);
@@ -30,6 +32,36 @@ function fixture(body: unknown) {
 }
 
 describe("OpenAI Responses analysis adapter", () => {
+  it.each([
+    ["output_limit", { ...response(), status: "incomplete", incomplete_details: { reason: "max_output_tokens" } }],
+    ["incomplete", { ...response(), status: "incomplete", incomplete_details: { reason: "private-sentinel" } }],
+    ["response_envelope", { ...response(), output: [{ type: "function_call", arguments: "private-sentinel" }] }],
+    ["refusal", { ...response(), output: [{ ...message(""), content: [{ type: "refusal", refusal: "private-sentinel" }] }] }],
+    ["output_json", response("private-sentinel")],
+    ["result_schema", response('{"private-sentinel":true}')],
+    ["response_bounds", { ...response(), ignored: "x".repeat(1_000_001) }],
+  ])("attributes %s without copying raw fields or relaxing rejection", async (reason, body) => {
+    const { adapter, transport } = fixture(body);
+    const error = await withinSupervisedStage("model_analysis", () => adapter.analyzeFeasibility(request())).catch((value: unknown) => value);
+    const diagnostic = supervisedFailureDiagnostic(error);
+    expect(diagnostic).toMatchObject({ stage: "model_analysis", category: "invalid_response", modelResponseReason: reason });
+    expect(JSON.stringify(diagnostic)).not.toContain("private-sentinel");
+    expect(transport.calls).toHaveLength(1);
+  });
+  it("does not accept forged reason properties", () => {
+    expect(openAiResponseFailureReason(Object.assign(new OpenAiAnalysisError("invalid_response", "private-sentinel"), { modelResponseReason: "output_limit" }))).toBeUndefined();
+  });
+  it.each([false, true])("classifies timeout separately and keeps bounded transient retry: %s", async recover => {
+    let calls = 0;
+    const adapter = new OpenAiAnalysisAdapter(config, { load: () => Promise.resolve("sk-abcdefghijklmnopqrstuvwxyz") }, { load: () => Promise.resolve({ kind: "issue_bundle", sha256: hash, bytes: "fixture" }) }, { request: () => {
+      calls += 1;
+      if (recover && calls === 2) return Promise.resolve({ status: 200, body: JSON.stringify(response()) });
+      throw new DOMException("private-sentinel", "TimeoutError");
+    } });
+    if (recover) await expect(adapter.analyzeFeasibility(request())).resolves.toEqual(result);
+    else await expect(adapter.analyzeFeasibility(request())).rejects.toMatchObject({ code: "timeout", message: "OpenAI request timed out" });
+    expect(calls).toBe(2);
+  });
   it("uses strict, tool-free, non-stored requests and validates structured feasibility", async () => {
     const transport = new FixtureTransport([{ status: 200, body: response() }]);
     const adapter = new OpenAiAnalysisAdapter(config, { load: () => Promise.resolve("sk-abcdefghijklmnopqrstuvwxyz") }, { load: () => Promise.resolve({ kind: "issue_bundle", sha256: createHash("sha256").update("issue contents").digest("hex"), bytes: "issue contents" }) }, transport);

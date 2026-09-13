@@ -2,6 +2,7 @@ import { z } from "zod";
 import { FeasibilityRejectionReasonSchema, FeasibilityValidationError } from "../../domain/sprint-delivery/v1/feasibility-authorization.js";
 
 import { githubReadValidationFailure, githubRepositoryReadCheckpointFailure, GitHubReadError, OpenAiAnalysisError } from "../../providers/v1/index.js";
+import { OpenAiResponseFailureReasonSchema, openAiResponseFailureReason } from "../../providers/v1/openai-analysis.js";
 
 export const SupervisedFailureStageSchema = z.enum([
   "configuration",
@@ -73,7 +74,9 @@ export const SupervisedFailureDiagnosticSchema = z.object({
   reason: SupervisedValidationReasonSchema.optional(),
   checkpoint: SupervisedRepositoryReadCheckpointSchema.optional(),
   feasibilityReason: FeasibilityRejectionReasonSchema.optional(),
+  modelResponseReason: OpenAiResponseFailureReasonSchema.optional(),
 }).strict().superRefine((value, context) => {
+  if (value.modelResponseReason && (value.stage !== "model_analysis" || value.category !== "invalid_response")) context.addIssue({ code: "custom", path: ["modelResponseReason"], message: "model response reason requires invalid model analysis" });
   if ((value.feasibilityReason || value.category === "feasibility_rejected") &&
       (value.stage !== "feasibility_validation" || value.category !== "feasibility_rejected" || !value.feasibilityReason)) {
     context.addIssue({ code: "custom", path: ["feasibilityReason"], message: "feasibility rejection requires its validation stage and reason" });
@@ -106,11 +109,17 @@ function categoryFor(error: unknown): SupervisedFailureCategory {
 }
 
 export function supervisedFailure(stage: SupervisedFailureStage, error: unknown): SupervisedDiagnosticError {
+  const modelReason = stage === "model_analysis" ? openAiResponseFailureReason(error) : undefined;
+  if (modelReason) return new SupervisedModelResponseDiagnosticError(modelReason);
   if (stage === "feasibility_validation" && error instanceof FeasibilityValidationError) {
     const reason = FeasibilityRejectionReasonSchema.safeParse(error.reason);
     if (reason.success) return new SupervisedFeasibilityDiagnosticError(reason.data);
   }
   return error instanceof SupervisedDiagnosticError ? error : new SupervisedDiagnosticError(stage, categoryFor(error));
+}
+
+class SupervisedModelResponseDiagnosticError extends SupervisedDiagnosticError {
+  constructor(readonly modelResponseReason: z.infer<typeof OpenAiResponseFailureReasonSchema>) { super("model_analysis", "invalid_response"); }
 }
 
 class SupervisedFeasibilityDiagnosticError extends SupervisedDiagnosticError {
@@ -142,6 +151,7 @@ export function supervisedFailureDiagnostic(error: unknown): SupervisedFailureDi
     event: "supervised_dispatch_failed",
     stage: normalized.stage,
     category: normalized.category,
+    ...(normalized instanceof SupervisedModelResponseDiagnosticError ? { modelResponseReason: normalized.modelResponseReason } : {}),
     ...(normalized instanceof SupervisedFeasibilityDiagnosticError ? { feasibilityReason: normalized.feasibilityReason } : {}),
     ...(normalized.stage === "canonical_read" && normalized.operation ? { operation: normalized.operation } : {}),
     ...(normalized.stage === "canonical_read" && normalized.category === "invalid_input" && normalized.operation === "repository_configuration" && normalized.field ? { field: normalized.field } : {}),

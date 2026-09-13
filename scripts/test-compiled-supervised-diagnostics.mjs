@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { stdout } from "node:process";
 
-import { GitHubAppReadAdapter } from "../dist/providers/v1/index.js";
+import { GitHubAppReadAdapter, OpenAiAnalysisAdapter } from "../dist/providers/v1/index.js";
 import { validateFeasibilityForRun } from "../dist/domain/sprint-delivery/v1/feasibility-authorization.js";
-import { withinSupervisedStageSync } from "../dist/runtime/v1/supervised-diagnostics.js";
+import { withinSupervisedStageSync, withinSupervisedStage } from "../dist/runtime/v1/supervised-diagnostics.js";
 import { createSupervisedGitHubReadTransport, instrumentSupervisedCanonicalReads, supervisedFailureDiagnostic } from "../dist/runtime/v1/index.js";
 
 const repository = "todd-brunia/ai-consulting-client-portal";
@@ -65,6 +65,15 @@ assert.deepEqual(JSON.parse(checkpointSerialized), {
 assert.doesNotMatch(checkpointSerialized, /sk-fake|network|prompt injection/);
 
 stdout.write("compiled supervised diagnostic boundary passed\n");
+
+const incompleteAdapter = new OpenAiAnalysisAdapter({ version: "openai-analysis/v1", projectId: "proj_abcdefgh", credentialReference: "ai-delivery-orchestrator/pilot/portal-openai-builder-api-key", timeoutMilliseconds: 1000, maxRetries: 0, maxOutputTokens: 4096 },
+  { load: () => Promise.resolve("sk-abcdefghijklmnopqrstuvwxyz") },
+  { load: () => Promise.resolve({ kind: "issue_bundle", bytes: "fixture", sha256: "a".repeat(64) }) },
+  { request: () => Promise.resolve({ status: 200, body: JSON.stringify({ model: "gpt-5.6-terra", status: "incomplete", incomplete_details: { reason: "max_output_tokens" }, output: [{ type: "reasoning", summary: [{ text: "private-sentinel" }] }] }) }) });
+const incompleteFailure = await withinSupervisedStage("model_analysis", () => incompleteAdapter.analyzeFeasibility({ version: "providers/v1", repository, issueNumbers: [142], planFingerprints: { "142": "b".repeat(64) }, defaultBranchSha: "a".repeat(40) })).catch(error => error);
+assert.deepEqual(supervisedFailureDiagnostic(incompleteFailure), { version: "supervised-runtime-diagnostic/v1", event: "supervised_dispatch_failed", stage: "model_analysis", category: "invalid_response", modelResponseReason: "output_limit" });
+assert.doesNotMatch(JSON.stringify(supervisedFailureDiagnostic(incompleteFailure)), /private-sentinel|reasoning/);
+stdout.write("compiled model response attribution boundary passed\n");
 
 let feasibilityFailure;
 try {

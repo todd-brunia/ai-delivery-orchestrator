@@ -22,6 +22,19 @@ export class OpenAiAnalysisError extends Error {
   constructor(readonly code: "authentication" | "authorization" | "rate_limited" | "timeout" | "transport" | "invalid_response" | "model_mismatch" | "artifact_mismatch", message: string) { super(message); }
 }
 
+export const OpenAiResponseFailureReasonSchema = z.enum(["response_bounds", "response_json", "response_envelope", "output_limit", "incomplete", "refusal", "output_json", "result_schema", "evidence_contract", "transport_exception"]);
+type ResponseFailureReason = z.infer<typeof OpenAiResponseFailureReasonSchema>;
+const responseFailureReasons = new WeakMap<OpenAiAnalysisError, ResponseFailureReason>();
+function invalidResponse(reason: ResponseFailureReason): OpenAiAnalysisError {
+  const error = new OpenAiAnalysisError("invalid_response", "OpenAI response was invalid");
+  responseFailureReasons.set(error, reason);
+  return error;
+}
+/** Only locally classified reasons, never an exception property or provider text. */
+export function openAiResponseFailureReason(error: unknown): ResponseFailureReason | undefined {
+  return error instanceof OpenAiAnalysisError ? responseFailureReasons.get(error) : undefined;
+}
+
 export interface OpenAiApiKeySource { load(reference: string): Promise<string>; }
 export interface OpenAiHttpTransport { request(input: { url: string; headers: Readonly<Record<string, string>>; body: string; timeoutMilliseconds: number }): Promise<{ status: number; body: string }>; }
 export interface ModelArtifactSource { load(request: FeasibilityRequest | PullRequestReviewRequest): Promise<ModelArtifact>; }
@@ -43,9 +56,15 @@ const responseOutputSchema = z.object({
 
 /** Raw REST output, not the SDK-only output_text convenience property. */
 function responseText(raw: unknown): string {
-  const response = responseOutputSchema.parse(raw);
+  const metadata = z.object({ status: z.string(), incomplete_details: z.object({ reason: z.string() }).nullish() }).safeParse(raw);
+  if (metadata.success && metadata.data.status === "incomplete") throw invalidResponse(metadata.data.incomplete_details?.reason === "max_output_tokens" ? "output_limit" : "incomplete");
+  const refusal = z.object({ output: z.array(z.object({ type: z.string(), content: z.array(z.object({ type: z.string() })).optional() })).max(100) }).safeParse(raw);
+  if (refusal.success && refusal.data.output.some(item => item.type === "message" && item.content?.some(part => part.type === "refusal"))) throw invalidResponse("refusal");
+  const parsed = responseOutputSchema.safeParse(raw);
+  if (!parsed.success) throw invalidResponse("response_envelope");
+  const response = parsed.data;
   const text = response.output.flatMap((item) => item.type === "message" ? item.content.map((part) => part.text) : []).join("");
-  if (!text.trim() || Buffer.byteLength(text, "utf8") > 1_000_000) throw new OpenAiAnalysisError("invalid_response", "OpenAI response text is unavailable");
+  if (!text.trim() || Buffer.byteLength(text, "utf8") > 1_000_000) throw invalidResponse("response_envelope");
   return text;
 }
 
@@ -75,12 +94,20 @@ export class OpenAiAnalysisAdapter implements ModelAnalysisPort {
         if (response.status === 403) throw new OpenAiAnalysisError("authorization", "OpenAI project access was denied");
         if (response.status === 429) throw new OpenAiAnalysisError("rate_limited", "OpenAI request was rate limited");
         if (response.status < 200 || response.status >= 300) throw new OpenAiAnalysisError("transport", `OpenAI returned HTTP ${response.status}`);
-        if (Buffer.byteLength(response.body, "utf8") > 1_000_000) throw new OpenAiAnalysisError("invalid_response", "OpenAI response exceeds configured bound");
-        const parsed = JSON.parse(response.body) as { model?: unknown };
-        if (parsed.model !== target.model) throw new OpenAiAnalysisError("model_mismatch", "OpenAI resolved an unexpected model");
-        return schema.parse(JSON.parse(responseText(parsed)));
+        if (Buffer.byteLength(response.body, "utf8") > 1_000_000) throw invalidResponse("response_bounds");
+        let parsed: unknown;
+        try { parsed = JSON.parse(response.body) as unknown; } catch { throw invalidResponse("response_json"); }
+        const identity = z.object({ model: z.string() }).safeParse(parsed);
+        if (!identity.success) throw invalidResponse("response_envelope");
+        if (identity.data.model !== target.model) throw new OpenAiAnalysisError("model_mismatch", "OpenAI resolved an unexpected model");
+        const text = responseText(parsed);
+        let output: unknown;
+        try { output = JSON.parse(text) as unknown; } catch { throw invalidResponse("output_json"); }
+        const result = schema.safeParse(output);
+        if (!result.success) throw invalidResponse("result_schema");
+        return result.data;
       } catch (error) {
-        const normalized = error instanceof OpenAiAnalysisError ? error : new OpenAiAnalysisError("invalid_response", "OpenAI response was invalid");
+        const normalized = error instanceof OpenAiAnalysisError ? error : error instanceof Error && error.name === "TimeoutError" ? new OpenAiAnalysisError("timeout", "OpenAI request timed out") : invalidResponse("transport_exception");
         if (!["rate_limited", "transport", "timeout"].includes(normalized.code) || attempt === this.config.maxRetries) throw normalized;
         lastError = normalized;
       }
@@ -102,7 +129,7 @@ export class OpenAiAnalysisAdapter implements ModelAnalysisPort {
     catch { throw new OpenAiAnalysisError("artifact_mismatch", "supervised artifact validation failed"); }
     const response = await this.execute("feasibility", request, { artifact: prepared.artifact, schema: SupervisedAnalysisWireSchema, checkpointAssessment: checkpoint !== undefined });
     try { return normalizeSupervisedAnalysis(response, prepared); }
-    catch { throw new OpenAiAnalysisError("invalid_response", "supervised response validation failed"); }
+    catch { throw invalidResponse("evidence_contract"); }
   }
 
   async reviewPullRequest(raw: PullRequestReviewRequest): Promise<PullRequestReviewResult> {
