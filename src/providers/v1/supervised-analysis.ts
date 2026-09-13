@@ -3,6 +3,7 @@ import { z } from "zod";
 import { FeasibilityRequestSchema, FeasibilityResultSchema, ModelArtifactSchema, type FeasibilityRequest, type FeasibilityResult, type ModelArtifact } from "./contracts.js";
 import { RepositoryNameSchema } from "../../domain/sprint-delivery/v1/contracts.js";
 import { CheckpointEvidenceSchema, type CheckpointEvidence } from "../../domain/sprint-delivery/v1/checkpoint-evidence.js";
+import { CHECKPOINT_ASSESSMENT_INSTRUCTIONS, CHECKPOINT_ASSESSMENT_POLICY_VERSION } from "./supervised-checkpoint-prompt.js";
 
 export const DecisionCodeSchema = z.enum(["scope_boundary", "acceptance_evidence", "dependency_readiness", "fixture_publishing_path", "checkpoint_consumption", "operational_authorization", "runtime_readiness", "conflicting_evidence", "unclassified"]);
 export const decisionPrompts: Readonly<Record<z.infer<typeof DecisionCodeSchema>, string>> = Object.freeze({
@@ -76,7 +77,7 @@ export function prepareSupervisedArtifact(raw: ModelArtifact, rawRequest: Feasib
     const manifest = [...evidenceSegments(issue.body, "issue"), ...evidenceSegments(issue.plan.body, "plan")];
     const packet = checkpoint === undefined ? undefined : CheckpointEvidenceSchema.parse(checkpoint);
     if (packet && (packet.facts.repository !== request.repository || packet.facts.issueNumber !== issue.number || packet.facts.planCommentId !== issue.plan.commentId || packet.facts.planSha256 !== issue.plan.bodySha256 || packet.facts.defaultBranchSha !== request.defaultBranchSha || packet.facts.issueUpdatedAt !== issue.updatedAt || packet.facts.planUpdatedAt !== issue.plan.updatedAt)) throw new Error();
-    const bytes = JSON.stringify({ ...bundle, evidenceManifest: { version: "supervised-evidence/v1", segments: manifest }, ...(packet ? { checkpointEvidence: packet } : {}) });
+    const bytes = JSON.stringify({ ...bundle, evidenceManifest: { version: "supervised-evidence/v1", segments: manifest }, ...(packet ? { checkpointEvidence: packet, assessmentPolicy: { version: CHECKPOINT_ASSESSMENT_POLICY_VERSION, instructionsSha256: contentHash(CHECKPOINT_ASSESSMENT_INSTRUCTIONS) } } : {}) });
     if (Buffer.byteLength(bytes, "utf8") > 500_000) throw new Error();
     const inputArtifactSha256 = contentHash(bytes);
     const provenance = SupervisedInputProvenanceSchema.parse({ repository: bundle.repository, issueNumber: issue.number, planCommentId: issue.plan.commentId, planSha256: issue.plan.bodySha256, issueBodySha256: contentHash(issue.body), defaultBranchSha: bundle.defaultBranchSha, inputArtifactSha256 });

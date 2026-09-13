@@ -128,3 +128,23 @@ or expiration blocks; a consumed checkpoint requires recovery review, not an
 automatic replay of its old execute command. Existing authorization and exact
 durable outbox claims remain mandatory. A clear count is not a transaction lock
 or a cross-authorization exactly-once guarantee.
+
+## Explicit assessment instructions
+
+The September 13 live assessment reached the model with the packet but still
+returned four unresolved categories. The previous developer message specified
+only JSON formatting and distrust of repository instructions, not the checkpoint
+being assessed. `supervised-checkpoint-assessment/v1` now defines the staged
+assessment in a static code-owned developer message. Repository prose cannot
+select it: only the validated checkpoint argument activates it. The policy
+version and instructions SHA-256 are included in the hashed artifact, so a prompt
+change invalidates old input/preflight digests. Legacy full-issue analysis is
+unchanged. A real prerequisite from a later stage must still block the current
+checkpoint; no result or decision is deleted, overridden, or coerced to feasible.
+
+This follows [official prompt guidance](https://developers.openai.com/api/docs/guides/prompt-engineering)
+on explicit application instructions, code-managed prompt versions and fixtures.
+The tests verify instruction selection, input provenance, untrusted-text isolation,
+and rejection preservation; they do not establish live model quality or authorize
+execution. The execute workflow's subsequent full-issue assessment remains a
+separate integration gate; a scoped assessment must not silently replace it.
