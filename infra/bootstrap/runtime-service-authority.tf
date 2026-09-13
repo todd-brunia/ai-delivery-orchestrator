@@ -4,6 +4,11 @@ locals {
 
 data "aws_iam_policy_document" "github_plan_runtime_services" {
   statement {
+    sid       = "InspectPilotCallbackControllerSchedule"
+    actions   = ["events:DescribeRule", "events:ListTargetsByRule"]
+    resources = ["arn:aws:events:${var.aws_region}:${var.aws_account_id}:rule/${local.pilot_name}-callback-controller"]
+  }
+  statement {
     sid = "InspectPilotRuntimeServices"
     actions = [
       "apigateway:GET", "application-autoscaling:DescribeScalableTargets", "application-autoscaling:ListTagsForResource", "cloudwatch:GetDashboard",
