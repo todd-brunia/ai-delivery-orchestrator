@@ -155,6 +155,13 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
     actions   = ["cloudwatch:DeleteDashboards", "cloudwatch:GetDashboard", "cloudwatch:PutDashboard"]
     resources = ["arn:aws:cloudwatch::${var.aws_account_id}:dashboard/${local.pilot_name}"]
   }
+  statement {
+    sid = "ManagePilotCallbackControllerSchedule"
+    actions = [
+      "events:DeleteRule", "events:DescribeRule", "events:ListTargetsByRule", "events:RemoveTargets",
+    ]
+    resources = ["arn:aws:events:${var.aws_region}:${var.aws_account_id}:rule/${local.pilot_name}-callback-controller"]
+  }
 }
 
 data "aws_iam_policy_document" "github_apply_runtime_network" {
