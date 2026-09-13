@@ -2,6 +2,22 @@
 
 ## September 13 resumed validation (latest)
 
+### Local schema-failure attribution
+
+The adapter now attaches a fixed assessment (`checkpoint`, `full_issue`, or
+`review`), top-level field category, and validation-rule category to result-schema
+failures. Only the first validation issue is classified. Arbitrary paths,
+messages, values and unknown keys are never retained. Private WeakMap attribution
+rejects forged exception properties and returns a detached copy. The runtime
+diagnostic accepts this optional detail only for model result-schema rejection.
+Existing diagnostics remain valid. Prompts, models, response schemas, approval
+policy and non-retryable rejection behavior are unchanged.
+
+Local lint, typecheck, full unit/observer suite, build, compiled fixtures and
+Docker build passed. No AWS deployment or model request was made for this change.
+This improves the next failure's attribution; it cannot reconstruct the discarded
+response below and does not establish a successful live preflight.
+
 ### Runtime-v2 disabled preflight: result validation failure
 
 Fresh narrowed GitHub reads again verified the unchanged current marked plan

@@ -25,14 +25,34 @@ export class OpenAiAnalysisError extends Error {
 export const OpenAiResponseFailureReasonSchema = z.enum(["response_bounds", "response_json", "response_envelope", "output_limit", "incomplete", "refusal", "output_json", "result_schema", "evidence_contract", "transport_exception"]);
 type ResponseFailureReason = z.infer<typeof OpenAiResponseFailureReasonSchema>;
 const responseFailureReasons = new WeakMap<OpenAiAnalysisError, ResponseFailureReason>();
-function invalidResponse(reason: ResponseFailureReason): OpenAiAnalysisError {
+export const OpenAiSchemaFailureSchema = z.object({
+  assessment: z.enum(["checkpoint", "full_issue", "review"]),
+  field: z.enum(["version", "feasible", "dependencies", "conflicts", "risk", "unresolvedDecisions", "evidenceUris", "provenance", "verdict", "findings", "root"]),
+  rule: z.enum(["type", "bounds", "format", "value", "unknown_fields", "constraint", "unknown"]),
+}).strict();
+type SchemaFailure = z.infer<typeof OpenAiSchemaFailureSchema>;
+const schemaFailures = new WeakMap<OpenAiAnalysisError, SchemaFailure>();
+function schemaFailure(assessment: SchemaFailure["assessment"], error: z.ZodError): SchemaFailure {
+  const issue = error.issues[0];
+  const field = OpenAiSchemaFailureSchema.shape.field.safeParse(issue?.path[0]);
+  const code = issue?.code;
+  const rule = code === "invalid_type" ? "type" : code === "too_small" || code === "too_big" ? "bounds" : code === "invalid_format" ? "format" : code === "invalid_value" ? "value" : code === "unrecognized_keys" ? "unknown_fields" : code === "custom" ? "constraint" : "unknown";
+  return { assessment, field: field.success ? field.data : "root", rule };
+}
+function invalidResponse(reason: ResponseFailureReason, detail?: SchemaFailure): OpenAiAnalysisError {
   const error = new OpenAiAnalysisError("invalid_response", "OpenAI response was invalid");
   responseFailureReasons.set(error, reason);
+  if (reason === "result_schema" && detail) schemaFailures.set(error, detail);
   return error;
 }
 /** Only locally classified reasons, never an exception property or provider text. */
 export function openAiResponseFailureReason(error: unknown): ResponseFailureReason | undefined {
   return error instanceof OpenAiAnalysisError ? responseFailureReasons.get(error) : undefined;
+}
+/** Only fixed categories derived locally; never retain validation messages or input. */
+export function openAiSchemaFailure(error: unknown): SchemaFailure | undefined {
+  const detail = error instanceof OpenAiAnalysisError ? schemaFailures.get(error) : undefined;
+  return detail ? { ...detail } : undefined;
 }
 
 export interface OpenAiApiKeySource { load(reference: string): Promise<string>; }
@@ -104,7 +124,7 @@ export class OpenAiAnalysisAdapter implements ModelAnalysisPort {
         let output: unknown;
         try { output = JSON.parse(text) as unknown; } catch { throw invalidResponse("output_json"); }
         const result = schema.safeParse(output);
-        if (!result.success) throw invalidResponse("result_schema");
+        if (!result.success) throw invalidResponse("result_schema", schemaFailure(operation === "review" ? "review" : supervised?.checkpointAssessment === true ? "checkpoint" : "full_issue", result.error));
         return result.data;
       } catch (error) {
         const normalized = error instanceof OpenAiAnalysisError ? error : error instanceof Error && error.name === "TimeoutError" ? new OpenAiAnalysisError("timeout", "OpenAI request timed out") : invalidResponse("transport_exception");

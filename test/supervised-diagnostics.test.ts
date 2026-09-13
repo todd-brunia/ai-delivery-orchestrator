@@ -12,6 +12,16 @@ import {
 } from "../src/runtime/v1/index.js";
 
 describe("supervised runtime failure diagnostics", () => {
+  it("limits schema detail to result-schema rejection and fixed categories", () => {
+    const base = { version: "supervised-runtime-diagnostic/v1", event: "supervised_dispatch_failed", stage: "model_analysis", category: "invalid_response", modelResponseReason: "result_schema", modelSchemaFailure: { assessment: "checkpoint", field: "risk", rule: "constraint" } };
+    expect(SupervisedFailureDiagnosticSchema.safeParse(base).success).toBe(true);
+    for (const change of [
+      { stage: "database" }, { category: "unexpected" }, { modelResponseReason: "output_json" },
+      { modelResponseReason: undefined },
+      { modelSchemaFailure: { ...base.modelSchemaFailure, field: "private-sentinel" } },
+      { modelSchemaFailure: { ...base.modelSchemaFailure, message: "private-sentinel" } },
+    ]) expect(SupervisedFailureDiagnosticSchema.safeParse({ ...base, ...change }).success).toBe(false);
+  });
   it("rejects unknown response reasons and attribution outside invalid model analysis", () => {
     for (const value of [
       { stage: "database", category: "invalid_response", modelResponseReason: "output_limit" },

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import { OpenAiAnalysisAdapter } from "../src/providers/v1/index.js";
-import { openAiResponseFailureReason, OpenAiAnalysisError } from "../src/providers/v1/openai-analysis.js";
+import { openAiResponseFailureReason, openAiSchemaFailure, OpenAiAnalysisError } from "../src/providers/v1/openai-analysis.js";
 import { supervisedFailureDiagnostic, withinSupervisedStage } from "../src/runtime/v1/supervised-diagnostics.js";
 
 const repository = "todd-brunia/ai-consulting-client-portal";
@@ -32,6 +32,30 @@ function fixture(body: unknown) {
 }
 
 describe("OpenAI Responses analysis adapter", () => {
+  it.each([
+    [{ ...result, feasible: "private-sentinel" }, "feasible", "type"],
+    [{ ...result, risk: { ...result.risk, categories: ["ordinary", "security"] } }, "risk", "constraint"],
+    [{ ...result, dependencies: [{ prerequisiteIssueNumber: 69, dependentIssueNumber: 69, kind: "blocks" }] }, "dependencies", "constraint"],
+    [{ ...result, provenance: { ...provenance, artifactSha256: "private-sentinel" } }, "provenance", "format"],
+    [{ ...result, "private-sentinel": true }, "root", "unknown_fields"],
+    [{ ...result, risk: { ...result.risk, confidence: "private-sentinel" } }, "risk", "value"],
+    [{ ...result, risk: { ...result.risk, rationale: "" } }, "risk", "bounds"],
+  ])("emits bounded schema categories without input contents", async (output, field, rule) => {
+    const { adapter, transport } = fixture(response(JSON.stringify(output)));
+    const error: unknown = await adapter.analyzeFeasibility(request()).catch((value: unknown) => value);
+    if (!(error instanceof Error)) throw new Error("expected adapter rejection");
+    expect(openAiSchemaFailure(error)).toEqual({ assessment: "full_issue", field, rule });
+    const copy = openAiSchemaFailure(error)!;
+    copy.assessment = "review";
+    expect(openAiSchemaFailure(error)?.assessment).toBe("full_issue");
+    const diagnostic = await withinSupervisedStage("model_analysis", () => Promise.reject(error)).catch(supervisedFailureDiagnostic);
+    expect(diagnostic).toMatchObject({ modelSchemaFailure: { assessment: "full_issue", field, rule } });
+    expect(JSON.stringify(diagnostic)).not.toContain("private-sentinel");
+    expect(transport.calls).toHaveLength(1);
+  });
+  it("ignores forged schema detail", () => {
+    expect(openAiSchemaFailure(Object.assign(new OpenAiAnalysisError("invalid_response", "private-sentinel"), { modelSchemaFailure: { assessment: "review", field: "risk", rule: "constraint" } }))).toBeUndefined();
+  });
   it.each([
     ["output_limit", { ...response(), status: "incomplete", incomplete_details: { reason: "max_output_tokens" } }],
     ["incomplete", { ...response(), status: "incomplete", incomplete_details: { reason: "private-sentinel" } }],

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { FeasibilityRejectionReasonSchema, FeasibilityValidationError } from "../../domain/sprint-delivery/v1/feasibility-authorization.js";
 
 import { githubReadValidationFailure, githubRepositoryReadCheckpointFailure, GitHubReadError, OpenAiAnalysisError } from "../../providers/v1/index.js";
-import { OpenAiResponseFailureReasonSchema, openAiResponseFailureReason } from "../../providers/v1/openai-analysis.js";
+import { OpenAiResponseFailureReasonSchema, openAiResponseFailureReason, OpenAiSchemaFailureSchema, openAiSchemaFailure } from "../../providers/v1/openai-analysis.js";
 
 export const SupervisedFailureStageSchema = z.enum([
   "configuration",
@@ -75,7 +75,9 @@ export const SupervisedFailureDiagnosticSchema = z.object({
   checkpoint: SupervisedRepositoryReadCheckpointSchema.optional(),
   feasibilityReason: FeasibilityRejectionReasonSchema.optional(),
   modelResponseReason: OpenAiResponseFailureReasonSchema.optional(),
+  modelSchemaFailure: OpenAiSchemaFailureSchema.optional(),
 }).strict().superRefine((value, context) => {
+  if (value.modelSchemaFailure && (value.stage !== "model_analysis" || value.category !== "invalid_response" || value.modelResponseReason !== "result_schema")) context.addIssue({ code: "custom", path: ["modelSchemaFailure"], message: "schema detail requires model result schema rejection" });
   if (value.modelResponseReason && (value.stage !== "model_analysis" || value.category !== "invalid_response")) context.addIssue({ code: "custom", path: ["modelResponseReason"], message: "model response reason requires invalid model analysis" });
   if ((value.feasibilityReason || value.category === "feasibility_rejected") &&
       (value.stage !== "feasibility_validation" || value.category !== "feasibility_rejected" || !value.feasibilityReason)) {
@@ -110,7 +112,7 @@ function categoryFor(error: unknown): SupervisedFailureCategory {
 
 export function supervisedFailure(stage: SupervisedFailureStage, error: unknown): SupervisedDiagnosticError {
   const modelReason = stage === "model_analysis" ? openAiResponseFailureReason(error) : undefined;
-  if (modelReason) return new SupervisedModelResponseDiagnosticError(modelReason);
+  if (modelReason) return new SupervisedModelResponseDiagnosticError(modelReason, openAiSchemaFailure(error));
   if (stage === "feasibility_validation" && error instanceof FeasibilityValidationError) {
     const reason = FeasibilityRejectionReasonSchema.safeParse(error.reason);
     if (reason.success) return new SupervisedFeasibilityDiagnosticError(reason.data);
@@ -119,7 +121,7 @@ export function supervisedFailure(stage: SupervisedFailureStage, error: unknown)
 }
 
 class SupervisedModelResponseDiagnosticError extends SupervisedDiagnosticError {
-  constructor(readonly modelResponseReason: z.infer<typeof OpenAiResponseFailureReasonSchema>) { super("model_analysis", "invalid_response"); }
+  constructor(readonly modelResponseReason: z.infer<typeof OpenAiResponseFailureReasonSchema>, readonly modelSchemaFailure?: z.infer<typeof OpenAiSchemaFailureSchema>) { super("model_analysis", "invalid_response"); }
 }
 
 class SupervisedFeasibilityDiagnosticError extends SupervisedDiagnosticError {
@@ -152,6 +154,7 @@ export function supervisedFailureDiagnostic(error: unknown): SupervisedFailureDi
     stage: normalized.stage,
     category: normalized.category,
     ...(normalized instanceof SupervisedModelResponseDiagnosticError ? { modelResponseReason: normalized.modelResponseReason } : {}),
+    ...(normalized instanceof SupervisedModelResponseDiagnosticError && normalized.modelSchemaFailure ? { modelSchemaFailure: normalized.modelSchemaFailure } : {}),
     ...(normalized instanceof SupervisedFeasibilityDiagnosticError ? { feasibilityReason: normalized.feasibilityReason } : {}),
     ...(normalized.stage === "canonical_read" && normalized.operation ? { operation: normalized.operation } : {}),
     ...(normalized.stage === "canonical_read" && normalized.category === "invalid_input" && normalized.operation === "repository_configuration" && normalized.field ? { field: normalized.field } : {}),

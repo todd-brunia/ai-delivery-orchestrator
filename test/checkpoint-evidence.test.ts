@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildCheckpointEvidence, checkpointDigest, ReceiptCountsSchema, revalidateCheckpointSnapshot, validateCheckpointEvidence } from "../src/domain/sprint-delivery/v1/checkpoint-evidence.js";
 import { contentHash, prepareSupervisedArtifact } from "../src/providers/v1/supervised-analysis.js";
-import { OpenAiAnalysisAdapter } from "../src/providers/v1/openai-analysis.js";
+import { OpenAiAnalysisAdapter, openAiSchemaFailure } from "../src/providers/v1/openai-analysis.js";
 import { CHECKPOINT_ASSESSMENT_INSTRUCTIONS, CHECKPOINT_ASSESSMENT_POLICY_VERSION } from "../src/providers/v1/supervised-checkpoint-prompt.js";
 import { validateFeasibilityForRun } from "../src/domain/sprint-delivery/v1/feasibility-authorization.js";
 import { runtimeEvidence } from "./fixtures/runtime-evidence.js";
@@ -100,5 +100,11 @@ describe("checkpoint evidence", () => {
     expect(result.result.unresolvedDecisions).toEqual(["operational_authorization"]);
     expect(() => validateFeasibilityForRun(result.result, [142])).toThrow();
     expect(calls).toHaveLength(2);
+    wire.risk.categories = ["ordinary", "security"];
+    for (const checkpoint of [undefined, build()]) {
+      const failure: unknown = await adapter.analyzeSupervisedFeasibility(request, checkpoint).catch((error: unknown) => error);
+      expect(openAiSchemaFailure(failure)).toEqual({ assessment: checkpoint ? "checkpoint" : "full_issue", field: "risk", rule: "constraint" });
+    }
+    expect(calls).toHaveLength(4);
   });
 });
