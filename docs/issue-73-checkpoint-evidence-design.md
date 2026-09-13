@@ -148,3 +148,21 @@ The tests verify instruction selection, input provenance, untrusted-text isolati
 and rejection preservation; they do not establish live model quality or authorize
 execution. The execute workflow's subsequent full-issue assessment remains a
 separate integration gate; a scoped assessment must not silently replace it.
+
+## Read-only execution-readiness guard
+
+Checkpoint-enabled preflight now also invokes the existing full-issue analysis
+port after the scoped assessment passes. Both results must pass the unchanged
+domain feasibility and human-approval policies before preflight can be ready.
+The full-issue input artifact fingerprint joins the preflight digest, so a
+different full-issue input invalidates the owner's earlier authorization. Packet
+freshness is checked again after both assessments. Legacy callers without a
+checkpoint packet retain their previous preflight behavior.
+
+This adds an assessment call, not an authorization route or a replacement
+assessment. The live workflow still performs its own independent full-issue
+check. A later rejection can still consume an execution attempt and require
+recovery review; preflight cannot guarantee a future model result or freeze
+external state. The new guard catches currently observable full-issue rejection
+before run, authorization or planning-binding writes. No live calls were made
+to validate this change, and the last live scoped rejection remains unresolved.

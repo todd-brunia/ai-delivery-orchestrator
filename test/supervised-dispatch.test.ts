@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { RepositoryAdapterConfigV1 } from "../src/domain/sprint-delivery/v1/index.js";
 import type { PersistedSprintRun, WorkflowNodeResult } from "../src/persistence/index.js";
@@ -52,20 +52,21 @@ function fixture(executionEnabled = true, missingCoverage = false, reporting?: {
       return Promise.resolve({ duplicate });
     },
   };
+  const modelAnalysis = { analyzeFeasibility: () => Promise.resolve({ feasible: true, dependencies: [], conflicts: missingCoverage ? [] : [{ issueNumber, domains: [] }], risk: { categories: ["ordinary"] as const, confidence: "high" as const, rationale: "fixture" }, unresolvedDecisions: [] as string[], evidenceUris: [], provenance: { model: "stub", modelVersion: "v1", policyVersion: "v1", artifactSha256: "d".repeat(64), usage: { inputTokens: 0, outputTokens: 0 } } }) };
   const operator = new SupervisedDispatchOperator({ executionEnabled, adapter }, {
     ...reporting,
     repository: persistence as never,
     githubRead: githubRead as never,
-    modelAnalysis: { analyzeFeasibility: () => Promise.resolve({ feasible: true, dependencies: [], conflicts: missingCoverage ? [] : [{ issueNumber, domains: [] }], risk: { categories: ["ordinary"] as const, confidence: "high" as const, rationale: "fixture" }, unresolvedDecisions: [], evidenceUris: [], provenance: { model: "stub", modelVersion: "v1", policyVersion: "v1", artifactSha256: "d".repeat(64), usage: { inputTokens: 0, outputTokens: 0 } } }) } as never,
+    modelAnalysis: modelAnalysis as never,
     canonicalControl: { getDefaultBranchHead: () => Promise.resolve({ sha: branchSha, evidenceUri: "github://refs/main" }), assertWorkflowAtRef: () => Promise.resolve({ evidenceUri: "github://workflow/implementation.yml" }) },
     workflow: { execute: (request) => { workflowCalls += 1; if (!run || request.runId !== run.id) throw new Error("wrong durable run"); run = { ...run, workItems: [{ ...run.workItems[0]!, state: "dispatch_queued", revision: 4 }] }; return Promise.resolve({ workflowVersion: "sprint-delivery/v1", providerContractVersion: "providers/v1", runId: request.runId, threadId: request.threadId, status: "bindings_collected", bindingFingerprints: { [run.workItems[0]!.id]: "e".repeat(64) }, authorizedIssueNumbers: [issueNumber], waitingIssueNumbers: [], scheduledIssueNumbers: [issueNumber], dispatchOutboxIds: { [String(issueNumber)]: "00000000-0000-4000-8000-000000000999" } }); } },
     dispatchWorker: { drainExact: (actionId: string) => { claimed.push(actionId); return Promise.resolve([{ id: actionId, outcome: "completed" as const }]); } },
   });
-  return { operator, counts: () => ({ creates, workflowCalls, claimed, nodeResults: nodeResults.size }) };
+  return { operator, modelAnalysis, counts: () => ({ creates, workflowCalls, claimed, nodeResults: nodeResults.size }) };
 }
 
 describe("supervised dispatch operator", () => {
-  it("rechecks fresh receipts and reuses the approved snapshot without granting extra execution", async () => {
+  it.each(["accepted", "infeasible", "unresolved", "unavailable", "artifact_drift"] as const)("rechecks checkpoint receipts and full-issue readiness before writes (%s)", async (fullIssueResult) => {
     let time = "2026-08-31T21:40:00Z";
     let consumed = false;
     let calls = 0;
@@ -79,10 +80,24 @@ describe("supervised dispatch operator", () => {
       });
     } } });
     const base = { version: "supervised-dispatch-command/v1", repository: repositoryName, issueNumber };
+    const validAnalysis = await state.modelAnalysis.analyzeFeasibility();
+    const fullIssue = vi.spyOn(state.modelAnalysis, "analyzeFeasibility");
     const checked = await state.operator.run({ ...base, mode: "preflight", occurredAt: time });
+    expect(fullIssue).toHaveBeenCalledTimes(1);
+    expect(state.counts()).toEqual({ creates: 0, workflowCalls: 0, claimed: [], nodeResults: 0 });
     const command = { ...base, mode: "execute", occurredAt: "2026-08-31T21:42:00Z", checkpointEvidence: checked.preflight.checkpointEvidence, authorization: { id: "owner-checkpoint-142", preflightDigest: checked.preflight.digest, authorizedAt: "2026-08-31T21:41:00Z", expiresAt: "2026-08-31T21:45:00Z" } };
     await expect(state.operator.run({ ...command, checkpointEvidence: undefined })).rejects.toMatchObject({ stage: "execution_gate" });
     time = command.occurredAt;
+    if (fullIssueResult !== "accepted") {
+      if (fullIssueResult === "unavailable") fullIssue.mockRejectedValue(new Error("private-sentinel"));
+      else fullIssue.mockResolvedValue({ ...validAnalysis, feasible: fullIssueResult !== "infeasible", unresolvedDecisions: fullIssueResult === "unresolved" ? ["private-sentinel"] : [], provenance: { ...validAnalysis.provenance, artifactSha256: fullIssueResult === "artifact_drift" ? "e".repeat(64) : validAnalysis.provenance.artifactSha256 } });
+      const error = await state.operator.run(command).catch((value: unknown) => value);
+      expect(error).toMatchObject({ stage: fullIssueResult === "unavailable" ? "model_analysis" : fullIssueResult === "artifact_drift" ? "execution_gate" : "feasibility_validation" });
+      expect(String(error)).not.toContain("private-sentinel");
+      expect(fullIssue).toHaveBeenCalledTimes(2);
+      expect(state.counts()).toEqual({ creates: 0, workflowCalls: 0, claimed: [], nodeResults: 0 });
+      return;
+    }
     const result = await state.operator.run(command);
     expect(result.preflight.digest).toBe(checked.preflight.digest);
     expect(result).toMatchObject({ mode: "execute", dispatchOutcome: "completed" });
@@ -91,6 +106,7 @@ describe("supervised dispatch operator", () => {
     expect(calls).toBe(2);
     expect(state.counts().creates).toBe(1);
     expect(state.counts().claimed).toHaveLength(1);
+    expect(fullIssue).toHaveBeenCalledTimes(2);
   });
   it.each(["present", "unavailable"])("blocks %s checkpoint receipts before model access or mutations", async mode => {
     let calls = 0;

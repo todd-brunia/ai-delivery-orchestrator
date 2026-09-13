@@ -237,6 +237,18 @@ export class SupervisedDispatchOperator {
     });
     const analysis = withinSupervisedStageSync("feasibility_validation", () => validateFeasibilityForRun(rawAnalysis, [issueNumber]));
     const authorization = await withinSupervisedStage("policy", () => authorizeLiveBuild({ github: this.dependencies.githubRead, repository: this.adapter.repository, issueNumber, plan: binding.plan, analysis }));
+    // The checkpoint assessment is narrower than the live workflow's independent
+    // full-issue gate. Check both before creating a run/binding, without replacing
+    // the workflow's execution-time assessment or treating either as permission.
+    const fullIssueAnalysis = checkpointEvidence
+      ? await withinSupervisedStage("model_analysis", () => this.dependencies.modelAnalysis.analyzeFeasibility(analysisRequest))
+      : undefined;
+    const executionAnalysis = checkpointEvidence
+      ? withinSupervisedStageSync("feasibility_validation", () => validateFeasibilityForRun(fullIssueAnalysis, [issueNumber]))
+      : undefined;
+    const executionAuthorization = executionAnalysis
+      ? await withinSupervisedStage("policy", () => authorizeLiveBuild({ github: this.dependencies.githubRead, repository: this.adapter.repository, issueNumber, plan: binding.plan, analysis: executionAnalysis }))
+      : undefined;
     if (checkpointEvidence && this.dependencies.checkpoint) withinSupervisedStageSync("policy", () => validateCheckpointEvidence(checkpointEvidence, checkpointEvidence.facts, this.dependencies.checkpoint!.now()));
     const stableEvidence = {
       repository: this.adapter.repository,
@@ -256,10 +268,11 @@ export class SupervisedDispatchOperator {
       installationPermissions: binding.installation.permissions,
       workflow: this.adapter.workflows.implementation,
       analysisArtifactSha256: analysis.provenance.artifactSha256,
-      authorized: authorization.authorized,
+      authorized: authorization.authorized && (executionAuthorization?.authorized ?? true),
+      ...(executionAnalysis ? { executionAnalysisArtifactSha256: executionAnalysis.provenance.artifactSha256 } : {}),
     };
     const blockers: SupervisedPreflightResult["blockers"] = [];
-    if (!authorization.authorized) blockers.push("human_approval_required");
+    if (!stableEvidence.authorized) blockers.push("human_approval_required");
     return SupervisedPreflightResultSchema.parse({
       version: "supervised-dispatch-preflight/v1",
       ready: blockers.length === 0,
@@ -275,7 +288,7 @@ export class SupervisedDispatchOperator {
       appId: binding.installation.appId,
       installationId: binding.installation.installationId,
       workflow: this.adapter.workflows.implementation,
-      authorized: authorization.authorized,
+      authorized: stableEvidence.authorized,
       executionEnabled: this.config.executionEnabled,
       ...(checkpointEvidence ? { checkpointEvidence } : {}),
       blockers,

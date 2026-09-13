@@ -4,6 +4,21 @@
 
 ### Execution-handoff regression evidence
 
+The checkpoint-enabled read-only preflight now checks the existing full-issue
+assessment as well as scoped checkpoint readiness, applies both existing
+approval checks, and binds the additional input fingerprint into its digest.
+Tests prove full-issue infeasibility, unresolved decisions, provider failure or
+input-artifact drift prevents execute before any run/authorization/workflow
+write. The live workflow's independent gate remains in place. This is a local
+readiness safeguard, not a resolution of the last live model rejection or
+permission to dispatch.
+
+Validation for this guard: all 22 targeted supervised/workflow tests, full unit
+suite and seven observer tests, lint, typecheck, build, Docker build, compiled
+fixtures, offline Lambda container invocation and `git diff --check` passed.
+PostgreSQL integration and live AWS checks were not rerun for this application
+guard; the prior lifecycle checkpoint results below remain historical evidence.
+
 Local tests now exercise the actual live binding workflow with accepted,
 infeasible, unresolved-decision and unavailable full-issue assessments. All three
 failure cases preserve the discovered work-item state/revision and produce no
