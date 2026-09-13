@@ -2,6 +2,42 @@
 
 ## September 13 resumed validation (latest)
 
+### Runtime-v2 disabled preflight: result validation failure
+
+Fresh narrowed GitHub reads again verified the unchanged current marked plan
+`5646729081`, digest `e4bc9e3ebb57834c1426c405d9beb5ff55fa0268e9716bee50b4cd03e8c1f76a`,
+subsequent human approval, installation permission ceiling, workflow availability
+and successful exact-head CI Gate at default SHA
+`7b46cc3478dcbbd4d2157dc1ea44d273750e796f`.
+
+One execution-disabled preflight used supervised revision 21 and the validated
+`issue73-8d2c41d` image, with explicit runtime scope and an external 180-second
+watchdog. Task `12adc84606134313bc7d60a35070b497` started at 14:07:56 UTC and
+stopped at 14:09:05 UTC, exit 1. Its only validated diagnostic was
+`model_analysis / invalid_response / result_schema`; no ready preflight or
+decision report was emitted. This proves the runtime reached model result
+validation, not that either feasibility assessment passed. The diagnostic does
+not distinguish which of the two assessment schemas failed or retain a failing
+field. The raw response was not logged and cannot be reconstructed from this
+evidence. Do not relabel this as the previous infeasibility finding.
+
+The request kept the existing pinned model, instructions, tools-empty and
+store-false settings, with 4096 output tokens, 30-second request timeout and one
+transient retry maximum. Result-schema failures are not automatically retried.
+No run creation, workflow dispatch, callback processing, migration or authority
+change was enabled. The pilot running-task list was empty after completion.
+
+Local regression cases confirm that mixed ordinary/sensitive risks, duplicate
+risk categories and self-dependencies also map to the same rejecting schema
+diagnostic without leaking response contents or retrying. They demonstrate why
+the current diagnostic is insufficient to identify this live failure; they are
+not a diagnosis of the discarded response. Further investigation should use
+fixed, non-content schema attribution locally before another live attempt, not
+weaken validation or repeatedly rerun this candidate.
+
+Console evidence: the same us-east-1 pilot cluster and worker log group, stream
+`supervised-dispatch/supervised-dispatch/12adc84606134313bc7d60a35070b497`.
+
 ### Runtime metadata compatibility verified in ECS
 
 After local validation, image `issue73-8d2c41d` was published with digest

@@ -39,6 +39,9 @@ describe("OpenAI Responses analysis adapter", () => {
     ["refusal", { ...response(), output: [{ ...message(""), content: [{ type: "refusal", refusal: "private-sentinel" }] }] }],
     ["output_json", response("private-sentinel")],
     ["result_schema", response('{"private-sentinel":true}')],
+    ["result_schema", response(JSON.stringify({ ...result, risk: { ...result.risk, categories: ["ordinary", "security"], rationale: "private-sentinel" } }))],
+    ["result_schema", response(JSON.stringify({ ...result, risk: { ...result.risk, categories: ["security", "security"], rationale: "private-sentinel" } }))],
+    ["result_schema", response(JSON.stringify({ ...result, dependencies: [{ prerequisiteIssueNumber: 69, dependentIssueNumber: 69, kind: "blocks" }] }))],
     ["response_bounds", { ...response(), ignored: "x".repeat(1_000_001) }],
   ])("attributes %s without copying raw fields or relaxing rejection", async (reason, body) => {
     const { adapter, transport } = fixture(body);
