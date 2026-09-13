@@ -290,6 +290,7 @@ describe("Terraform foundation policy", () => {
     expect(bootstrap).toMatch(/sid\s*= "PassSupervisedDispatchRolesToEcs"[\s\S]*?actions\s*= \["iam:PassRole"\][\s\S]*?resources = local\.supervised_dispatch_role_arns[\s\S]*?values\s*= \["ecs-tasks\.amazonaws\.com"\]/);
     expect(bootstrap).not.toMatch(/sid\s*= "PassSupervisedDispatchRolesToEcs"[\s\S]*?lambda\.amazonaws\.com/);
     expect(bootstrap).toMatch(/sid\s*= "InspectPilotCallbackRoles"[\s\S]*?"iam:GetRole"[\s\S]*?resources = local\.callback_runtime_role_arns/);
+    expect(bootstrap).toMatch(/sid\s*= "InspectPilotCallbackControllerSchedule"[\s\S]*?"events:ListTagsForResource"[\s\S]*?callback-controller/);
     const callbackRemoval = bootstrap.match(/sid\s*= "RemovePilotCallbackRoles"[\s\S]*?\n\s{2}}\n/)?.[0] ?? "";
     expect(callbackRemoval).toContain('"iam:DeleteRole"');
     expect(callbackRemoval).toContain('"iam:DeleteRolePolicy"');

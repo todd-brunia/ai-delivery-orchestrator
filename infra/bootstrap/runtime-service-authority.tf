@@ -5,7 +5,7 @@ locals {
 data "aws_iam_policy_document" "github_plan_runtime_services" {
   statement {
     sid       = "InspectPilotCallbackControllerSchedule"
-    actions   = ["events:DescribeRule", "events:ListTargetsByRule"]
+    actions   = ["events:DescribeRule", "events:ListTargetsByRule", "events:ListTagsForResource"]
     resources = ["arn:aws:events:${var.aws_region}:${var.aws_account_id}:rule/${local.pilot_name}-callback-controller"]
   }
   statement {
@@ -163,7 +163,7 @@ data "aws_iam_policy_document" "github_apply_runtime_services" {
   statement {
     sid = "ManagePilotCallbackControllerSchedule"
     actions = [
-      "events:DeleteRule", "events:DescribeRule", "events:ListTargetsByRule", "events:RemoveTargets",
+      "events:DeleteRule", "events:DescribeRule", "events:ListTagsForResource", "events:ListTargetsByRule", "events:RemoveTargets",
     ]
     resources = ["arn:aws:events:${var.aws_region}:${var.aws_account_id}:rule/${local.pilot_name}-callback-controller"]
   }
