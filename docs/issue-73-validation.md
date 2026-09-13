@@ -2,6 +2,28 @@
 
 ## September 13 resumed validation (latest)
 
+### Runtime metadata compatibility verified in ECS
+
+After local validation, image `issue73-8d2c41d` was published with digest
+`sha256:ee49336ecfa587f09f676e666b9e602e221d4097c9d44bc2b07676798f0087b8`.
+Supervised task revision 21 changes only the image from revision 20; existing
+roles, task configuration and network scope were preserved. One manually
+launched metadata-only probe used a 30-second external watchdog, independently
+of the observer's 180-second process timer.
+
+Task `23525bb0b04046b2bd77efa2ba44a3aa` logged `runtime_metadata_smoke/passed`,
+exited 0, and reached STOPPED at 14:04:13 UTC on September 13. Its fixed result
+records zero database connections, model calls, dispatches and callback claims.
+The configuration fingerprint was explicitly synthetic: this proves the pinned
+ECS metadata adapter and process guard are compatible with the actual task,
+not full CLI configuration readiness, model acceptance or callback processing.
+The pilot running-task list was empty after the probe.
+
+Console evidence (us-east-1): ECS cluster `ai-delivery-orchestrator-pilot-worker`,
+stopped task above; CloudWatch log group `/ai-delivery-orchestrator/pilot/worker`,
+stream `supervised-dispatch/supervised-dispatch/23525bb0b04046b2bd77efa2ba44a3aa`.
+No service, schedule, Lambda, IAM, database migration or fixture was changed.
+
 ### Approved runtime evidence: local implementation
 
 The owner approved the runtime-evidence proposal and requested local-first
