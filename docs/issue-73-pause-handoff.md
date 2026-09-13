@@ -1,5 +1,9 @@
 # Issue #73 pause / restart — September 12, 2026
 
+Historical pause snapshot: work resumed September 13 under the owner's AWS-test
+authorization. Read the **September 13 resumed validation** section at the start
+of `issue-73-validation.md` for current candidates, results, and remaining gates.
+
 ## Stopping point
 
 The approved local checkpoint-evidence implementation is complete on

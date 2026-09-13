@@ -1,5 +1,49 @@
 # Issue #73: completion and validation
 
+## September 13 resumed validation (latest)
+
+The owner authorized independently progressing toward one final PR and running
+AWS tests with their refreshed credentials. IAM/credential expansion and human-only
+actions remain gated. No callback enablement, fixture publication, migration,
+workflow dispatch, or runtime IAM modification has occurred in this resumed work.
+
+- Published commit `bb5a4f7` as ECR tag `issue73-bb5a4f7`, digest
+  `sha256:eaf59d05f5d507d8dd4d648c895c0d33731ab10f2bdde88e90494d4bff7abadd`,
+  supervised task revision 18, with unchanged roles/network and execution disabled.
+- Preflight task `5c284ad5e5f743fc9ca4cbd329ed64fe` failed at the database stage.
+  A subsequent 45-second read-only diagnostic task
+  `f684c04dcd0548b790585455c3c7b886` exited 0 and confirmed all six issue-142
+  record-family counts were zero. This is consistent with cold Aurora connection
+  timeout, not proof that the original cause was captured. Commit `cb504f3`
+  raises connection establishment to 45 seconds; SQL limits remain unchanged.
+- Warm revision-18 retry `4f58dae114b8482982c178f575e4181b` reached model assessment
+  and failed with `unresolved_decisions`: acceptance_evidence,
+  checkpoint_consumption, fixture_publishing_path, operational_authorization.
+  Report SHA `9841fb2dc1315c7a8372d9b36481196665b2410db680c34e3d8299190fbcb80b`;
+  actual input SHA `dd38d101e457db01e566b5bad067e7ce1ccb867245e2660d0b59ce894e410984`.
+  No rejection was bypassed. Referenced plan segments were read against the same
+  canonical marked plan and their concerns remain model-reported, not verified facts.
+- Commit `dfad594` explicitly defines the checkpoint assessment in static
+  application instructions and hashes that policy into the artifact. Legacy
+  full-issue analysis remains unchanged. Published ECR tag `issue73-dfad594`,
+  digest `sha256:8fb7c428f092a0ccb439c968cd26540638fad7d560e43694ba81a0fd090700e8`,
+  supervised revision 19. Task `ef3ab464ebf04e3bb1941eb332957874` failed closed
+  at `model_analysis/invalid_response`. Its safe diagnostic does not distinguish
+  provider-envelope, JSON/schema, or evidence-normalization failure. Do not guess
+  the cause, increase permissions, or repeatedly invoke an unchanged candidate.
+- Local checks passed: lint, typecheck, 301 unit tests plus 6 observer tests,
+  build, compiled fixtures, Docker build, 44 PostgreSQL integration tests,
+  `npm audit --audit-level=high` (zero vulnerabilities), and diff whitespace checks.
+
+Current remaining gates: improve safe invalid-response attribution before another
+model invocation; validate the scoped-assessment/execute workflow handoff (which
+still performs its independent full-issue feasibility review); obtain real accepted
+dispatch evidence; staged fixture/callback evidence; and automatic lifecycle wiring.
+No final PR or completion claim is justified yet. The verified lifecycle authority
+gap and proposed least-privilege remedy are in
+`issue-73-lifecycle-authority-proposal.md`. The existing autoscaling target has no
+scaling policy, no named wake rules were found, and runtime roles lack ECS controls.
+
 Work is kept on `issue-73-complete-callbacks`. Open one draft PR after the
 implementation and agreed acceptance evidence are complete. #74 remains outside
 this change. Do not close #73 on the strength of unit tests or an image build.
