@@ -24,6 +24,7 @@ export interface CallbackWorkerOptions {
   readonly maxBatch: number;
   readonly maxAttempts: number;
   readonly leaseMilliseconds: number;
+  readonly mayWork?: () => Promise<boolean>;
 }
 
 /** A delivery has a hard deadline; slow reads cannot extend authority past its lease. */
@@ -36,6 +37,7 @@ export class CallbackWorker {
   async drainOnce(): Promise<readonly CallbackDisposition[]> {
     const outcomes: CallbackDisposition[] = [];
     for (let index = 0; index < this.options.maxBatch && this.control.mayClaim; index++) {
+      if (this.options.mayWork && !await this.options.mayWork()) break;
       const started = this.now();
       const expiresAt = new Date(started.getTime() + this.options.leaseMilliseconds);
       const item = (await this.inbox.claim(this.options.ownerId, 1, expiresAt, this.options.maxAttempts, started))[0];
@@ -47,7 +49,7 @@ export class CallbackWorker {
         workItemId = await this.resolver.locate(item.event);
         if (!workItemId) {
           const installation = item.event.eventName.startsWith("installation");
-          if (!this.control.mayClaim || this.now() >= expiresAt) throw new Error("callback_deadline_or_drain");
+          if ((this.options.mayWork && !await this.options.mayWork()) || !this.control.mayClaim || this.now() >= expiresAt) throw new Error("callback_deadline_or_drain");
           await this.commits.commit({ deliveryId: item.event.deliveryId, deliveryLeaseOwner: this.options.ownerId, disposition: installation ? "blocked" : "ignored", reasonClass: installation ? "installation_reconciliation_required" : "unsupported_action", evidence: { eventName: item.event.eventName, configurationVersion: this.options.configurationVersion }, recordedAt: this.now().toISOString(), events: [], ...(installation ? { notification: "reconciliation" as const } : {}) }, this.now());
           outcomes.push(installation ? "blocked" : "ignored");
           continue;
@@ -55,7 +57,7 @@ export class CallbackWorker {
         const acquired = await this.leases.tryAcquireLease({ aggregateType: "work_item", aggregateId: workItemId, ownerId: leaseOwner, expiresAt }, this.now());
         if (!acquired) throw new Error("lease_unavailable");
         const resolved = await this.resolver.resolve({ event: item.event, configurationVersion: this.options.configurationVersion, workItemId });
-        if (!this.control.mayClaim || this.now() >= expiresAt) throw new Error("callback_deadline_or_drain");
+        if ((this.options.mayWork && !await this.options.mayWork()) || !this.control.mayClaim || this.now() >= expiresAt) throw new Error("callback_deadline_or_drain");
         const decision = decideCallback(item.event, resolved.binding, resolved.observation, resolved.state);
         const disposition = decision.disposition === "ready" ? "completed" : decision.disposition;
         const semanticKey = `callback:v1:${workItemId}:${createHash("sha256").update(JSON.stringify({ observation: resolved.observation, reason: decision.reason })).digest("hex")}`;

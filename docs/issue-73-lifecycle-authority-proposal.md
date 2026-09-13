@@ -1,7 +1,64 @@
 # Issue #73: remaining lifecycle authority decision
 
-Status: proposal only, September 13, 2026. No IAM, role, scheduler, service,
-network, or callback-enablement change has been applied for this proposal.
+Status: owner approved implementation and pilot testing, September 13, 2026,
+in the working session. Approval is limited to the inventory and safeguards below;
+it does not authorize production deployment or bypass the fixture prerequisites.
+Implementation is in progress. The reviewed IAM bootstrap was applied on
+September 13: three callback roles and four inline policies created, with zero
+existing resources changed or destroyed. Task-launch authority is not attached
+until both exact task-definition revisions exist and their second plan is reviewed.
+
+## Additional network prerequisite — owner approved
+
+Read-only inspection on September 13 confirmed that private worker security group
+`sg-0195296e5bc0ea25c` permits PostgreSQL to the database, HTTPS to the interface
+endpoint security group, and HTTPS to the regional S3 prefix list. It does not
+permit HTTPS to DynamoDB. The existing DynamoDB gateway endpoint and route alone
+do not grant security-group egress. This also prevents the existing private
+callback projection writer from reaching its coordination table.
+
+The lifecycle ingress needs DynamoDB for its generation fence and durable wake
+signal before SQS acknowledgement. The required additional permission is one
+outbound TCP 443 rule from this worker security group to the AWS-managed
+`com.amazonaws.us-east-1.dynamodb` prefix list through the existing gateway
+endpoint. No ingress, internet route, NAT, endpoint, credential, or IAM action
+would be added by that rule. The owner explicitly approved this exact addition
+in the working session on September 13, before any AWS mutation.
+
+Local work adds the lifecycle state machine, conditional coordination
+adapter, pinned ECS launcher, scheduled handler, runtime fences and wake wiring,
+and opt-in Terraform definitions. Application deployment and acceptance testing
+are still in progress; the IAM bootstrap alone does not establish callback success.
+
+## Lifecycle implementation notes
+
+- Missing coordination state is disabled and unknown, not empty. Initialization
+  seeds unacknowledged work for both modes; owner enablement increments a generation.
+- Conditional revisions serialize reservations and wake updates. A slot contains
+  the configuration hash, deterministic launch token, captured wake, generation,
+  task ARN when known, and a fixed 180-second deadline including startup.
+- A known task must be observed `STOPPED` before its slot can be reused. Unknown
+  launches retry the identical request only within ten minutes, safely inside
+  [ECS's token lifetime](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ECS_Idempotency.html).
+  Older ambiguous outcomes remain fenced for operator inspection; they never
+  expire directly into a duplicate launch. Five consecutive task crashes exhaust
+  automatic retries until an explicit generation-fenced wake.
+- Before claims and callback/projection commits, the runtime rereads the durable
+  generation and checks its task identity/deadline. Signal failures prevent SQS
+  acknowledgement. Empty progress acknowledges only the launch's captured wake.
+- Pilot task definitions require lifecycle identity and exact delivery-ID scope.
+  The unconfigured scope is the nil UUID, and scheduler enablement additionally
+  requires explicit delivery IDs and canonical hook identity. No fixture gate is
+  inferred from a successful infrastructure deployment.
+- The Lambda scheduler is outside the VPC and disabled by default. The pilot's
+  concurrency quota remains unchanged and unreserved; conditional claims, not
+  concurrency settings, establish single-task safety.
+- Bootstrap sequence: opt into IAM roles without launch ARNs; provision the two
+  task definitions and disabled controller using an immutable candidate digest;
+  then attach launch authority for those exact revisions. Preserve these explicit
+  Terraform inputs on subsequent plans; omitted opt-in values would propose
+  deletion and must be rejected. Existing main-only deployment workflows are not
+  used to test a feature candidate.
 
 ## Verified gap
 
@@ -22,7 +79,8 @@ table. It may launch only two pinned callback task definitions in the existing
 pilot cluster: ingress and canonical processor. No model or publishing operation
 is available to this controller. The processor uses existing reviewed public
 subnets/security group; the ingress retains the existing private network path.
-No NAT gateway, endpoint removal, or additional network access is proposed.
+No NAT gateway or endpoint removal is proposed. The only additional network
+access is the separately approved DynamoDB egress rule described above.
 
 At most one task per mode runs concurrently. Launches use durable conditional
 claims and deterministic ECS client tokens, with explicit task deadlines and

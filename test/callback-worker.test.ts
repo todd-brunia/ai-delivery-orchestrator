@@ -7,6 +7,17 @@ const event: NormalizedGitHubEvent = { version: "github-webhook/v1", deliveryId:
 const resolver: CallbackResolver = { locate: () => Promise.resolve("work-item-81"), resolve: () => Promise.resolve({ runId: "run-81", revision: 0, runRevision: 0, observedAt: event.receivedAt, artifacts: [], workItemId: "work-item-81", state: "build_dispatched", binding: { repository: event.repository!, hookId: 8, installationId: 9, issueNodeId: "I_81", planningFingerprint: "b".repeat(64), automationMarker: "marker:81", expectedBranch: "automation/81", expectedBaseSha: "c".repeat(40), acceptedWorkflowRunId: "81" }, observation: { repository: event.repository!, hookId: 8, installationId: 9, issueNodeId: "I_81", planningFingerprint: "b".repeat(64), automationMarker: "marker:81", branch: "automation/81", baseSha: "c".repeat(40), workflowRunId: "81", workflowCompleted: true } }) };
 
 describe("callback worker", () => {
+  it("rechecks the durable generation after canonical reads and before committing", async () => {
+    let gates = 0; let commits = 0;
+    const worker = new CallbackWorker(new RuntimeGenerationControl(),
+      { claim: () => Promise.resolve([{ event, attemptCount: 1 }]), retry: () => Promise.resolve("pending" as const) },
+      { tryAcquireLease: () => Promise.resolve(true) }, resolver,
+      { commit: () => { commits++; return Promise.resolve({ duplicate: false }); } },
+      { ownerId: "fenced", configurationVersion: "config:1", maxBatch: 1, maxAttempts: 3, leaseMilliseconds: 60_000,
+        mayWork: () => Promise.resolve(++gates === 1) });
+    expect(await worker.drainOnce()).toEqual(["retrying"]);
+    expect(commits).toBe(0); expect(gates).toBe(2);
+  });
   it("claims a bounded FIFO batch, leases the item, and commits canonical catch-up", async () => {
     const commits: unknown[] = []; let retried = false;
     const worker = new CallbackWorker(new RuntimeGenerationControl(), { claim: () => Promise.resolve([{ event, attemptCount: 1 }]), retry: () => { retried = true; return Promise.resolve("pending" as const); } }, { tryAcquireLease: () => Promise.resolve(true) }, resolver, { commit: (value) => { commits.push(value); return Promise.resolve({ duplicate: false }); } }, { ownerId: "worker-a", configurationVersion: "config:1", maxBatch: 1, maxAttempts: 3, leaseMilliseconds: 60_000 }, () => new Date("2026-08-31T12:00:00Z"));

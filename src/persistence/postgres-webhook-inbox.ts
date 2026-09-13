@@ -13,6 +13,18 @@ interface InboxRow { normalized_event: unknown; attempt_count: number; claim_exp
 export class PostgresWebhookInbox {
   constructor(private readonly pool: Pool, private readonly callbackRepository?: string, private readonly enabledEvents?: readonly string[], private readonly deliveryIds?: readonly string[]) {}
 
+  /** Claimed work remains pending until completion, even before lease expiry. */
+  async hasPendingWork(): Promise<boolean> {
+    const result = await this.pool.query<{ pending: boolean }>(`SELECT EXISTS (
+      SELECT 1 FROM orchestrator.github_webhook_inbox WHERE status IN ('pending','claimed')
+      AND ($1::text IS NULL OR repository=$1 OR repository IS NULL)
+      AND ($2::text[] IS NULL OR event_name=ANY($2))
+      AND ($3::uuid[] IS NULL OR delivery_id=ANY($3))) AS pending`,
+    [this.callbackRepository ?? null, this.enabledEvents ?? null, this.deliveryIds ?? null]);
+    if (typeof result.rows[0]?.pending !== "boolean") throw new Error("callback_progress_unavailable");
+    return result.rows[0].pending;
+  }
+
   async accept(rawEvent: NormalizedGitHubEvent): Promise<InboxAcceptance> {
     const event = NormalizedGitHubEventSchema.parse(rawEvent);
     const result = await this.pool.query(

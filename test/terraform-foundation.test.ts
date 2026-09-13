@@ -121,7 +121,7 @@ describe("Terraform foundation policy", () => {
   it("exposes only bounded webhook ingress through API Gateway and Lambda", () => {
     expect(pilot).toContain('route_key = "POST /github/webhooks"');
     expect(pilot).toContain('payload_format_version = "2.0"');
-    expect(pilot).not.toContain("reserved_concurrent_executions");
+    expect(read("infra/environments/pilot/webhook-ingress.tf")).not.toContain("reserved_concurrent_executions");
     expect(pilot).toContain('entry_point = ["node_modules/.bin/aws-lambda-ric"]');
     expect(pilot).toContain('command     = ["dist/github/webhooks/v1/lambda-handler.handler"]');
     expect(pilot).toContain('WEBHOOK_SECRET_ARN');
@@ -241,7 +241,7 @@ describe("Terraform foundation policy", () => {
     const migrationSecretInjection = pilotIam.match(/data "aws_iam_policy_document" "migration_secret_injection" \{([\s\S]*?)\n\}/)?.[1];
     expect(migrationSecretInjection).toContain('resources = [var.database_secret_arn]');
     expect(migrationSecretInjection).not.toContain("secretsmanager:VersionStage");
-    expect(pilotIam).not.toMatch(/iam:PassRole|iam:\*/);
+    expect(pilotIam.replace(read("infra/environments/pilot-iam/callback-lifecycle.tf"), "")).not.toMatch(/iam:PassRole|iam:\*/);
     expect(pilot).not.toMatch(/resource\s+"aws_iam_/);
     expect(pilot).not.toMatch(/aws_secretsmanager_secret_version|secret_string|secret_binary/i);
   });
@@ -424,8 +424,30 @@ describe("Terraform foundation policy", () => {
     expect(pilot).toContain("role          = var.operator_lambda_role_arn");
     expect(pilot).toContain("execution_role_arn       = var.supervised_dispatch_execution_role_arn");
     expect(pilot).toContain("task_role_arn            = var.supervised_dispatch_task_role_arn");
-    expect(pilot.match(/skip_destroy\s*=\s*true/g)).toHaveLength(3);
+    expect(pilot.match(/skip_destroy\s*=\s*true/g)).toHaveLength(4);
     expect(bootstrap).not.toContain("ecs:DeregisterTaskDefinition");
+  });
+
+  it("limits the approved callback lifecycle to pinned tasks and scoped coordination", () => {
+    const lifecycle = read("infra/environments/pilot/callback-lifecycle.tf");
+    const authority = read("infra/environments/pilot-iam/callback-lifecycle.tf");
+    expect(lifecycle).toMatch(/variable "callback_lifecycle_enabled"\s*\{[^}]*default\s*=\s*false/);
+    expect(lifecycle).toContain('state               = var.callback_lifecycle_enabled ? "ENABLED" : "DISABLED"');
+    expect(lifecycle).toContain('CALLBACK_LIFECYCLE_REQUIRED');
+    expect(lifecycle).toContain('source_arn');
+    expect(lifecycle).toContain('aws_cloudwatch_event_rule.callback_controller[0].arn');
+    expect(lifecycle).not.toMatch(/OPENAI|SUPERVISED_DISPATCH|aws_nat_gateway|aws_iam_role/);
+    expect(authority).toContain('resources = values(var.callback_task_definition_arns)');
+    expect(authority).toContain('resources = [aws_iam_role.worker.arn, aws_iam_role.callback["processor"].arn, aws_iam_role.callback["execution"].arn]');
+    expect(authority).toContain('variable = "iam:PassedToService"');
+    expect(authority).toContain('values   = ["ecs-tasks.amazonaws.com"]');
+    expect(authority).toContain('variable = "ecs:cluster"');
+    expect(authority).toContain('variable = "dynamodb:LeadingKeys"');
+    expect(authority).toContain('values   = ["callback-lifecycle/v1"]');
+    expect(authority).not.toMatch(/iam:\*|ecs:\*|secretsmanager:\*|sqs:ReceiveMessage|openai|UpdateService|StopTask/);
+    const network = read("infra/environments/pilot/private-endpoints.tf");
+    expect(network).toContain('prefix_list_id    = data.aws_prefix_list.dynamodb.id');
+    expect(network).toContain('name = "com.amazonaws.${var.aws_region}.dynamodb"');
   });
 
   it("keeps supervised dispatch ephemeral, disabled, zero-inbound, and least privilege", () => {

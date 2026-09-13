@@ -11,6 +11,15 @@ describe("callback runtime boundary", () => {
     const inbox = { accept: () => { accepted++; return Promise.resolve({ event: payload as never, duplicate: false }); } };
     await acceptCallbackEnvelope(JSON.stringify(envelope), "fixture:v1", payload.repository, inbox);
     expect(accepted).toBe(1);
+    const order: string[] = [];
+    const durableInbox = { accept: () => { order.push("inbox"); return Promise.resolve({ event: payload as never, duplicate: true }); } };
+    await expect(acceptCallbackEnvelope(JSON.stringify(envelope), "fixture:v1", payload.repository, durableInbox,
+      () => { order.push("wake"); return Promise.reject(new Error("signal_unavailable")); })).rejects.toThrow("signal_unavailable");
+    expect(order).toEqual(["inbox", "wake"]);
+    // Successful duplicate delivery must republish the wake before ACK is allowed.
+    await acceptCallbackEnvelope(JSON.stringify(envelope), "fixture:v1", payload.repository, durableInbox,
+      () => { order.push("wake"); return Promise.resolve(); });
+    expect(order).toEqual(["inbox", "wake", "inbox", "wake"]);
     await expect(acceptCallbackEnvelope(JSON.stringify({ ...envelope, contentSha256: "b".repeat(64) }), "fixture:v1", payload.repository, inbox)).rejects.toThrow("mismatch");
     await expect(acceptCallbackEnvelope(JSON.stringify(envelope), "fixture:v2", payload.repository, inbox)).rejects.toThrow("mismatch");
     expect(accepted).toBe(1);
@@ -26,6 +35,9 @@ describe("callback runtime boundary", () => {
       REPOSITORY_ADAPTER_JSON: "{}", GITHUB_HOOK_ID: "1", GITHUB_REPOSITORY_ID: "2", GITHUB_APP_ID: "3", GITHUB_INSTALLATION_ID: "4", GITHUB_INSTALLATION_ACCOUNT: "fixture",
       PGHOST: "fixture.invalid", PGDATABASE: "orchestrator", DATABASE_SECRET_ARN: "arn:aws:secretsmanager:us-east-1:123456789012:secret:rds!cluster-fixture-abcdef" };
     expect(CallbackEnvironmentSchema.safeParse(ingress).success).toBe(true);
+    expect(CallbackEnvironmentSchema.safeParse({ ...ingress, CALLBACK_LIFECYCLE_REQUIRED: "true" }).success).toBe(false);
+    expect(CallbackEnvironmentSchema.safeParse({ ...ingress, CALLBACK_LIFECYCLE_REQUIRED: "true",
+      CALLBACK_LIFECYCLE_CONFIGURATION: "a".repeat(64), CALLBACK_LIFECYCLE_TOKEN: "b".repeat(64), CALLBACK_LIFECYCLE_DEADLINE: "2000000000000" }).success).toBe(true);
     const processor = { ...ingress, CALLBACK_RUNTIME_MODE: "processor" };
     expect(CallbackEnvironmentSchema.safeParse(processor).success).toBe(false);
     expect(CallbackEnvironmentSchema.safeParse({ ...processor, PGUSER: "fixture", PGPASSWORD: "fake", CALLBACK_DELIVERY_IDS: randomUUID() }).success).toBe(true);

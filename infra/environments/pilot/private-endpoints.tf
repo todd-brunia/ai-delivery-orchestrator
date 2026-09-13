@@ -6,6 +6,19 @@ data "aws_prefix_list" "s3" {
   name = "com.amazonaws.${var.aws_region}.s3"
 }
 
+data "aws_prefix_list" "dynamodb" {
+  name = "com.amazonaws.${var.aws_region}.dynamodb"
+}
+
+resource "aws_vpc_security_group_egress_rule" "worker_dynamodb_gateway" {
+  security_group_id = aws_security_group.worker.id
+  prefix_list_id    = data.aws_prefix_list.dynamodb.id
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+  description       = "TLS to regional DynamoDB through the existing gateway endpoint"
+}
+
 resource "aws_security_group" "private_endpoints" {
   name        = "${local.name}-private-endpoints"
   description = "TLS access to exact AWS private service endpoints from pilot workers"

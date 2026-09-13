@@ -83,6 +83,21 @@ beforeEach(async () => {
 });
 afterAll(async () => pool.end());
 
+it("retains claimed work in lifecycle progress and scopes empty evidence to enabled deliveries", async () => {
+  const selected = event(); const excluded = event();
+  const scoped = new PostgresWebhookInbox(pool, repository, ["workflow_run"], [selected.deliveryId]);
+  expect(await scoped.hasPendingWork()).toBe(false);
+  await inbox.accept(excluded);
+  expect(await scoped.hasPendingWork()).toBe(false);
+  await inbox.accept(selected);
+  expect(await scoped.hasPendingWork()).toBe(true);
+  await scoped.claim("progress", 1, new Date(Date.now() + 60_000), 3);
+  expect(await scoped.hasPendingWork()).toBe(true);
+  await scoped.complete(selected.deliveryId, "progress");
+  expect(await scoped.hasPendingWork()).toBe(false);
+  expect(await inbox.hasPendingWork()).toBe(true);
+});
+
 describe("complete callback pipeline with real PostgreSQL and fake GitHub HTTP", () => {
   it("catches up from a delayed PR callback and records every duplicate delivery without duplicate work", async () => {
     exposePr();
