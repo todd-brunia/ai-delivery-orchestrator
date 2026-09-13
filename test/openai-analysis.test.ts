@@ -51,6 +51,18 @@ describe("OpenAI Responses analysis adapter", () => {
   it("does not accept forged reason properties", () => {
     expect(openAiResponseFailureReason(Object.assign(new OpenAiAnalysisError("invalid_response", "private-sentinel"), { modelResponseReason: "output_limit" }))).toBeUndefined();
   });
+  it.each(["response_json", "transport_exception"])("keeps %s fail-closed and non-retryable", async reason => {
+    let calls = 0;
+    const adapter = new OpenAiAnalysisAdapter(config, { load: () => Promise.resolve("sk-abcdefghijklmnopqrstuvwxyz") }, { load: () => Promise.resolve({ kind: "issue_bundle", sha256: hash, bytes: "fixture" }) }, { request: () => {
+      calls += 1;
+      if (reason === "transport_exception") throw new TypeError("private-sentinel");
+      return Promise.resolve({ status: 200, body: "private-sentinel" });
+    } });
+    const error = await withinSupervisedStage("model_analysis", () => adapter.analyzeFeasibility(request())).catch((value: unknown) => value);
+    expect(supervisedFailureDiagnostic(error)).toMatchObject({ category: "invalid_response", modelResponseReason: reason });
+    expect(JSON.stringify(supervisedFailureDiagnostic(error))).not.toContain("private-sentinel");
+    expect(calls).toBe(1);
+  });
   it.each([false, true])("classifies timeout separately and keeps bounded transient retry: %s", async recover => {
     let calls = 0;
     const adapter = new OpenAiAnalysisAdapter(config, { load: () => Promise.resolve("sk-abcdefghijklmnopqrstuvwxyz") }, { load: () => Promise.resolve({ kind: "issue_bundle", sha256: hash, bytes: "fixture" }) }, { request: () => {

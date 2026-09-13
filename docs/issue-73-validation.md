@@ -2,6 +2,38 @@
 
 ## September 13 resumed validation (latest)
 
+### Diagnostic continuation
+
+Commit `ddf1e8d` adds local, fixed-category response attribution. Only reasons
+recorded by the adapter in a private WeakMap can reach the strict diagnostic;
+exception properties, provider messages, JSON text, and reasoning are excluded.
+Incomplete output limits, other incomplete responses, refusals, envelope/JSON/
+schema failures, and evidence-normalization failures remain rejecting. Actual
+`TimeoutError` exceptions now use the existing bounded timeout retry budget
+instead of being misclassified as invalid responses. No model, effort, token
+limit, authorization, or feasibility rule changed.
+
+Published tag `issue73-ddf1e8d`, digest
+`sha256:315d6d1950f48dfaa15f9ef4f640eda3d4d5db9ee03c466cfb9ba2493582cc56`,
+supervised revision 20. Task `9e8e7cf0c01c48879e9037ae37a6f6ba` ran with dispatch
+disabled, unchanged roles/network and a 180-second hard deadline. It stopped at
+12:18:57 UTC with exit 1, after a valid structured assessment was rejected as
+`infeasible`. Two unresolved categories remained: checkpoint_consumption and
+runtime_readiness, referencing plan segments P0019/P0020/P0025/P0026. The report
+hash is `a413725efe8d9dc548ae893f543c5a5417bc913d3357578aa27e418315f59766`;
+actual input hash is
+`eb117a8929d78d04e7b27a85aae7000085590ca90d60b512368eb4402ee7f468`.
+This result does not reconstruct revision 19's discarded response or establish
+that its failure was a timeout. No unchanged-candidate retry is planned.
+
+Local unit, type/lint/build, compiled diagnostic/redaction and Docker checks
+passed, as did all 44 PostgreSQL integration tests. The lifecycle IAM proposal
+still awaits explicit owner approval; automated goal continuation is not approval.
+No fixture dispatch, callback processing, migration, or IAM change occurred.
+Reference: [Responses API fields](https://developers.openai.com/api/reference/cli/resources/responses/methods/create).
+
+### Earlier September 13 attempts
+
 The owner authorized independently progressing toward one final PR and running
 AWS tests with their refreshed credentials. IAM/credential expansion and human-only
 actions remain gated. No callback enablement, fixture publication, migration,
