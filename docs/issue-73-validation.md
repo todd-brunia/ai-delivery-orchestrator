@@ -2,6 +2,39 @@
 
 ## September 13 resumed validation (latest)
 
+### Revision 22 preflight: valid result, feasibility rejected
+
+After commit `16be4d2`, all 45 local PostgreSQL integration tests and the offline
+native Lambda invocation passed. Fresh narrowed GitHub reads verified the same
+plan, subsequent approval, installation permission ceiling and exact-head CI
+Gate described below. The locally validated image was pushed as
+`issue73-16be4d2`, digest
+`sha256:65cc50bfa993da99e33e3f7b5ffa530552ba660d1e293ffa8bebd7b63bfc8753`.
+Supervised task revision 22 differs from revision 21 only in its image; roles
+and disabled dispatch configuration were preserved.
+
+One bounded preflight task, `5a6b7de2328e419c88a2bcebfba83551`, started at
+14:21:05 UTC and stopped at 14:22:12 UTC, exit 1. It emitted a valid structured
+decision report followed by `feasibility_validation / feasibility_rejected /
+infeasible`. Report digest:
+`721a7ca21fcc08684fe07c1f79e90d4a453e62fd9c2d9f38a0bceaedfd158b80`;
+input artifact digest:
+`27c410eda1c87a9b09a0707cfa566954a01605d2518035108983847a4ac70994`.
+The three reported categories were `acceptance_evidence`,
+`checkpoint_consumption`, and `runtime_readiness`, all with empty evidence IDs.
+These are model-reported concerns, not verified defects. No source references
+or specific missing facts can be inferred from them. The packet already carries
+acceptance criteria, a clear-at-observation receipt snapshot, and task-local
+runtime evidence; it explicitly does not prove concurrency safety or unobserved
+runtime controls. This result neither proves the previous schema error's cause
+nor establishes that all readiness concerns are resolved.
+
+No ready preflight, run creation, dispatch, callback claim or migration occurred.
+The callback schedule and worker service remained disabled/zero at launch, and
+the running-task list was empty after completion. No further live retry was
+launched. Do not bypass the feasibility gate or enable callback rollout from
+this evidence. The issue-bound fixture and live lifecycle checks remain open.
+
 ### Local schema-failure attribution
 
 The adapter now attaches a fixed assessment (`checkpoint`, `full_issue`, or
