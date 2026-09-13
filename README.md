@@ -82,6 +82,7 @@ credentials.
   but no live automatic-merge executor or identity is enabled.
 
 See [Architecture](./docs/architecture.md),
+[Architecture diagram](./docs/architecture-diagram.md),
 [Threat model](./docs/threat-model.md),
 [Local operating runbook](./docs/operating-runbook.md),
 [Client AWS account foundation](./docs/client-aws-account-foundation.md),
