@@ -68,8 +68,14 @@ locals {
     "ai-delivery-orchestrator-pilot-supervised-dispatch",
     "ai-delivery-orchestrator-pilot-supervised-dispatch-execution",
   ])
+  callback_runtime_role_names = toset([
+    "ai-delivery-orchestrator-pilot-callback-controller",
+    "ai-delivery-orchestrator-pilot-callback-execution",
+    "ai-delivery-orchestrator-pilot-callback-processor",
+  ])
   pilot_runtime_role_arns       = [for name in local.pilot_runtime_role_names : "arn:aws:iam::${var.aws_account_id}:role/${name}"]
   supervised_dispatch_role_arns = [for name in local.supervised_dispatch_role_names : "arn:aws:iam::${var.aws_account_id}:role/${name}"]
+  callback_runtime_role_arns    = [for name in local.callback_runtime_role_names : "arn:aws:iam::${var.aws_account_id}:role/${name}"]
   all_pilot_runtime_role_arns   = concat(local.pilot_runtime_role_arns, local.supervised_dispatch_role_arns)
   tags = {
     Project     = "ai-delivery-orchestrator"

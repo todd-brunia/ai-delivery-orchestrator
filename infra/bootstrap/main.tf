@@ -173,6 +173,11 @@ data "aws_iam_policy_document" "github_plan" {
     ]
     resources = local.all_pilot_runtime_role_arns
   }
+  statement {
+    sid       = "InspectPilotCallbackRoles"
+    actions   = ["iam:GetRole", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies", "iam:ListRoleTags"]
+    resources = local.callback_runtime_role_arns
+  }
 }
 
 resource "aws_iam_role_policy" "github_plan" {
@@ -375,6 +380,11 @@ data "aws_iam_policy_document" "github_apply" {
       "iam:UpdateAssumeRolePolicy",
     ]
     resources = local.supervised_dispatch_role_arns
+  }
+  statement {
+    sid       = "RemovePilotCallbackRoles"
+    actions   = ["iam:DeleteRole", "iam:DeleteRolePolicy", "iam:GetRole", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies", "iam:ListRolePolicies", "iam:ListRoleTags"]
+    resources = local.callback_runtime_role_arns
   }
   statement {
     sid       = "PassPilotRuntimeRoles"
